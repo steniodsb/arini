@@ -1,36 +1,134 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Arini Negócios Imobiliários — Site + CRM
 
-## Getting Started
+Plataforma completa: **site público** + **CRM interno por setor** com fluxo de aprovação central.
 
-First, run the development server:
+Stack: Next.js 14 (App Router, TypeScript) + Tailwind + Supabase (Postgres, Auth, Storage, RLS).
+
+## Setup
+
+### 1. Variáveis de ambiente
+
+Copie `.env.example` para `.env.local` e preencha com as credenciais do seu projeto Supabase:
+
+```bash
+cp .env.example .env.local
+```
+
+Você precisa de:
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` → Dashboard Supabase → Project Settings → API
+- `SUPABASE_PROJECT_REF` → ref do projeto (parte do subdomínio `*.supabase.co`)
+- `SUPABASE_DB_PASSWORD` → senha do Postgres (Project Settings → Database)
+
+### 2. Instalar dependências e aplicar schema
+
+```bash
+npm install
+npm run db:migrate     # aplica supabase/migrations/* (tabelas, RLS, storage)
+npm run db:seed-users  # cria 7 usuários (1 admin + 6 setoriais) com senha de SEED_USER_PASSWORD
+```
+
+> Alternativa manual (sem senha do banco): cole `supabase/migrations/0001_complete_schema.sql` e `0002_storage.sql` no SQL Editor do Supabase Dashboard.
+
+### 3. Rodar localmente
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Site público**: http://localhost:3000
+- **CRM**: http://localhost:3000/admin/login
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 4. Deploy (Vercel)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Importe o repositório no Vercel e defina as variáveis públicas (`NEXT_PUBLIC_*`) e privadas (`SUPABASE_SERVICE_ROLE_KEY`) em Settings → Environment Variables.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Estrutura
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+src/
+├─ app/
+│  ├─ (public)/         site (home, /imoveis, /imoveis/[codigo], /sobre, /contato)
+│  ├─ admin/            CRM protegido por middleware
+│  │   ├─ captacao/             setor 1
+│  │   ├─ marketing/            setor 2
+│  │   ├─ administrativo/       setor 3
+│  │   ├─ aprovacoes/           inbox central
+│  │   ├─ juridico/             setor 4
+│  │   ├─ leads/                setor 5 (kanban)
+│  │   ├─ financeiro-imovel/    setor 6
+│  │   ├─ financeiro-empresarial/  setor 7
+│  │   ├─ usuarios/             admin_central
+│  │   ├─ auditoria/            logs
+│  │   └─ configuracoes/
+│  └─ api/              endpoints (leads público, decidir aprovação, criar usuário)
+├─ components/          ui + crm + brand + public
+├─ lib/                 supabase clients, auth, permissions, types
+└─ middleware.ts        protege /admin
+supabase/migrations/    SQL para aplicar
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Identidade
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Verde Arini**: `#092316`
+- **Gradient dourado**: `#F8BF32 → #D99212`
+- **Tipografia**: Fraunces (display) + Inter (UI)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Setores
+
+| Setor | Acessa | Aprova |
+|---|---|---|
+| captacao | Imóveis próprios, upload mídia | — |
+| marketing | Imóveis aprovados, campanhas | — |
+| administrativo | Tudo | sim |
+| juridico | Documentos, contratos | — |
+| recepcao | Leads, funil, agendamentos | — |
+| financeiro | Fechamentos, comissões, despesas | — |
+| admin_central | Tudo + usuários + auditoria | sim |
+
+---
+
+## Fluxo principal
+
+1. Captador cria imóvel em `/admin/captacao/novo` → status `aguardando_aprovacao_captacao`.
+2. Admin aprova em `/admin/aprovacoes` → status `aprovado_captacao`.
+3. Marketing configura divulgação em `/admin/marketing/[id]` → envia para aprovação.
+4. Admin aprova → status `publicado`, aparece em `/imoveis`.
+5. Visitante envia interesse → vira lead em `/admin/leads`.
+6. Recepção move pelo kanban, registra interações e agendamentos.
+7. Jurídico valida documentação em `/admin/juridico/[id]`.
+8. Financeiro registra fechamento e comissão.
+9. Tudo fica em `/admin/auditoria` (logs automáticos via triggers).
+
+---
+
+## Storage Buckets
+
+- `property-media` (público) — imagens, vídeos, reels, tours
+- `property-documents` (privado) — matrícula, IPTU, contratos
+- `expense-receipts` (privado)
+- `contracts` (privado)
+- `avatars` (público)
+
+---
+
+## Integrações futuras (campos prontos)
+
+- WhatsApp (Twilio / WhatsApp Business)
+- Assinatura digital (D4Sign, Clicksign)
+- Portais imobiliários (Zap, Viva Real)
+- Arini Maps
+
+---
+
+## Observações
+
+- Bucket de mídia é público. Para sensível, use signed URLs.
+- Middleware redireciona `/admin/*` não autenticado para `/admin/login`.
+- Triggers de auditoria registram automaticamente todas as mutações críticas.
+- `fn_generate_property_code(type, category)` gera código de imóvel via RPC.

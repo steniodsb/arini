@@ -2,22 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 0 0% 100%;
+    --foreground: 153 60% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 153 60% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 153 60% 8%;
+    --primary: 153 60% 8%;
+    --primary-foreground: 40 90% 95%;
+    --secondary: 40 92% 58%;
+    --secondary-foreground: 153 60% 8%;
+    --muted: 150 10% 95%;
+    --muted-foreground: 153 15% 35%;
+    --accent: 40 92% 58%;
+    --accent-foreground: 153 60% 8%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 150 10% 88%;
+    --input: 150 10% 88%;
+    --ring: 40 92% 58%;
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 153 60% 8%;
+    --foreground: 40 90% 95%;
+    --card: 153 50% 10%;
+    --card-foreground: 40 90% 95%;
+    --popover: 153 50% 10%;
+    --popover-foreground: 40 90% 95%;
+    --primary: 40 92% 58%;
+    --primary-foreground: 153 60% 8%;
+    --secondary: 153 40% 18%;
+    --secondary-foreground: 40 90% 95%;
+    --muted: 153 30% 15%;
+    --muted-foreground: 150 10% 70%;
+    --accent: 40 92% 58%;
+    --accent-foreground: 153 60% 8%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 153 30% 18%;
+    --input: 153 30% 18%;
+    --ring: 40 92% 58%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .text-gold-gradient {
+    background: linear-gradient(135deg, #F8BF32 0%, #D99212 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .btn-gold {
+    background: linear-gradient(135deg, #F8BF32 0%, #D99212 100%);
+    color: #092316;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(217, 146, 18, 0.25);
+    transition: all 0.2s;
+  }
+  .btn-gold:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 6px 20px rgba(217, 146, 18, 0.4);
+  }
 }
 
 @layer utilities {
