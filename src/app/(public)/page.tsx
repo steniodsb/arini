@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { PropertyCard } from "@/components/public/PropertyCard";
 import { Button } from "@/components/ui/button";
-import { Search, ShieldCheck, MapPinned, Sparkles } from "lucide-react";
+import { Search, ShieldCheck, MapPinned, Sparkles, MapPin } from "lucide-react";
 import type { Property, PropertyMedia } from "@/lib/types";
 
 export const revalidate = 60;
@@ -37,39 +37,36 @@ export default async function HomePage() {
   return (
     <>
       {/* HERO */}
-      <section className="relative overflow-hidden bg-arini-radial text-white">
-        <div className="absolute inset-0 opacity-20 bg-gold-gradient-soft" />
-        <div className="container relative py-24 md:py-32 grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <span className="inline-block px-3 py-1 rounded-full bg-gold-gradient text-arini text-xs font-semibold tracking-wider uppercase">
-              Arini Negócios Imobiliários
-            </span>
-            <h1 className="mt-6 font-display text-5xl md:text-6xl leading-tight">
-              Encontre o <span className="text-gold-gradient">imóvel</span> certo
-              para a próxima fase da sua vida.
-            </h1>
-            <p className="mt-6 text-white/70 text-lg max-w-lg">
-              Casas, apartamentos, fazendas e oportunidades de investimento com
-              curadoria, transparência e atendimento dedicado.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button asChild variant="gold" size="lg">
-                <Link href="/imoveis"><Search size={18} /> Ver imóveis</Link>
-              </Button>
-              <Button asChild variant="outline" size="lg" className="border-white/30 text-white hover:bg-white/10 hover:text-white">
-                <Link href="/contato">Falar com um corretor</Link>
-              </Button>
-            </div>
-          </div>
-          <div className="hidden md:block">
-            <div className="aspect-square rounded-2xl bg-gold-gradient p-1">
-              <div className="h-full w-full rounded-2xl bg-arini-dark flex items-center justify-center">
-                <div className="text-center text-gold">
-                  <div className="font-display text-7xl">A</div>
-                  <div className="text-xs uppercase tracking-[0.5em] mt-2">Arini</div>
-                </div>
-              </div>
-            </div>
+      <section className="relative overflow-hidden text-white min-h-[78vh] flex items-center">
+        {/* Imagem de fundo */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('/hero-bg.jpg')" }}
+          aria-hidden
+        />
+        {/* Overlay verde Arini 80% */}
+        <div className="absolute inset-0 bg-arini" style={{ opacity: 0.8 }} aria-hidden />
+
+        {/* Conteúdo centralizado */}
+        <div className="container relative z-10 py-24 md:py-32 text-center flex flex-col items-center">
+          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-xs font-semibold tracking-[0.2em] uppercase text-gold">
+            <MapPin size={14} /> Arini Negócios Imobiliários
+          </span>
+          <h1 className="mt-6 font-display text-5xl md:text-7xl leading-[1.05] max-w-4xl">
+            Encontre o <span className="text-gold-gradient">imóvel</span> certo
+            <br className="hidden md:block" /> para a próxima fase da sua vida.
+          </h1>
+          <p className="mt-6 text-white/80 text-lg max-w-2xl">
+            Casas, apartamentos, fazendas e oportunidades de investimento com
+            curadoria, transparência e atendimento dedicado.
+          </p>
+          <div className="mt-10 flex flex-wrap gap-3 justify-center">
+            <Button asChild variant="gold" size="lg">
+              <Link href="/imoveis"><Search size={18} /> Ver imóveis</Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="border-white/30 text-white hover:bg-white/10 hover:text-white">
+              <Link href="/contato">Falar com um corretor</Link>
+            </Button>
           </div>
         </div>
       </section>
