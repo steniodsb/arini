@@ -1,5 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { PropertyCard } from "@/components/public/PropertyCard";
+import { PageHero } from "@/components/public/PageHero";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -40,14 +41,19 @@ export default async function ImoveisPage({ searchParams }: { searchParams: SP }
   const list = (properties ?? []) as Property[];
 
   return (
+    <>
+      <PageHero
+        eyebrow="Nossa carteira"
+        title={
+          <>
+            Veja nossos <span className="text-gold-gradient">imóveis</span>
+          </>
+        }
+        subtitle="Casas, apartamentos, terrenos, loteamentos e propriedades rurais com curadoria, transparência e documentação validada."
+        bgImage="/hero-imoveis.jpg"
+        size="md"
+      />
     <div className="container py-12">
-      <div className="mb-8">
-        <h1 className="font-display text-4xl text-arini">Imóveis</h1>
-        <p className="text-muted-foreground mt-2">
-          Encontre o imóvel ideal entre nossas opções selecionadas.
-        </p>
-      </div>
-
       <form className="grid md:grid-cols-6 gap-3 mb-8 p-4 bg-muted/40 rounded-lg border">
         <div className="md:col-span-2">
           <Label>Buscar</Label>
@@ -92,5 +98,6 @@ export default async function ImoveisPage({ searchParams }: { searchParams: SP }
         </div>
       )}
     </div>
+    </>
   );
 }
