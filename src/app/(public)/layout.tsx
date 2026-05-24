@@ -6,8 +6,8 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-border">
-        <div className="container flex h-20 items-center justify-between">
-          <Logo />
+        <div className="container flex h-28 items-center justify-between">
+          <Logo size={80} />
           <PublicNav />
         </div>
       </header>
