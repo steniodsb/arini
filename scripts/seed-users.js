@@ -5,14 +5,15 @@ const { connectionString } = require("./_db");
 
 const DEFAULT_PASSWORD = process.env.SEED_USER_PASSWORD || "TrocarSenha123!";
 
+const D = "arininegociosimobiliarios.com.br";
 const USERS = [
-  { email: "arini@steniowebdesigner.com", nome: "Admin Arini",      sector: "admin_central",  is_admin_central: true  },
-  { email: "captador@arini.com.br",       nome: "Captador Demo",    sector: "captacao",       is_admin_central: false },
-  { email: "marketing@arini.com.br",      nome: "Marketing Demo",   sector: "marketing",      is_admin_central: false },
-  { email: "admin@arini.com.br",          nome: "Admin Demo",       sector: "administrativo", is_admin_central: false },
-  { email: "juridico@arini.com.br",       nome: "Jurídico Demo",    sector: "juridico",       is_admin_central: false },
-  { email: "recepcao@arini.com.br",       nome: "Recepção Demo",    sector: "recepcao",       is_admin_central: false },
-  { email: "financeiro@arini.com.br",     nome: "Financeiro Demo",  sector: "financeiro",     is_admin_central: false },
+  { email: `admin@${D}`,          nome: "Admin Arini",      sector: "admin_central",  is_admin_central: true  },
+  { email: `captador@${D}`,       nome: "Captador",         sector: "captacao",       is_admin_central: false },
+  { email: `marketing@${D}`,      nome: "Marketing",        sector: "marketing",      is_admin_central: false },
+  { email: `administrativo@${D}`, nome: "Administrativo",   sector: "administrativo", is_admin_central: false },
+  { email: `juridico@${D}`,       nome: "Jurídico",         sector: "juridico",       is_admin_central: false },
+  { email: `recepcao@${D}`,       nome: "Recepção",         sector: "recepcao",       is_admin_central: false },
+  { email: `financeiro@${D}`,     nome: "Financeiro",       sector: "financeiro",     is_admin_central: false },
 ];
 
 async function main() {
