@@ -8,12 +8,17 @@ import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Property, type PropertyCate
 
 export const revalidate = 60;
 
-interface SP { type?: string; category?: string; cidade?: string; q?: string; min?: string; max?: string; }
+interface SP { type?: string; types?: string; category?: string; cidade?: string; q?: string; min?: string; max?: string; }
 
 export default async function ImoveisPage({ searchParams }: { searchParams: SP }) {
   const supabase = createSupabaseServer();
   let q = supabase.from("properties").select("*").eq("publicado_no_site", true);
-  if (searchParams.type) q = q.eq("type", searchParams.type);
+  if (searchParams.types) {
+    const arr = searchParams.types.split(",").map((s) => s.trim()).filter(Boolean);
+    if (arr.length) q = q.in("type", arr);
+  } else if (searchParams.type) {
+    q = q.eq("type", searchParams.type);
+  }
   if (searchParams.category) q = q.eq("category", searchParams.category);
   if (searchParams.cidade) q = q.ilike("cidade", `%${searchParams.cidade}%`);
   if (searchParams.q) q = q.or(`titulo.ilike.%${searchParams.q}%,bairro.ilike.%${searchParams.q}%,codigo.ilike.%${searchParams.q}%`);

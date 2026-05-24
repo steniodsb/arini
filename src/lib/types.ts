@@ -8,10 +8,10 @@ export type Sector =
   | "admin_central";
 
 export type PropertyType =
-  | "casa" | "apartamento" | "lote" | "terreno" | "fazenda"
+  | "casa" | "apartamento" | "lote" | "terreno" | "loteamento" | "fazenda"
   | "sitio" | "chacara" | "comercial" | "galpao" | "rural" | "outros";
 
-export type PropertyCategory = "venda" | "locacao" | "venda_locacao" | "rural";
+export type PropertyCategory = "venda" | "locacao" | "venda_locacao" | "rural" | "arrendamento";
 
 export type PropertyStatus =
   | "rascunho"
@@ -159,13 +159,35 @@ export const SECTOR_LABELS: Record<Sector, string> = {
 
 export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
   casa: "Casa", apartamento: "Apartamento", lote: "Lote", terreno: "Terreno",
+  loteamento: "Loteamento",
   fazenda: "Fazenda", sitio: "Sítio", chacara: "Chácara", comercial: "Comercial",
   galpao: "Galpão", rural: "Rural", outros: "Outros",
 };
 
 export const CATEGORY_LABELS: Record<PropertyCategory, string> = {
-  venda: "Venda", locacao: "Locação", venda_locacao: "Venda / Locação", rural: "Rural",
+  venda: "Venda",
+  locacao: "Aluguel",
+  venda_locacao: "Venda / Aluguel",
+  rural: "Rural",
+  arrendamento: "Arrendamento",
 };
+
+// Para o menu público — agrupamento simplificado de tipos
+export const TYPE_NAV_GROUPS: { label: string; types: PropertyType[] }[] = [
+  { label: "Casas",       types: ["casa"] },
+  { label: "Apartamentos", types: ["apartamento"] },
+  { label: "Rurais",      types: ["fazenda", "sitio", "chacara", "rural"] },
+  { label: "Terrenos",    types: ["terreno", "lote"] },
+  { label: "Loteamentos", types: ["loteamento"] },
+  { label: "Comerciais",  types: ["comercial", "galpao"] },
+];
+
+// Para o menu público — categorias clicáveis
+export const CATEGORY_NAV: { label: string; key: PropertyCategory }[] = [
+  { label: "Venda",        key: "venda" },
+  { label: "Aluguel",      key: "locacao" },
+  { label: "Arrendamento", key: "arrendamento" },
+];
 
 export const STATUS_LABELS: Record<PropertyStatus, string> = {
   rascunho: "Rascunho",

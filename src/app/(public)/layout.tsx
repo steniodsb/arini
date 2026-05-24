@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
+import { PublicNav } from "@/components/public/PublicNav";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -7,18 +8,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-border">
         <div className="container flex h-20 items-center justify-between">
           <Logo />
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-arini">
-            <Link href="/" className="hover:text-gold-dark transition-colors">Início</Link>
-            <Link href="/imoveis" className="hover:text-gold-dark transition-colors">Imóveis</Link>
-            <Link href="/sobre" className="hover:text-gold-dark transition-colors">Sobre</Link>
-            <Link href="/contato" className="hover:text-gold-dark transition-colors">Contato</Link>
-            <Link
-              href="/admin/login"
-              className="ml-4 inline-flex items-center px-4 py-2 rounded-md btn-gold text-sm"
-            >
-              Área Interna
-            </Link>
-          </nav>
+          <PublicNav />
         </div>
       </header>
       <main className="flex-1">{children}</main>
