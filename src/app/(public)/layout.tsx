@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { PublicNav } from "@/components/public/PublicNav";
+import { WhatsAppFab } from "@/components/public/WhatsAppFab";
 import { Phone, MessageCircle, Mail, MapPin, LogIn } from "lucide-react";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -74,6 +75,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
           Arini Negócios Imobiliários — Todos os direitos reservados
         </div>
       </footer>
+      <WhatsAppFab />
     </div>
   );
 }

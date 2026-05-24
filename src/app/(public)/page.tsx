@@ -44,8 +44,8 @@ export default async function HomePage() {
           style={{ backgroundImage: "url('/hero-bg.jpg')" }}
           aria-hidden
         />
-        {/* Overlay verde Arini 80% */}
-        <div className="absolute inset-0 bg-arini" style={{ opacity: 0.8 }} aria-hidden />
+        {/* Overlay verde Arini bem presente */}
+        <div className="absolute inset-0 bg-arini" style={{ opacity: 0.94 }} aria-hidden />
 
         {/* Conteúdo centralizado */}
         <div className="container relative z-10 py-24 md:py-32 text-center flex flex-col items-center">
