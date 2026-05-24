@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { PublicNav } from "@/components/public/PublicNav";
 import { WhatsAppFab } from "@/components/public/WhatsAppFab";
-import { Phone, MessageCircle, Mail, MapPin, LogIn } from "lucide-react";
+import { Phone, MessageCircle, Mail, MapPin, LogIn, Instagram, Facebook, Youtube } from "lucide-react";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -16,9 +16,24 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       <main className="flex-1">{children}</main>
       <footer className="bg-arini-dark text-white/80">
         <div className="container py-14 grid grid-cols-1 md:grid-cols-4 gap-10">
-          {/* Coluna 1 — Logo */}
-          <div className="flex items-start">
+          {/* Coluna 1 — Logo + descrição + redes */}
+          <div className="space-y-5">
             <Logo variant="light" size={140} />
+            <p className="text-sm text-white/70 max-w-xs leading-relaxed">
+              Curadoria, transparência e atendimento dedicado em cada negócio
+              imobiliário. Construindo confiança há mais de uma década.
+            </p>
+            <div className="flex items-center gap-3">
+              <SocialIcon href="https://www.instagram.com/arininegociosimobiliarios/" label="Instagram">
+                <Instagram size={18} />
+              </SocialIcon>
+              <SocialIcon href="https://www.facebook.com/arininegociosimobiliarios" label="Facebook">
+                <Facebook size={18} />
+              </SocialIcon>
+              <SocialIcon href="https://www.youtube.com/@arininegociosimobiliarios" label="YouTube">
+                <Youtube size={18} />
+              </SocialIcon>
+            </div>
           </div>
 
           {/* Coluna 2 — Menu */}
@@ -77,5 +92,27 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       </footer>
       <WhatsAppFab />
     </div>
+  );
+}
+
+function SocialIcon({
+  href,
+  label,
+  children,
+}: {
+  href: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      className="w-10 h-10 rounded-full bg-white/10 hover:bg-gold-gradient hover:text-arini text-white flex items-center justify-center transition-all"
+    >
+      {children}
+    </a>
   );
 }
