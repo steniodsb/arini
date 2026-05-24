@@ -26,7 +26,7 @@ export function FinanceiroImovelForm({ properties }: Props) {
     const comissao_pct = fd.get("comissao_pct") ? Number(fd.get("comissao_pct")) : null;
     const comissao_valor = comissao_pct ? (valor_fechado * comissao_pct) / 100 : (fd.get("comissao_valor") ? Number(fd.get("comissao_valor")) : null);
 
-    const { error } = await supabase.from("property_financials").insert({
+    const { data: fin, error } = await supabase.from("property_financials").insert({
       property_id: fd.get("property_id"),
       operation_type: fd.get("operation_type"),
       valor_fechado,
@@ -35,9 +35,32 @@ export function FinanceiroImovelForm({ properties }: Props) {
       comissao_pct,
       comissao_valor,
       criado_por: user?.id,
+    }).select().single();
+    if (error) { setError(error.message); setLoading(false); return; }
+
+    // Cria entry de comissão para a imobiliária
+    if (comissao_valor && comissao_valor > 0) {
+      await supabase.from("commissions").insert({
+        property_financial_id: fin.id,
+        beneficiario_tipo: "imobiliaria",
+        beneficiario_nome: "Imobiliária Arini",
+        percentual: comissao_pct,
+        valor: comissao_valor,
+        status: "pendente",
+      });
+    }
+
+    // Cria receita (income)
+    await supabase.from("incomes").insert({
+      origem: fd.get("operation_type") === "locacao" ? "locacao" : "comissao",
+      valor: comissao_valor ?? 0,
+      data: fd.get("data_fechamento") || new Date().toISOString().slice(0, 10),
+      ref_property_id: fd.get("property_id"),
+      descricao: `Fechamento ${fd.get("operation_type")} — comissão ${comissao_pct ?? "—"}%`,
+      criado_por: user?.id,
     });
+
     setLoading(false);
-    if (error) { setError(error.message); return; }
     (e.currentTarget as HTMLFormElement).reset();
     router.refresh();
   }

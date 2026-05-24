@@ -2,7 +2,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { SECTOR_LABELS } from "@/lib/types";
 import { SECTOR_NAV } from "@/lib/permissions";
 import { Logo } from "@/components/brand/Logo";
-import { LogoutButton } from "./LogoutButton";
+import { TopBar } from "@/components/crm/TopBar";
 import Link from "next/link";
 
 export default async function AdminLayout({
@@ -22,7 +22,7 @@ export default async function AdminLayout({
         <div className="p-6 border-b border-white/10">
           <Logo variant="light" />
         </div>
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {nav.map((item) => (
             <Link
               key={item.href}
@@ -33,17 +33,23 @@ export default async function AdminLayout({
             </Link>
           ))}
         </nav>
-        <div className="p-4 border-t border-white/10">
-          <div className="text-xs text-white/50">Logado como</div>
-          <div className="text-sm font-medium">{profile.nome}</div>
-          <div className="text-xs text-gold mt-1">
+        <div className="p-4 border-t border-white/10 text-xs">
+          <div className="text-white/40">
             {profile.is_admin_central ? "Admin Central" : SECTOR_LABELS[profile.sector]}
           </div>
-          <LogoutButton />
         </div>
       </aside>
-      <main className="flex-1 min-w-0">
-        <div className="p-8">{children}</div>
+      <main className="flex-1 min-w-0 flex flex-col">
+        <TopBar
+          profile={{
+            id: profile.id,
+            nome: profile.nome,
+            email: profile.email,
+            sector: profile.sector,
+            is_admin_central: profile.is_admin_central,
+          }}
+        />
+        <div className="flex-1 p-8 overflow-y-auto">{children}</div>
       </main>
     </div>
   );

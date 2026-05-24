@@ -1,11 +1,14 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 import { StatusBadge } from "@/components/crm/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
 import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Approval, type Property, type PropertyMedia } from "@/lib/types";
+import { Pencil, ExternalLink } from "lucide-react";
 import Image from "next/image";
 
 export default async function PropertyDetailAdminPage({ params }: { params: { id: string } }) {
@@ -37,6 +40,18 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
         <div className="text-right">
           <div className="text-xs uppercase text-muted-foreground">Valor</div>
           <div className="text-3xl text-gold-gradient font-semibold">{formatCurrencyBRL(p.valor)}</div>
+          <div className="mt-3 flex gap-2 justify-end">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/admin/captacao/${p.id}/editar`}><Pencil size={14} /> Editar</Link>
+            </Button>
+            {p.publicado_no_site && (
+              <Button asChild variant="ghost" size="sm">
+                <Link href={`/imoveis/${p.codigo}`} target="_blank">
+                  <ExternalLink size={14} /> Ver no site
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
