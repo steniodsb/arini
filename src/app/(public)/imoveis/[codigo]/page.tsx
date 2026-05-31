@@ -72,7 +72,9 @@ export default async function PropertyDetailPage({
   if (p.ano_construcao) diferenciais.push(`Construído em ${p.ano_construcao}`);
   if (p.exclusividade) diferenciais.push("Imóvel exclusivo");
 
-  const mapsHref = p.lat && p.lng
+  const mapsHref = p.maps_url
+    ? p.maps_url
+    : p.lat && p.lng
     ? `https://www.google.com/maps?q=${p.lat},${p.lng}`
     : p.endereco
     ? `https://www.google.com/maps?q=${encodeURIComponent([p.endereco, p.bairro, p.cidade, p.uf].filter(Boolean).join(", "))}`

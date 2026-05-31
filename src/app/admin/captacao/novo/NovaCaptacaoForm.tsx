@@ -9,6 +9,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MediaUploader } from "@/components/crm/MediaUploader";
+import { uploadPropertyMedia } from "@/lib/upload";
 import {
   CATEGORY_LABELS,
   PROPERTY_TYPE_LABELS,
@@ -21,6 +23,7 @@ export function NovaCaptacaoForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -58,6 +61,7 @@ export function NovaCaptacaoForm() {
         cep: (fd.get("cep") as string) || null,
         lat: fd.get("lat") ? Number(fd.get("lat")) : null,
         lng: fd.get("lng") ? Number(fd.get("lng")) : null,
+        maps_url: (fd.get("maps_url") as string)?.trim() || null,
         valor: fd.get("valor") ? Number(fd.get("valor")) : null,
         area_total: fd.get("area_total") ? Number(fd.get("area_total")) : null,
         area_construida: fd.get("area_construida") ? Number(fd.get("area_construida")) : null,
@@ -95,26 +99,23 @@ export function NovaCaptacaoForm() {
         placa_colocada: fd.get("placa") === "on",
       });
 
-      // Upload de mídia
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const ext = file.name.split(".").pop();
-        const path = `${property.id}/${Date.now()}-${i}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from("property-media")
-          .upload(path, file, { upsert: false });
-        if (upErr) continue;
-        const { data: urlData } = supabase.storage.from("property-media").getPublicUrl(path);
-        const tipo = file.type.startsWith("video/") ? "video" : "imagem";
-        await supabase.from("property_media").insert({
-          property_id: property.id,
-          tipo,
-          url: urlData.publicUrl,
-          storage_path: path,
-          ordem: i,
-          capa: i === 0,
-          tamanho: file.size,
+      // Upload de mídia (robusto: retry + continua mesmo se algum falhar)
+      let uploadFailures = 0;
+      if (files.length > 0) {
+        const result = await uploadPropertyMedia(supabase, property.id, files, {
+          onProgress: (done, total, name) =>
+            setUploadMsg(
+              done < total ? `Enviando mídia ${done + 1}/${total}: ${name}` : "Mídia enviada.",
+            ),
         });
+        uploadFailures = result.failed.length;
+        if (uploadFailures > 0) {
+          setError(
+            `Imóvel criado, mas ${uploadFailures} arquivo(s) falharam no upload: ${result.failed
+              .map((f) => f.name)
+              .join(", ")}. Abra a edição do imóvel para reenviá-los.`,
+          );
+        }
       }
 
       // Cria approval
@@ -127,8 +128,13 @@ export function NovaCaptacaoForm() {
         payload: { codigo, type, category },
       });
 
-      router.push(`/admin/captacao/${property.id}`);
-      router.refresh();
+      // Só navega automaticamente se tudo subiu; senão deixa a msg visível.
+      if (uploadFailures === 0) {
+        router.push(`/admin/captacao/${property.id}`);
+        router.refresh();
+      } else {
+        setLoading(false);
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
@@ -177,6 +183,11 @@ export function NovaCaptacaoForm() {
           <div><Label>Bairro</Label><Input name="bairro" /></div>
           <div><Label>Cidade</Label><Input name="cidade" /></div>
           <div><Label>UF</Label><Input name="uf" maxLength={2} /></div>
+          <div className="md:col-span-3">
+            <Label>Link do Google Maps</Label>
+            <Input name="maps_url" type="url" placeholder="Cole aqui o link compartilhado do Google Maps (https://maps.app.goo.gl/…)" />
+            <p className="text-xs text-muted-foreground mt-1">Opcional. Se preenchido, é usado no botão “Ver no Maps” do CRM e do site.</p>
+          </div>
           <div><Label>Latitude</Label><Input name="lat" type="number" step="any" /></div>
           <div><Label>Longitude</Label><Input name="lng" type="number" step="any" /></div>
         </CardContent>
@@ -195,18 +206,10 @@ export function NovaCaptacaoForm() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Mídia (fotos e vídeos)</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Mídia (fotos, vídeos e mídia bruta)</CardTitle></CardHeader>
         <CardContent>
-          <input
-            type="file"
-            multiple
-            accept="image/*,video/*"
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-            className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-arini file:text-white hover:file:bg-arini-light"
-          />
-          {files.length > 0 && (
-            <p className="text-sm text-muted-foreground mt-2">{files.length} arquivo(s) selecionado(s). A primeira imagem será a capa.</p>
-          )}
+          <MediaUploader onChange={setFiles} />
+          {uploadMsg && <p className="text-sm text-muted-foreground mt-3">{uploadMsg}</p>}
         </CardContent>
       </Card>
 

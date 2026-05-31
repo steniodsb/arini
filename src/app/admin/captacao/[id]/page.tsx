@@ -7,23 +7,35 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
-import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Approval, type Property, type PropertyMedia } from "@/lib/types";
-import { Pencil, ExternalLink } from "lucide-react";
+import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Approval, type Property, type PropertyMedia, type SectorObservation } from "@/lib/types";
+import { Pencil, ExternalLink, MapPin } from "lucide-react";
 import Image from "next/image";
+import { SectorObservations } from "@/components/crm/SectorObservations";
+import { DeletePropertyButton } from "@/components/crm/DeletePropertyButton";
+
+// Status nos quais o imóvel ainda não foi aprovado pela diretoria/gerência.
+const PRE_APPROVAL_STATUSES = ["rascunho", "aguardando_aprovacao_captacao", "aprovado_captacao"];
 
 export default async function PropertyDetailAdminPage({ params }: { params: { id: string } }) {
-  await requireUser();
+  const { user, profile } = await requireUser();
   const supabase = createSupabaseServer();
   const { data: property } = await supabase.from("properties").select("*").eq("id", params.id).single();
   if (!property) notFound();
   const p = property as Property;
 
-  const [{ data: media }, { data: capture }, { data: approvals }] = await Promise.all([
+  const [{ data: media }, { data: capture }, { data: approvals }, { data: observations }] = await Promise.all([
     supabase.from("property_media").select("*").eq("property_id", p.id).order("ordem"),
     supabase.from("property_capture_info").select("*").eq("property_id", p.id).maybeSingle(),
     supabase.from("approvals").select("*").eq("entity_table", "properties").eq("entity_id", p.id).order("created_at", { ascending: false }),
+    supabase.from("sector_observations").select("*").eq("entity_table", "properties").eq("entity_id", p.id).order("created_at", { ascending: false }),
   ]);
   const mediaList = (media ?? []) as PropertyMedia[];
+
+  const isDiretoria = profile?.is_admin_central || profile?.sector === "admin_central";
+  const canDelete =
+    isDiretoria ||
+    profile?.sector === "administrativo" ||
+    (profile?.sector === "captacao" && p.captador_id === user.id && PRE_APPROVAL_STATUSES.includes(p.status));
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -51,6 +63,7 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
                 </Link>
               </Button>
             )}
+            {canDelete && <DeletePropertyButton propertyId={p.id} codigo={p.codigo} />}
           </div>
         </div>
       </div>
@@ -81,6 +94,16 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
             <div>{p.endereco ?? "—"}</div>
             <div>{p.bairro} {p.cidade && `· ${p.cidade}`} {p.uf && `/${p.uf}`}</div>
             <div className="text-muted-foreground text-xs">CEP: {p.cep ?? "—"} · Lat/Lng: {p.lat ?? "—"} / {p.lng ?? "—"}</div>
+            {(() => {
+              const mapsHref = p.maps_url
+                || (p.lat && p.lng ? `https://www.google.com/maps?q=${p.lat},${p.lng}` : null)
+                || (p.endereco ? `https://www.google.com/maps?q=${encodeURIComponent([p.endereco, p.bairro, p.cidade, p.uf].filter(Boolean).join(", "))}` : null);
+              return mapsHref ? (
+                <a href={mapsHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-arini hover:text-gold-dark text-xs font-semibold mt-1">
+                  <MapPin size={12} /> Ver no Google Maps →
+                </a>
+              ) : null;
+            })()}
           </CardContent>
         </Card>
         <Card>
@@ -122,6 +145,16 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
             )}
           </CardContent>
         </Card>
+      )}
+
+      {profile && (
+        <SectorObservations
+          entityTable="properties"
+          entityId={p.id}
+          currentUserId={user.id}
+          currentSector={profile.sector}
+          initial={(observations ?? []) as SectorObservation[]}
+        />
       )}
 
       <Card>

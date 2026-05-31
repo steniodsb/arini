@@ -49,6 +49,7 @@ export function EditPropertyForm({
       cep: (fd.get("cep") as string) || null,
       lat: fd.get("lat") ? Number(fd.get("lat")) : null,
       lng: fd.get("lng") ? Number(fd.get("lng")) : null,
+      maps_url: (fd.get("maps_url") as string)?.trim() || null,
       valor: fd.get("valor") ? Number(fd.get("valor")) : null,
       valor_fechado: fd.get("valor_fechado") ? Number(fd.get("valor_fechado")) : null,
       area_total: fd.get("area_total") ? Number(fd.get("area_total")) : null,
@@ -106,6 +107,10 @@ export function EditPropertyForm({
           <div><Label>Bairro</Label><Input name="bairro" defaultValue={property.bairro ?? ""} /></div>
           <div><Label>Cidade</Label><Input name="cidade" defaultValue={property.cidade ?? ""} /></div>
           <div><Label>UF</Label><Input name="uf" maxLength={2} defaultValue={property.uf ?? ""} /></div>
+          <div className="md:col-span-3">
+            <Label>Link do Google Maps</Label>
+            <Input name="maps_url" type="url" defaultValue={property.maps_url ?? ""} placeholder="https://maps.app.goo.gl/…" />
+          </div>
           <div><Label>Latitude</Label><Input name="lat" type="number" step="any" defaultValue={property.lat ?? ""} /></div>
           <div><Label>Longitude</Label><Input name="lng" type="number" step="any" defaultValue={property.lng ?? ""} /></div>
         </CardContent>

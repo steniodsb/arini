@@ -74,6 +74,7 @@ export interface Property {
   cep: string | null;
   lat: number | null;
   lng: number | null;
+  maps_url: string | null;
   valor: number | null;
   valor_fechado: number | null;
   area_total: number | null;
@@ -150,12 +151,26 @@ export interface Approval {
 export const SECTOR_LABELS: Record<Sector, string> = {
   captacao: "Captação",
   marketing: "Marketing",
-  administrativo: "Administrativo",
+  administrativo: "Administrativo (Gerência)",
   juridico: "Jurídico",
   recepcao: "Recepção / Leads",
   financeiro: "Financeiro",
-  admin_central: "Administração Central",
+  admin_central: "Diretoria",
 };
+
+export interface SectorObservation {
+  id: string;
+  entity_table: string;
+  entity_id: string;
+  target_sector: Sector;
+  autor_id: string | null;
+  autor_sector: Sector | null;
+  texto: string;
+  resolvido: boolean;
+  resolvido_por: string | null;
+  resolvido_em: string | null;
+  created_at: string;
+}
 
 export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
   casa: "Casa", apartamento: "Apartamento", lote: "Lote", terreno: "Terreno",
