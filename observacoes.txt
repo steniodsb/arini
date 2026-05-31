@@ -1,0 +1,181 @@
+Captaçao: 
+
+
+Gerar codigo referente ao tipo de imovel, seguindo sequencia (isso deve aparecer nas informacoes do imovel, tanto no crm, quanto no site. 
+
+Endereço: campo para adiçao do link do google maps. 
+
+Midia: Corrigir upload de midias com midia bruta, em varios tipos de arquivos, aumentar capacidade do upload. 
+
+Informaçoes de captaçao:
+
+Colocar filtro do setor que irá receber a observação.
+
+
+--------------------
+
+Marketing:
+
+Captação sobe, vai pro marketing afunilar, ele recebe tipo de imovel, endereço, cidade e bairro, vai receber midias para ediçao e precisa de um espaço para subir as midias editadas. 
+
+
+ele só recebe informacoesq se o captador enviar para o marketing. 
+
+
+analisar integracao com Instagram e facebook
+
+
+
+
+Tipo de conteudo: Ter uma data dentro de cada conteudo que irá subir e publicado. 
+
+
+Observação: Somente se quiser e prcisa selecionar o setor que irá receber. 
+
+
+
+----------------
+
+imoveis:
+
+
+Não consegue editar ou excluir ou colocar observaçoes para algum setor antes de ser aprovado. (corrigir/delegar)
+
+
+
+
+
+
+Propritários (só administrativo tem acesso)
+
+
+
+Só o administrativo central pode aprovar o imovel para que ele usa (diretoria). 
+
+
+Financeiro entra no adminitrativo.
+
+Administrativo geral (um subgerennte praticamente) e o administrativo diretoria que é o administrativo geral. 
+
+
+
+
+-------------------------------------
+
+
+
+Juridico:
+
+Precisa ter 2 abas: 
+
+Imoveis anexados (documentos anexados a imoveis) SÓ ADMIN DIRETORIA 
+
+
+Aba de documentos onde podemos adicionar clientes e fornecer os documentos para ele. 
+
+
+Campo para adicionar o tipo de cliente (criar um novo item na sidebar, pagina para cadastro de cliente)
+
+
+Dashboard de juridico para saber quantos documentos foram inseridos, etc, para ter controle. 
+
+
+
+
+
+Contratos: 
+
+
+Dashboard de juridico para saber quantos documentos foram inseridos, etc, para ter controle. 
+
+
+
+
+-----------------------------
+
+
+Dashboard gereal com graficos e filtros por setores. 
+
+
+
+
+--------------------------------------
+
+
+Leads: Integraçao com Instagram, facebook e WhatsApp e TikTok. (Analisar de receber mensagem e ja cair o lead no crm)
+
+
+
+
+
+
+
+---------------------------------------
+
+
+Financeiro de imoveis: cadastrar despesas de todos os tipos por data e solicitar relatorio por data personalizada. 
+
+
+Criar "Contas bancarias" e quanto cada um tem de caixa para controle geral. 
+
+
+Gasto de imóveis ou de clientes. 
+
+
+
+
+-------------------------------
+
+Financeiro empresa:
+
+Nao tem como editar os lançamentos e nao tem como excluir os lançamentos. 
+
+
+E se o administrativo lançar de gasto de imoveis ou da empresa, só a diretoria pode editar ou excluir. Isso fica na mão da diretoria. O administrativo só pode lançar e só a diretoria pode editar. 
+
+
+Saldo em caixas do financeiro da empresa, com conta e saldos. 
+
+
+---------------------------------
+
+
+
+Comissoes:
+
+
+Precisa ter a configuraçao e gerenciamento de comissoes gerais, podendo lançar comissoes gerais e nao so de imoveis do site. 
+
+
+
+Tudo o que envolve dinheiro, tem que ter data de inicio e fechamento. 
+
+
+----------------------------------------
+
+Somente diretoria solicita relatorio 
+
+
+
+------------------------------------------------
+
+
+
+Opção de todos os setores, delegar funções e se comunicarem. 
+
+
+
+----------------------------------------
+
+
+
+Etapas: captação sobe imoveis para o markting - administrativo autoriza - marketing termina e publica - volta pra administracao aprovar denovo - apos aprovar, publica - diretoria teria acesso nas movimentacoes anteriores, com dashboard. 
+
+
+
+
+
+--------------------
+
+Painel para bater ponto com cadastro de usuarios/funcionarios e ele conseguir bater o ponto.
+
