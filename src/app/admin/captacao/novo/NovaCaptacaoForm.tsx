@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MediaUploader } from "@/components/crm/MediaUploader";
 import { uploadPropertyMedia } from "@/lib/upload";
+import { errMessage } from "@/lib/utils";
 import {
   CATEGORY_LABELS,
   PROPERTY_TYPE_LABELS,
@@ -88,7 +89,7 @@ export function NovaCaptacaoForm() {
         tour: fd.get("mat_tour") === "on",
         drone: fd.get("mat_drone") === "on",
       };
-      await supabase.from("property_capture_info").insert({
+      const { error: capErr } = await supabase.from("property_capture_info").insert({
         property_id: property.id,
         utilizou_camera: fd.get("eq_camera") === "on",
         utilizou_drone: fd.get("eq_drone") === "on",
@@ -98,6 +99,7 @@ export function NovaCaptacaoForm() {
         relatorio_texto: (fd.get("relatorio") as string) || null,
         placa_colocada: fd.get("placa") === "on",
       });
+      if (capErr) throw capErr;
 
       // Upload de mídia (robusto: retry + continua mesmo se algum falhar)
       let uploadFailures = 0;
@@ -119,7 +121,7 @@ export function NovaCaptacaoForm() {
       }
 
       // Cria approval
-      await supabase.from("approvals").insert({
+      const { error: apprErr } = await supabase.from("approvals").insert({
         entity_table: "properties",
         entity_id: property.id,
         stage: "captacao",
@@ -127,6 +129,7 @@ export function NovaCaptacaoForm() {
         solicitado_por: userId,
         payload: { codigo, type, category },
       });
+      if (apprErr) throw apprErr;
 
       // Só navega automaticamente se tudo subiu; senão deixa a msg visível.
       if (uploadFailures === 0) {
@@ -136,8 +139,8 @@ export function NovaCaptacaoForm() {
         setLoading(false);
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      setError(message);
+      console.error("Erro ao salvar captação:", e);
+      setError(errMessage(e));
     } finally {
       setLoading(false);
     }
