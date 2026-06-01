@@ -1,13 +1,16 @@
-import { requireSector } from "@/lib/auth";
+import { requireSector, canCreateMoney } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
 import { PayCommissionButton } from "./PayCommissionButton";
+import { NewGeneralCommissionDialog } from "./NewGeneralCommissionDialog";
 
 export default async function ComissoesPage({ searchParams }: { searchParams: { status?: string } }) {
-  await requireSector(["financeiro", "administrativo", "admin_central"]);
+  const { profile } = await requireSector(["financeiro", "administrativo", "admin_central"]);
+  const podeLancar = canCreateMoney(profile);
   const supabase = createSupabaseServer();
+  const { data: accounts } = await supabase.from("bank_accounts").select("id, nome").eq("ativo", true).order("nome");
   let q = supabase
     .from("commissions")
     .select("*, property_financials(property_id, valor_fechado, data_fechamento, operation_type, properties(codigo, titulo))")
@@ -24,9 +27,12 @@ export default async function ComissoesPage({ searchParams }: { searchParams: { 
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-3xl text-arini">Comissões</h1>
-        <p className="text-muted-foreground mt-1">Controle de comissões geradas por operação de venda/locação.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-3xl text-arini">Comissões</h1>
+          <p className="text-muted-foreground mt-1">Comissões de imóveis e comissões gerais (parcerias, indicações, etc.).</p>
+        </div>
+        {podeLancar && <NewGeneralCommissionDialog accounts={(accounts ?? []) as { id: string; nome: string }[]} />}
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">

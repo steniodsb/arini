@@ -12,7 +12,15 @@ export async function POST(req: Request) {
 
   const { data: profile } = await ssr.from("profiles").select("*").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 403 });
-  if (!profile.is_admin_central && profile.sector !== "administrativo") {
+
+  const isDiretoria = profile.is_admin_central || profile.sector === "admin_central";
+  // A aprovação de marketing publica o imóvel no site → exclusiva da diretoria.
+  // A autorização da etapa de captação pode ser feita pela gerência (administrativo).
+  if (stage === "marketing" || entityTable !== "properties") {
+    if (!isDiretoria) {
+      return NextResponse.json({ error: "Apenas a diretoria pode aprovar esta etapa" }, { status: 403 });
+    }
+  } else if (!isDiretoria && profile.sector !== "administrativo") {
     return NextResponse.json({ error: "Sem permissão para aprovar" }, { status: 403 });
   }
 

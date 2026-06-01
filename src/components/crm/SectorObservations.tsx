@@ -29,12 +29,14 @@ export function SectorObservations({
   currentUserId,
   currentSector,
   initial,
+  canAdd = true,
 }: {
   entityTable: string;
   entityId: string;
   currentUserId: string;
   currentSector: Sector;
   initial: SectorObservation[];
+  canAdd?: boolean;
 }) {
   const router = useRouter();
   const [items, setItems] = useState<SectorObservation[]>(initial);
@@ -93,6 +95,12 @@ export function SectorObservations({
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        {!canAdd && (
+          <p className="text-xs text-muted-foreground italic">
+            As observações ficam disponíveis após a aprovação do imóvel.
+          </p>
+        )}
+        {canAdd && (
         <div className="space-y-2">
           <Textarea
             rows={2}
@@ -119,6 +127,7 @@ export function SectorObservations({
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
+        )}
 
         <div className="space-y-2">
           {items.length === 0 && (

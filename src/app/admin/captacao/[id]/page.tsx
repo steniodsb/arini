@@ -12,6 +12,7 @@ import { Pencil, ExternalLink, MapPin } from "lucide-react";
 import Image from "next/image";
 import { SectorObservations } from "@/components/crm/SectorObservations";
 import { DeletePropertyButton } from "@/components/crm/DeletePropertyButton";
+import { SendToMarketingButton } from "@/components/crm/SendToMarketingButton";
 
 // Status nos quais o imóvel ainda não foi aprovado pela diretoria/gerência.
 const PRE_APPROVAL_STATUSES = ["rascunho", "aguardando_aprovacao_captacao", "aprovado_captacao"];
@@ -36,6 +37,15 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
     isDiretoria ||
     profile?.sector === "administrativo" ||
     (profile?.sector === "captacao" && p.captador_id === user.id && PRE_APPROVAL_STATUSES.includes(p.status));
+  // Edição/observações: diretoria e administrativo sempre; captação só enquanto
+  // não aprovado e dono do imóvel. Demais setores não editam imóvel não aprovado.
+  const canEdit =
+    isDiretoria ||
+    profile?.sector === "administrativo" ||
+    (profile?.sector === "captacao" && p.captador_id === user.id && PRE_APPROVAL_STATUSES.includes(p.status));
+  // Observações ficam liberadas após o imóvel ser aprovado (sai dos status pré-aprovação),
+  // ou sempre para diretoria/administrativo/captação-dono.
+  const canObserve = canEdit || !PRE_APPROVAL_STATUSES.includes(p.status);
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -53,9 +63,11 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
           <div className="text-xs uppercase text-muted-foreground">Valor</div>
           <div className="text-3xl text-gold-gradient font-semibold">{formatCurrencyBRL(p.valor)}</div>
           <div className="mt-3 flex gap-2 justify-end">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/admin/captacao/${p.id}/editar`}><Pencil size={14} /> Editar</Link>
-            </Button>
+            {canEdit && (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/admin/captacao/${p.id}/editar`}><Pencil size={14} /> Editar</Link>
+              </Button>
+            )}
             {p.publicado_no_site && (
               <Button asChild variant="ghost" size="sm">
                 <Link href={`/imoveis/${p.codigo}`} target="_blank">
@@ -65,6 +77,11 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
             )}
             {canDelete && <DeletePropertyButton propertyId={p.id} codigo={p.codigo} />}
           </div>
+          {canEdit && p.status === "aprovado_captacao" && !p.enviado_para_marketing && (
+            <div className="mt-2 flex justify-end">
+              <SendToMarketingButton propertyId={p.id} userId={user.id} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -154,6 +171,7 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
           currentUserId={user.id}
           currentSector={profile.sector}
           initial={(observations ?? []) as SectorObservation[]}
+          canAdd={canObserve}
         />
       )}
 

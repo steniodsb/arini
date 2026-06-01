@@ -34,7 +34,15 @@ export type LeadStage =
 
 export type LeadOrigin =
   | "instagram" | "facebook" | "site" | "whatsapp" | "ligacao"
-  | "indicacao" | "trafego_pago" | "placa" | "portal" | "outros";
+  | "indicacao" | "trafego_pago" | "placa" | "portal" | "tiktok" | "messenger" | "outros";
+
+export type ClientType =
+  | "comprador" | "vendedor" | "locatario" | "locador" | "proprietario"
+  | "fornecedor" | "parceiro" | "investidor" | "outro";
+
+export type SocialPlatform = "instagram" | "facebook" | "whatsapp" | "tiktok";
+
+export type TimeEntryType = "entrada" | "intervalo_inicio" | "intervalo_fim" | "saida";
 
 export type ApprovalStage =
   | "captacao" | "marketing" | "juridico"
@@ -97,6 +105,9 @@ export interface Property {
   slug_publico: string | null;
   publicado_no_site: boolean;
   destaque: boolean;
+  enviado_para_marketing: boolean;
+  enviado_marketing_em: string | null;
+  enviado_marketing_por: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -231,5 +242,116 @@ export const LEAD_STAGES: { key: LeadStage; label: string; color: string }[] = [
 
 export const LEAD_ORIGINS: LeadOrigin[] = [
   "instagram","facebook","site","whatsapp","ligacao",
-  "indicacao","trafego_pago","placa","portal","outros"
+  "indicacao","trafego_pago","placa","portal","tiktok","messenger","outros"
 ];
+
+export const CLIENT_TYPES: ClientType[] = [
+  "comprador","vendedor","locatario","locador","proprietario",
+  "fornecedor","parceiro","investidor","outro",
+];
+
+export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
+  comprador: "Comprador",
+  vendedor: "Vendedor",
+  locatario: "Locatário",
+  locador: "Locador",
+  proprietario: "Proprietário",
+  fornecedor: "Fornecedor",
+  parceiro: "Parceiro",
+  investidor: "Investidor",
+  outro: "Outro",
+};
+
+export interface Client {
+  id: string;
+  nome: string;
+  tipo: ClientType;
+  cpf_cnpj: string | null;
+  telefone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  endereco: string | null;
+  cidade: string | null;
+  uf: string | null;
+  observacoes: string | null;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientDocument {
+  id: string;
+  client_id: string;
+  tipo: string;
+  nome: string | null;
+  url: string;
+  storage_path: string | null;
+  status: "pendente" | "entregue" | "assinado" | "cancelado";
+  observacoes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface BankAccount {
+  id: string;
+  nome: string;
+  banco: string | null;
+  agencia: string | null;
+  conta: string | null;
+  tipo: "conta_corrente" | "poupanca" | "caixa" | "investimento";
+  saldo_inicial: number;
+  ativo: boolean;
+  created_at: string;
+}
+
+export interface BankAccountBalance {
+  id: string;
+  nome: string;
+  banco: string | null;
+  tipo: string;
+  ativo: boolean;
+  saldo_inicial: number;
+  saldo_atual: number;
+}
+
+export interface TimeEntry {
+  id: string;
+  user_id: string;
+  tipo: TimeEntryType;
+  registrado_em: string;
+  origem: string;
+  observacoes: string | null;
+  created_at: string;
+}
+
+export const TIME_ENTRY_LABELS: Record<TimeEntryType, string> = {
+  entrada: "Entrada",
+  intervalo_inicio: "Saída p/ intervalo",
+  intervalo_fim: "Retorno do intervalo",
+  saida: "Saída",
+};
+
+export interface MarketingContent {
+  id: string;
+  campaign_id: string;
+  property_id: string | null;
+  tipo: string;
+  titulo: string | null;
+  data_publicacao: string | null;
+  publicado: boolean;
+  observacoes: string | null;
+  created_at: string;
+}
+
+export interface MarketingMedia {
+  id: string;
+  property_id: string;
+  campaign_id: string | null;
+  fase: "bruta" | "editada";
+  tipo: string;
+  url: string;
+  storage_path: string | null;
+  ordem: number;
+  created_at: string;
+}

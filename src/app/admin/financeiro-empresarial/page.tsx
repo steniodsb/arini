@@ -5,15 +5,24 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
 import { ExpenseForm } from "./ExpenseForm";
 import { CashFlowChart } from "@/components/crm/CashFlowChart";
+import { ExpenseDateFilter } from "./ExpenseDateFilter";
 
-export default async function FinanceiroEmpresarialPage() {
+export default async function FinanceiroEmpresarialPage({ searchParams }: { searchParams: { from?: string; to?: string } }) {
   await requireSector(["financeiro", "administrativo", "admin_central"]);
   const supabase = createSupabaseServer();
-  const [{ data: expenses }, { data: categories }, { data: incomesAll }, { data: expensesAll }] = await Promise.all([
-    supabase.from("expenses").select("*, expense_categories(nome)").order("vencimento", { ascending: true }).limit(200),
+
+  let expQuery = supabase.from("expenses").select("*, expense_categories(nome)").order("vencimento", { ascending: true }).limit(300);
+  if (searchParams.from) expQuery = expQuery.gte("vencimento", searchParams.from);
+  if (searchParams.to) expQuery = expQuery.lte("vencimento", searchParams.to);
+
+  const [{ data: expenses }, { data: categories }, { data: incomesAll }, { data: expensesAll }, { data: accounts }, { data: properties }, { data: clients }] = await Promise.all([
+    expQuery,
     supabase.from("expense_categories").select("*").eq("ativo", true),
     supabase.from("incomes").select("valor, data").gte("data", new Date(new Date().getFullYear(), new Date().getMonth() - 5, 1).toISOString().slice(0, 10)),
     supabase.from("expenses").select("valor, vencimento, status").gte("vencimento", new Date(new Date().getFullYear(), new Date().getMonth() - 5, 1).toISOString().slice(0, 10)),
+    supabase.from("bank_accounts").select("id, nome").eq("ativo", true).order("nome"),
+    supabase.from("properties").select("id, codigo, titulo").order("codigo"),
+    supabase.from("clients").select("id, nome").order("nome"),
   ]);
 
   // Monta dados do gráfico (últimos 6 meses)
@@ -66,21 +75,30 @@ export default async function FinanceiroEmpresarialPage() {
       <Card>
         <CardHeader><CardTitle>Nova despesa</CardTitle></CardHeader>
         <CardContent>
-          <ExpenseForm categories={(categories ?? []) as { id: string; nome: string }[]} />
+          <ExpenseForm
+            categories={(categories ?? []) as { id: string; nome: string }[]}
+            accounts={(accounts ?? []) as { id: string; nome: string }[]}
+            properties={(properties ?? []) as { id: string; codigo: string; titulo: string | null }[]}
+            clients={(clients ?? []) as { id: string; nome: string }[]}
+          />
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Despesas</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Despesas</CardTitle>
+          <ExpenseDateFilter from={searchParams.from ?? ""} to={searchParams.to ?? ""} />
+        </CardHeader>
         <CardContent>
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase text-muted-foreground">
-              <tr><th className="py-2">Vencimento</th><th>Categoria</th><th>Fornecedor</th><th>Valor</th><th>Status</th><th>Recorrência</th></tr>
+              <tr><th className="py-2">Vencimento</th><th>Tipo</th><th>Categoria</th><th>Fornecedor</th><th>Valor</th><th>Status</th><th>Recorrência</th></tr>
             </thead>
             <tbody>
               {(expenses ?? []).map((e) => (
                 <tr key={e.id} className="border-t">
                   <td className="py-2">{formatDateBR(e.vencimento)}</td>
+                  <td className="capitalize text-xs">{e.tipo_gasto ?? "empresa"}</td>
                   <td>{e.expense_categories?.nome ?? "—"}</td>
                   <td>{e.fornecedor ?? "—"}</td>
                   <td>{formatCurrencyBRL(e.valor)}</td>
@@ -88,7 +106,7 @@ export default async function FinanceiroEmpresarialPage() {
                   <td className="text-xs">{e.recorrencia}</td>
                 </tr>
               ))}
-              {(expenses ?? []).length === 0 && <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
+              {(expenses ?? []).length === 0 && <tr><td colSpan={7} className="py-6 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
             </tbody>
           </table>
         </CardContent>

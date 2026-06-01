@@ -9,10 +9,12 @@ import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Property } from "@/lib/type
 export default async function MarketingListPage() {
   await requireSector(["marketing", "administrativo", "admin_central"]);
   const supabase = createSupabaseServer();
+  // Gate: o marketing só "recebe" imóveis que a captação enviou explicitamente.
   const { data: properties } = await supabase
     .from("properties")
     .select("*")
-    .in("status", ["aprovado_captacao", "em_marketing", "aguardando_aprovacao_marketing", "publicado"])
+    .eq("enviado_para_marketing", true)
+    .in("status", ["em_marketing", "aguardando_aprovacao_marketing", "publicado"])
     .order("created_at", { ascending: false })
     .limit(100);
   const list = (properties ?? []) as Property[];
@@ -46,6 +48,7 @@ export default async function MarketingListPage() {
                 <td className="px-4 py-3">
                   {p.titulo || `${PROPERTY_TYPE_LABELS[p.type]} em ${p.cidade ?? "—"}`}
                   <div className="text-xs text-muted-foreground">{PROPERTY_TYPE_LABELS[p.type]} · {CATEGORY_LABELS[p.category]}</div>
+                  <div className="text-xs text-muted-foreground">{[p.endereco, p.bairro, p.cidade, p.uf].filter(Boolean).join(", ") || "—"}</div>
                 </td>
                 <td className="px-4 py-3">{formatCurrencyBRL(p.valor)}</td>
                 <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
