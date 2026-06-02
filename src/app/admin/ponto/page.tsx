@@ -1,7 +1,10 @@
+import Link from "next/link";
 import { requireUser, isDiretoria } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Users } from "lucide-react";
 import { TIME_ENTRY_LABELS, type TimeEntry, type TimeEntryType } from "@/lib/types";
 import { PunchClock } from "./PunchClock";
 
@@ -34,9 +37,16 @@ export default async function PontoPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-3xl text-arini">Ponto</h1>
-        <p className="text-muted-foreground mt-1">Registre entrada, intervalos e saída.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-3xl text-arini">Ponto</h1>
+          <p className="text-muted-foreground mt-1">Registre entrada, intervalos e saída.</p>
+        </div>
+        {admin && (
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/ponto/funcionarios"><Users size={14} /> Funcionários</Link>
+          </Button>
+        )}
       </div>
 
       <PunchClock userId={user.id} lastType={lastType} />

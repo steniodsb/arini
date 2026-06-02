@@ -15,9 +15,16 @@ import { errMessage } from "@/lib/utils";
 import {
   CATEGORY_LABELS,
   PROPERTY_TYPE_LABELS,
+  SECTOR_LABELS,
   type PropertyCategory,
   type PropertyType,
+  type Sector,
 } from "@/lib/types";
+
+// Setores que podem receber a observação da captação.
+const TARGET_SECTORS: Sector[] = [
+  "marketing", "administrativo", "juridico", "financeiro", "recepcao", "admin_central",
+];
 
 export function NovaCaptacaoForm() {
   const router = useRouter();
@@ -25,6 +32,7 @@ export function NovaCaptacaoForm() {
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const [obsSector, setObsSector] = useState<Sector>("marketing");
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -35,6 +43,11 @@ export function NovaCaptacaoForm() {
     const supabase = createSupabaseBrowser();
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
+    let autorSector: Sector | null = null;
+    if (userId) {
+      const { data: prof } = await supabase.from("profiles").select("sector").eq("id", userId).single();
+      autorSector = (prof?.sector as Sector) ?? null;
+    }
 
     try {
       const type = fd.get("type") as PropertyType;
@@ -89,6 +102,7 @@ export function NovaCaptacaoForm() {
         tour: fd.get("mat_tour") === "on",
         drone: fd.get("mat_drone") === "on",
       };
+      const relatorioText = (fd.get("relatorio") as string)?.trim() || null;
       const { error: capErr } = await supabase.from("property_capture_info").insert({
         property_id: property.id,
         utilizou_camera: fd.get("eq_camera") === "on",
@@ -96,10 +110,24 @@ export function NovaCaptacaoForm() {
         utilizou_gimbal: fd.get("eq_gimbal") === "on",
         utilizou_celular: fd.get("eq_celular") === "on",
         materiais,
-        relatorio_texto: (fd.get("relatorio") as string) || null,
+        relatorio_texto: relatorioText,
         placa_colocada: fd.get("placa") === "on",
       });
       if (capErr) throw capErr;
+
+      // Observação direcionada: o relatório também vira uma observação para o
+      // setor escolhido (cai como notificação nele, via trigger).
+      if (relatorioText) {
+        const { error: obsErr } = await supabase.from("sector_observations").insert({
+          entity_table: "properties",
+          entity_id: property.id,
+          target_sector: obsSector,
+          autor_id: userId,
+          autor_sector: autorSector,
+          texto: relatorioText,
+        });
+        if (obsErr) console.warn("Falha ao registrar observação direcionada:", obsErr.message);
+      }
 
       // Upload de mídia (robusto: retry + continua mesmo se algum falhar)
       let uploadFailures = 0;
@@ -257,7 +285,22 @@ export function NovaCaptacaoForm() {
           </div>
           <div>
             <Label>Relatório / observações</Label>
-            <Textarea name="relatorio" rows={3} />
+            <Textarea name="relatorio" rows={3} placeholder="Escreva o relatório/observação da captação…" />
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className="text-xs text-muted-foreground">Enviar esta observação para o setor:</span>
+              <Select
+                value={obsSector}
+                onChange={(e) => setObsSector(e.target.value as Sector)}
+                className="w-auto min-w-[200px]"
+              >
+                {TARGET_SECTORS.map((s) => (
+                  <option key={s} value={s}>{SECTOR_LABELS[s]}</option>
+                ))}
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              O setor escolhido recebe uma notificação com esta observação.
+            </p>
           </div>
         </CardContent>
       </Card>

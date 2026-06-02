@@ -39,15 +39,35 @@ export async function POST(req: Request) {
   // Efeitos colaterais por stage
   if (entityTable === "properties") {
     if (stage === "captacao") {
+      // aprovado → aprovado_captacao; reprovado → inativo; corrigir → rascunho (editável p/ reenvio)
       const newStatus = status === "aprovado" ? "aprovado_captacao" : status === "reprovado" ? "inativo" : "rascunho";
       await admin.from("properties").update({ status: newStatus }).eq("id", entityId);
     } else if (stage === "marketing") {
       if (status === "aprovado") {
         await admin.from("properties").update({ status: "publicado", publicado_no_site: true }).eq("id", entityId);
         await admin.from("marketing_campaigns").update({ status: "publicado", data_publicacao_realizada: new Date().toISOString().slice(0, 10) }).eq("property_id", entityId);
-      } else if (status === "reprovado") {
-        await admin.from("marketing_campaigns").update({ status: "reprovado" }).eq("property_id", entityId);
+      } else {
+        // reprovado ou corrigir → volta para em_marketing para o marketing reajustar e reenviar
+        await admin.from("properties").update({ status: "em_marketing" }).eq("id", entityId);
+        await admin
+          .from("marketing_campaigns")
+          .update({ status: status === "reprovado" ? "reprovado" : "rascunho" })
+          .eq("property_id", entityId);
       }
+    }
+  }
+
+  // Notifica o setor responsável quando reprovado ou correção solicitada (ciclo de etapas).
+  if (status === "reprovado" || status === "corrigir") {
+    const sectorToNotify = stage === "marketing" ? "marketing" : stage === "captacao" ? "captacao" : null;
+    if (sectorToNotify) {
+      await admin.from("notifications").insert({
+        sector: sectorToNotify,
+        tipo: "aprovacao",
+        titulo: status === "reprovado" ? "Aprovação reprovada" : "Correção solicitada",
+        mensagem: comentario || (status === "reprovado" ? "Item reprovado pela aprovação." : "Foram solicitados ajustes."),
+        link: stage === "marketing" ? `/admin/marketing/${entityId}` : `/admin/captacao/${entityId}`,
+      });
     }
   }
 

@@ -7,8 +7,9 @@ import { MarketingContents } from "./MarketingContents";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/crm/StatusBadge";
 import { SectorObservations } from "@/components/crm/SectorObservations";
-import { PROPERTY_TYPE_LABELS, CATEGORY_LABELS, type Property, type PropertyMedia, type MarketingMedia, type MarketingContent, type SectorObservation } from "@/lib/types";
-import { formatCurrencyBRL } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { PROPERTY_TYPE_LABELS, CATEGORY_LABELS, type Property, type PropertyMedia, type MarketingMedia, type MarketingContent, type SectorObservation, type Approval } from "@/lib/types";
+import { formatCurrencyBRL, formatDateTimeBR } from "@/lib/utils";
 
 export default async function MarketingDetailPage({ params }: { params: { id: string } }) {
   const { user, profile } = await requireSector(["marketing", "administrativo", "admin_central"]);
@@ -17,12 +18,13 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
   if (!property) notFound();
   const p = property as Property;
 
-  const [{ data: campaign }, { data: rawMedia }, { data: editedMedia }, { data: contents }, { data: observations }] = await Promise.all([
+  const [{ data: campaign }, { data: rawMedia }, { data: editedMedia }, { data: contents }, { data: observations }, { data: approvals }] = await Promise.all([
     supabase.from("marketing_campaigns").select("*").eq("property_id", p.id).maybeSingle(),
     supabase.from("property_media").select("*").eq("property_id", p.id).order("ordem"),
     supabase.from("marketing_media").select("*").eq("property_id", p.id).eq("fase", "editada").order("created_at", { ascending: false }),
     supabase.from("marketing_contents").select("*").eq("property_id", p.id).order("data_publicacao", { ascending: true }),
     supabase.from("sector_observations").select("*").eq("entity_table", "marketing_campaigns").eq("entity_id", p.id).order("created_at", { ascending: false }),
+    supabase.from("approvals").select("*").eq("entity_table", "properties").eq("entity_id", p.id).eq("stage", "marketing").order("created_at", { ascending: false }),
   ]);
 
   const campaignId = campaign?.id ?? null;
@@ -70,6 +72,24 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
           initial={(observations ?? []) as SectorObservation[]}
         />
       )}
+
+      <Card>
+        <CardHeader><CardTitle>Histórico de aprovações</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {((approvals ?? []) as Approval[]).length === 0 && (
+            <p className="text-sm text-muted-foreground">Nenhuma aprovação de marketing registrada ainda.</p>
+          )}
+          {((approvals ?? []) as Approval[]).map((a) => (
+            <div key={a.id} className="flex items-center justify-between border-b pb-2 text-sm">
+              <div className="flex items-center gap-2">
+                <Badge variant={a.status === "aprovado" ? "success" : a.status === "reprovado" ? "danger" : a.status === "corrigir" ? "warning" : "muted"}>{a.status}</Badge>
+                {a.comentario && <span className="text-muted-foreground">{a.comentario}</span>}
+              </div>
+              <span className="text-xs text-muted-foreground">{formatDateTimeBR(a.decidido_em || a.created_at)}</span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

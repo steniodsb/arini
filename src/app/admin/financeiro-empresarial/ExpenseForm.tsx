@@ -13,15 +13,17 @@ export function ExpenseForm({
   accounts = [],
   properties = [],
   clients = [],
+  defaultTipo = "empresa",
 }: {
   categories: { id: string; nome: string }[];
   accounts?: { id: string; nome: string }[];
   properties?: { id: string; codigo: string; titulo: string | null }[];
   clients?: { id: string; nome: string }[];
+  defaultTipo?: "empresa" | "imovel" | "cliente";
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [tipoGasto, setTipoGasto] = useState<"empresa" | "imovel" | "cliente">("empresa");
+  const [tipoGasto, setTipoGasto] = useState<"empresa" | "imovel" | "cliente">(defaultTipo);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setLoading(true);
@@ -45,7 +47,7 @@ export function ExpenseForm({
     });
     setLoading(false);
     (e.currentTarget as HTMLFormElement).reset();
-    setTipoGasto("empresa");
+    setTipoGasto(defaultTipo);
     router.refresh();
   }
 

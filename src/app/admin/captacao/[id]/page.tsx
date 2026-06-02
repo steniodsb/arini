@@ -13,6 +13,7 @@ import Image from "next/image";
 import { SectorObservations } from "@/components/crm/SectorObservations";
 import { DeletePropertyButton } from "@/components/crm/DeletePropertyButton";
 import { SendToMarketingButton } from "@/components/crm/SendToMarketingButton";
+import { ResubmitApprovalButton } from "@/components/crm/ResubmitApprovalButton";
 
 // Status nos quais o imóvel ainda não foi aprovado pela diretoria/gerência.
 const PRE_APPROVAL_STATUSES = ["rascunho", "aguardando_aprovacao_captacao", "aprovado_captacao"];
@@ -80,6 +81,11 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
           {canEdit && p.status === "aprovado_captacao" && !p.enviado_para_marketing && (
             <div className="mt-2 flex justify-end">
               <SendToMarketingButton propertyId={p.id} userId={user.id} />
+            </div>
+          )}
+          {canEdit && p.status === "rascunho" && (
+            <div className="mt-2 flex justify-end">
+              <ResubmitApprovalButton propertyId={p.id} userId={user.id} />
             </div>
           )}
         </div>
