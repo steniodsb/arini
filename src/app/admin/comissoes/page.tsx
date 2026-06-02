@@ -1,14 +1,22 @@
-import { requireSector, canCreateMoney } from "@/lib/auth";
+import { requireSector, canCreateMoney, isDiretoria } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
 import { PayCommissionButton } from "./PayCommissionButton";
 import { NewGeneralCommissionDialog } from "./NewGeneralCommissionDialog";
+import { TransactionActions } from "@/components/crm/TransactionActions";
+
+const COMMISSION_STATUS_OPTS = [
+  { value: "pendente", label: "Pendente" },
+  { value: "parcial", label: "Parcial" },
+  { value: "pago", label: "Pago" },
+];
 
 export default async function ComissoesPage({ searchParams }: { searchParams: { status?: string } }) {
   const { profile } = await requireSector(["financeiro", "administrativo", "admin_central"]);
   const podeLancar = canCreateMoney(profile);
+  const canManage = isDiretoria(profile);
   const supabase = createSupabaseServer();
   const { data: accounts } = await supabase.from("bank_accounts").select("id, nome").eq("ativo", true).order("nome");
   let q = supabase
@@ -104,7 +112,23 @@ export default async function ComissoesPage({ searchParams }: { searchParams: { 
                   </td>
                   <td>{c.pago_em ? formatDateBR(c.pago_em) : "—"}</td>
                   <td>
-                    {c.status !== "pago" && <PayCommissionButton id={c.id} />}
+                    <div className="flex items-center gap-1 justify-end">
+                      {c.status !== "pago" && <PayCommissionButton id={c.id} />}
+                      <TransactionActions
+                        table="commissions"
+                        id={c.id}
+                        title="Editar comissão"
+                        canManage={canManage}
+                        fields={[
+                          { name: "beneficiario_nome", label: "Beneficiário", type: "text", value: c.beneficiario_nome },
+                          { name: "valor", label: "Valor (R$)", type: "number", step: "0.01", value: c.valor },
+                          { name: "percentual", label: "Percentual (%)", type: "number", step: "0.01", value: c.percentual },
+                          { name: "status", label: "Status", type: "select", value: c.status, options: COMMISSION_STATUS_OPTS },
+                          { name: "data_inicio", label: "Data início", type: "date", value: c.data_inicio ?? null },
+                          { name: "data_fechamento", label: "Data fechamento", type: "date", value: c.data_fechamento ?? null },
+                        ]}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

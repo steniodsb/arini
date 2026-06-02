@@ -1,4 +1,4 @@
-import { requireSector } from "@/lib/auth";
+import { requireSector, isDiretoria } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,9 +6,18 @@ import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
 import { ExpenseForm } from "./ExpenseForm";
 import { CashFlowChart } from "@/components/crm/CashFlowChart";
 import { ExpenseDateFilter } from "./ExpenseDateFilter";
+import { TransactionActions } from "@/components/crm/TransactionActions";
+
+const EXPENSE_STATUS_OPTS = [
+  { value: "pendente", label: "Pendente" },
+  { value: "pago", label: "Pago" },
+  { value: "vencido", label: "Vencido" },
+  { value: "renegociado", label: "Renegociado" },
+];
 
 export default async function FinanceiroEmpresarialPage({ searchParams }: { searchParams: { from?: string; to?: string } }) {
-  await requireSector(["financeiro", "administrativo", "admin_central"]);
+  const { profile } = await requireSector(["financeiro", "administrativo", "admin_central"]);
+  const canManage = isDiretoria(profile);
   const supabase = createSupabaseServer();
 
   let expQuery = supabase.from("expenses").select("*, expense_categories(nome)").order("vencimento", { ascending: true }).limit(300);
@@ -92,7 +101,7 @@ export default async function FinanceiroEmpresarialPage({ searchParams }: { sear
         <CardContent>
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase text-muted-foreground">
-              <tr><th className="py-2">Vencimento</th><th>Tipo</th><th>Categoria</th><th>Fornecedor</th><th>Valor</th><th>Status</th><th>Recorrência</th></tr>
+              <tr><th className="py-2">Vencimento</th><th>Tipo</th><th>Categoria</th><th>Fornecedor</th><th>Valor</th><th>Status</th><th>Recorrência</th>{canManage && <th className="text-right">Ações</th>}</tr>
             </thead>
             <tbody>
               {(expenses ?? []).map((e) => (
@@ -104,9 +113,26 @@ export default async function FinanceiroEmpresarialPage({ searchParams }: { sear
                   <td>{formatCurrencyBRL(e.valor)}</td>
                   <td><Badge variant={e.status === "pago" ? "success" : e.status === "vencido" ? "danger" : "warning"}>{e.status}</Badge></td>
                   <td className="text-xs">{e.recorrencia}</td>
+                  {canManage && (
+                    <td>
+                      <TransactionActions
+                        table="expenses"
+                        id={e.id}
+                        title="Editar despesa"
+                        canManage={canManage}
+                        fields={[
+                          { name: "fornecedor", label: "Fornecedor", type: "text", value: e.fornecedor },
+                          { name: "descricao", label: "Descrição", type: "text", value: e.descricao },
+                          { name: "valor", label: "Valor (R$)", type: "number", step: "0.01", value: e.valor },
+                          { name: "vencimento", label: "Vencimento", type: "date", value: e.vencimento },
+                          { name: "status", label: "Status", type: "select", value: e.status, options: EXPENSE_STATUS_OPTS },
+                        ]}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
-              {(expenses ?? []).length === 0 && <tr><td colSpan={7} className="py-6 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
+              {(expenses ?? []).length === 0 && <tr><td colSpan={canManage ? 8 : 7} className="py-6 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
             </tbody>
           </table>
         </CardContent>
