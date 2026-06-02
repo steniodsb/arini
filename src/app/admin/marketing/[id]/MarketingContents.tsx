@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { formatDateBR } from "@/lib/utils";
-import { Plus, Check } from "lucide-react";
+import { Plus, Check, Trash2 } from "lucide-react";
 import type { MarketingContent } from "@/lib/types";
 
 const TIPOS = [
@@ -57,6 +57,15 @@ export function MarketingContents({
     setItems((p) => p.map((c) => (c.id === id ? { ...c, publicado } : c)));
   }
 
+  async function remove(id: string) {
+    if (!confirm("Excluir este conteúdo?")) return;
+    const supabase = createSupabaseBrowser();
+    const { error } = await supabase.from("marketing_contents").delete().eq("id", id);
+    if (error) { alert(error.message); return; }
+    setItems((p) => p.filter((c) => c.id !== id));
+    router.refresh();
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -84,6 +93,9 @@ export function MarketingContents({
                 <span className="text-xs text-muted-foreground">{c.data_publicacao ? formatDateBR(c.data_publicacao) : "sem data"}</span>
                 <button type="button" onClick={() => togglePub(c.id, !c.publicado)} className="text-xs text-arini hover:text-gold-dark font-semibold inline-flex items-center gap-1">
                   <Check size={12} /> {c.publicado ? "Marcar pendente" : "Marcar publicado"}
+                </button>
+                <button type="button" onClick={() => remove(c.id)} className="text-xs text-red-600 hover:text-red-700 inline-flex items-center gap-1">
+                  <Trash2 size={12} /> Excluir
                 </button>
               </div>
             </div>

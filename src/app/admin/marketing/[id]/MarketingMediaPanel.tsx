@@ -7,7 +7,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { uploadMarketingMedia } from "@/lib/upload";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload } from "lucide-react";
+import { Upload, Trash2 } from "lucide-react";
 import type { MarketingMedia, PropertyMedia } from "@/lib/types";
 
 export function MarketingMediaPanel({
@@ -47,6 +47,16 @@ export function MarketingMediaPanel({
     router.refresh();
   }
 
+  async function removeItem(m: MarketingMedia) {
+    if (!confirm("Excluir esta mídia editada?")) return;
+    const supabase = createSupabaseBrowser();
+    if (m.storage_path) await supabase.storage.from("marketing-media").remove([m.storage_path]);
+    const { error } = await supabase.from("marketing_media").delete().eq("id", m.id);
+    if (error) { setError(error.message); return; }
+    setItems((prev) => prev.filter((x) => x.id !== m.id));
+    router.refresh();
+  }
+
   return (
     <Card>
       <CardHeader><CardTitle>Mídias</CardTitle></CardHeader>
@@ -82,10 +92,18 @@ export function MarketingMediaPanel({
           ) : (
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
               {items.map((m) => (
-                <div key={m.id} className="relative aspect-square rounded-md overflow-hidden bg-muted">
+                <div key={m.id} className="relative aspect-square rounded-md overflow-hidden bg-muted group">
                   {m.tipo === "imagem"
                     ? <Image src={m.url} alt="" fill className="object-cover" sizes="120px" />
                     : <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">{m.tipo}</div>}
+                  <button
+                    type="button"
+                    onClick={() => removeItem(m)}
+                    title="Excluir"
+                    className="absolute top-1 right-1 bg-white/90 hover:bg-white text-red-600 rounded p-1 opacity-0 group-hover:opacity-100 transition"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                 </div>
               ))}
             </div>

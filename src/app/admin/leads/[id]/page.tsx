@@ -1,15 +1,19 @@
 import { notFound } from "next/navigation";
-import { requireSector } from "@/lib/auth";
+import { requireSector, isDiretoria } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTimeBR, formatCurrencyBRL } from "@/lib/utils";
 import { LEAD_STAGES, type Lead } from "@/lib/types";
 import { LeadInteractions } from "./LeadInteractions";
+import { TransactionActions } from "@/components/crm/TransactionActions";
 import Link from "next/link";
 
+const LEAD_STAGE_OPTS = LEAD_STAGES.map((s) => ({ value: s.key, label: s.label }));
+
 export default async function LeadDetailPage({ params }: { params: { id: string } }) {
-  await requireSector(["recepcao", "administrativo", "admin_central"]);
+  const { profile } = await requireSector(["recepcao", "administrativo", "admin_central"]);
+  const canManage = isDiretoria(profile);
   const supabase = createSupabaseServer();
   const { data } = await supabase.from("leads").select("*").eq("id", params.id).single();
   if (!data) notFound();
@@ -38,6 +42,26 @@ export default async function LeadDetailPage({ params }: { params: { id: string 
         <div className="text-right text-sm text-muted-foreground">
           <div>Criado em {formatDateTimeBR(lead.created_at)}</div>
           <div>Última interação {formatDateTimeBR(lead.ultima_interacao_em)}</div>
+          {canManage && (
+            <div className="mt-2">
+              <TransactionActions
+                table="leads"
+                id={lead.id}
+                title="Editar lead"
+                canManage={canManage}
+                redirectTo="/admin/leads"
+                editLabel="Editar"
+                fields={[
+                  { name: "nome", label: "Nome", type: "text", value: lead.nome },
+                  { name: "telefone", label: "Telefone", type: "text", value: lead.telefone },
+                  { name: "whatsapp", label: "WhatsApp", type: "text", value: lead.whatsapp },
+                  { name: "email", label: "E-mail", type: "text", value: lead.email },
+                  { name: "stage", label: "Estágio", type: "select", value: lead.stage, options: LEAD_STAGE_OPTS },
+                  { name: "observacoes", label: "Observações", type: "text", value: lead.observacoes },
+                ]}
+              />
+            </div>
+          )}
         </div>
       </div>
 

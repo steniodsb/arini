@@ -30,12 +30,16 @@ export function TransactionActions({
   title,
   fields,
   canManage,
+  redirectTo,
+  editLabel,
 }: {
   table: string;
   id: string;
   title: string;
   fields: TxField[];
   canManage: boolean;
+  redirectTo?: string;
+  editLabel?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -71,12 +75,15 @@ export function TransactionActions({
     const { error } = await supabase.from(table).delete().eq("id", id);
     setBusy(false);
     if (error) { alert(errMessage(error)); return; }
-    router.refresh();
+    if (redirectTo) router.push(redirectTo);
+    else router.refresh();
   }
 
   return (
     <div className="flex items-center gap-1 justify-end">
-      <Button size="sm" variant="ghost" onClick={() => setOpen(true)} title="Editar"><Pencil size={14} /></Button>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)} title="Editar">
+        <Pencil size={14} />{editLabel ? <span className="ml-1">{editLabel}</span> : null}
+      </Button>
       <Button size="sm" variant="ghost" onClick={remove} disabled={busy} title="Excluir" className="text-red-600 hover:text-red-700"><Trash2 size={14} /></Button>
 
       {open && (
