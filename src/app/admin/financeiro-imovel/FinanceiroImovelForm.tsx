@@ -26,6 +26,8 @@ export function FinanceiroImovelForm({ properties }: Props) {
     const comissao_pct = fd.get("comissao_pct") ? Number(fd.get("comissao_pct")) : null;
     const comissao_valor = comissao_pct ? (valor_fechado * comissao_pct) / 100 : (fd.get("comissao_valor") ? Number(fd.get("comissao_valor")) : null);
 
+    const pctEmpresa = fd.get("pct_empresa") ? Number(fd.get("pct_empresa")) : null;
+    const pctTerceiros = fd.get("pct_terceiros") ? Number(fd.get("pct_terceiros")) : null;
     const { data: fin, error } = await supabase.from("property_financials").insert({
       property_id: fd.get("property_id"),
       operation_type: fd.get("operation_type"),
@@ -34,6 +36,9 @@ export function FinanceiroImovelForm({ properties }: Props) {
       forma_pagamento: fd.get("forma_pagamento"),
       comissao_pct,
       comissao_valor,
+      divisao: pctEmpresa != null || pctTerceiros != null
+        ? { empresa: pctEmpresa ?? 0, terceiros: pctTerceiros ?? 0 }
+        : null,
       criado_por: user?.id,
     }).select().single();
     if (error) { setError(error.message); setLoading(false); return; }
@@ -98,6 +103,8 @@ export function FinanceiroImovelForm({ properties }: Props) {
       </div>
       <div><Label>Comissão %</Label><Input name="comissao_pct" type="number" step="0.01" /></div>
       <div><Label>Comissão R$ (se fixa)</Label><Input name="comissao_valor" type="number" step="0.01" /></div>
+      <div><Label>% Empresa</Label><Input name="pct_empresa" type="number" step="0.01" placeholder="Ex.: 60" /></div>
+      <div><Label>% Terceiros</Label><Input name="pct_terceiros" type="number" step="0.01" placeholder="Ex.: 40" /></div>
       <div className="md:col-span-3 flex justify-end">
         {error && <span className="text-sm text-red-600 mr-3 self-center">{error}</span>}
         <Button type="submit" variant="gold" disabled={loading}>{loading ? "Salvando…" : "Registrar fechamento"}</Button>

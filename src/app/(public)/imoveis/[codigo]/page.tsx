@@ -72,12 +72,11 @@ export default async function PropertyDetailPage({
   if (p.ano_construcao) diferenciais.push(`Construído em ${p.ano_construcao}`);
   if (p.exclusividade) diferenciais.push("Imóvel exclusivo");
 
-  const mapsHref = p.maps_url
-    ? p.maps_url
-    : p.lat && p.lng
-    ? `https://www.google.com/maps?q=${p.lat},${p.lng}`
-    : p.endereco
-    ? `https://www.google.com/maps?q=${encodeURIComponent([p.endereco, p.bairro, p.cidade, p.uf].filter(Boolean).join(", "))}`
+  // Site público mostra apenas a região (bairro/cidade) — sem rua, número,
+  // CEP ou localização exata. O interessado entra em contato para detalhes.
+  const regiao = [p.bairro, p.cidade, p.uf].filter(Boolean).join(", ");
+  const mapsHref = regiao
+    ? `https://www.google.com/maps?q=${encodeURIComponent(regiao)}`
     : null;
 
   const wppMessage = encodeURIComponent(
@@ -200,13 +199,13 @@ export default async function PropertyDetailPage({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-arini font-medium">
-                        {[p.endereco, p.bairro, p.cidade && `${p.cidade}${p.uf ? `/${p.uf}` : ""}`]
+                        {[p.bairro && `Bairro ${p.bairro}`, p.cidade && `${p.cidade}${p.uf ? `/${p.uf}` : ""}`]
                           .filter(Boolean)
-                          .join(", ")}
+                          .join(" · ")}
                       </div>
-                      {p.cep && (
-                        <div className="text-xs text-muted-foreground mt-0.5">CEP {p.cep}</div>
-                      )}
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Entre em contato para mais informações sobre a localização.
+                      </div>
                       {mapsHref && (
                         <a
                           href={mapsHref}
@@ -219,18 +218,14 @@ export default async function PropertyDetailPage({
                       )}
                     </div>
                   </div>
-                  {mapsHref && (
+                  {regiao && (
                     <div className="border-t">
                       <iframe
-                        src={`https://www.google.com/maps?q=${
-                          p.lat && p.lng
-                            ? `${p.lat},${p.lng}`
-                            : encodeURIComponent([p.endereco, p.bairro, p.cidade].filter(Boolean).join(", "))
-                        }&output=embed&z=15`}
+                        src={`https://www.google.com/maps?q=${encodeURIComponent(regiao)}&output=embed&z=14`}
                         loading="lazy"
                         className="w-full h-72 border-0"
                         referrerPolicy="no-referrer-when-downgrade"
-                        title="Localização no mapa"
+                        title="Região do imóvel"
                       />
                     </div>
                   )}

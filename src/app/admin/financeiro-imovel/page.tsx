@@ -7,6 +7,8 @@ import { FinanceiroImovelForm } from "./FinanceiroImovelForm";
 import { ExpenseForm } from "../financeiro-empresarial/ExpenseForm";
 import { ImovelDateFilter } from "./ImovelDateFilter";
 import { TransactionActions } from "@/components/crm/TransactionActions";
+import { MarkPaidButton } from "@/components/crm/MarkPaidButton";
+import { WalletSection } from "@/components/crm/WalletSection";
 
 const EXPENSE_STATUS_OPTS = [
   { value: "pendente", label: "Pendente" },
@@ -74,6 +76,8 @@ export default async function FinanceiroImovelPage({ searchParams }: { searchPar
         </CardContent>
       </Card>
 
+      <WalletSection canManage={canManage} />
+
       <Card>
         <CardHeader><CardTitle>Registrar fechamento</CardTitle></CardHeader>
         <CardContent>
@@ -112,19 +116,22 @@ export default async function FinanceiroImovelPage({ searchParams }: { searchPar
                   <td><Badge variant={e.status === "pago" ? "success" : e.status === "vencido" ? "danger" : "warning"}>{e.status}</Badge></td>
                   {canManage && (
                     <td>
-                      <TransactionActions
-                        table="expenses"
-                        id={e.id}
-                        title="Editar despesa"
-                        canManage={canManage}
-                        fields={[
-                          { name: "fornecedor", label: "Fornecedor", type: "text", value: e.fornecedor ?? null },
-                          { name: "descricao", label: "Descrição", type: "text", value: e.descricao ?? null },
-                          { name: "valor", label: "Valor (R$)", type: "number", step: "0.01", value: e.valor },
-                          { name: "vencimento", label: "Vencimento", type: "date", value: e.vencimento },
-                          { name: "status", label: "Status", type: "select", value: e.status, options: EXPENSE_STATUS_OPTS },
-                        ]}
-                      />
+                      <div className="flex items-center gap-1 justify-end">
+                        <MarkPaidButton id={e.id} paid={e.status === "pago"} />
+                        <TransactionActions
+                          table="expenses"
+                          id={e.id}
+                          title="Editar despesa"
+                          canManage={canManage}
+                          fields={[
+                            { name: "fornecedor", label: "Fornecedor", type: "text", value: e.fornecedor ?? null },
+                            { name: "descricao", label: "Descrição", type: "text", value: e.descricao ?? null },
+                            { name: "valor", label: "Valor (R$)", type: "number", step: "0.01", value: e.valor },
+                            { name: "vencimento", label: "Vencimento", type: "date", value: e.vencimento },
+                            { name: "status", label: "Status", type: "select", value: e.status, options: EXPENSE_STATUS_OPTS },
+                          ]}
+                        />
+                      </div>
                     </td>
                   )}
                 </tr>

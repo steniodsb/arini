@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,30 @@ export function NovaCaptacaoForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [obsSector, setObsSector] = useState<Sector>("marketing");
+  const [selType, setSelType] = useState<PropertyType>("casa");
+  const [selCategory, setSelCategory] = useState<PropertyCategory>("venda");
+  const [codigoPrevisto, setCodigoPrevisto] = useState<string>("");
+
+  // Preview do próximo código da sequência (ex.: casa 01 existe → CSV-00002).
+  // O código definitivo continua sendo gerado no salvamento, pela RPC.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const supabase = createSupabaseBrowser();
+      const { data } = await supabase
+        .from("property_code_sequences")
+        .select("prefix, next_seq")
+        .eq("type", selType)
+        .eq("category", selCategory)
+        .maybeSingle();
+      if (!active) return;
+      const prefix = data?.prefix
+        ?? (selType.slice(0, 2).toUpperCase() + selCategory.slice(0, 1).toUpperCase());
+      const seq = data?.next_seq ?? 1;
+      setCodigoPrevisto(`${prefix}-${String(seq).padStart(5, "0")}`);
+    })();
+    return () => { active = false; };
+  }, [selType, selCategory]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -181,7 +205,7 @@ export function NovaCaptacaoForm() {
         <CardContent className="grid md:grid-cols-2 gap-4">
           <div>
             <Label>Tipo*</Label>
-            <Select name="type" required defaultValue="casa">
+            <Select name="type" required value={selType} onChange={(e) => setSelType(e.target.value as PropertyType)}>
               {Object.entries(PROPERTY_TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
@@ -189,12 +213,18 @@ export function NovaCaptacaoForm() {
           </div>
           <div>
             <Label>Categoria*</Label>
-            <Select name="category" required defaultValue="venda">
+            <Select name="category" required value={selCategory} onChange={(e) => setSelCategory(e.target.value as PropertyCategory)}>
               {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
             </Select>
           </div>
+          {codigoPrevisto && (
+            <div className="md:col-span-2 rounded-md bg-gold/10 border border-gold/30 px-3 py-2 text-sm">
+              Código do imóvel (gerado em sequência):{" "}
+              <span className="font-mono font-semibold text-arini">{codigoPrevisto}</span>
+            </div>
+          )}
           <div className="md:col-span-2">
             <Label>Título (opcional)</Label>
             <Input name="titulo" placeholder="Ex.: Casa térrea no Jardim das Acácias" />

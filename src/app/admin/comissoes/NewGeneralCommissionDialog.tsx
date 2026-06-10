@@ -20,6 +20,8 @@ export function NewGeneralCommissionDialog({ accounts }: { accounts: { id: strin
     setLoading(true);
     const fd = new FormData(e.currentTarget);
     const { data: { user } } = await supabase.auth.getUser();
+    const pctEmpresa = fd.get("pct_empresa") ? Number(fd.get("pct_empresa")) : null;
+    const pctTerceiros = fd.get("pct_terceiros") ? Number(fd.get("pct_terceiros")) : null;
     const { error } = await supabase.from("commissions").insert({
       property_financial_id: null,
       tipo: "geral",
@@ -31,6 +33,9 @@ export function NewGeneralCommissionDialog({ accounts }: { accounts: { id: strin
       data_inicio: fd.get("data_inicio") || null,
       data_fechamento: fd.get("data_fechamento") || null,
       conta_id: fd.get("conta_id") || null,
+      divisao: pctEmpresa != null || pctTerceiros != null
+        ? { empresa: pctEmpresa ?? 0, terceiros: pctTerceiros ?? 0 }
+        : null,
       status: "pendente",
       criado_por: user?.id,
     });
@@ -71,6 +76,10 @@ export function NewGeneralCommissionDialog({ accounts }: { accounts: { id: strin
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>Data início</Label><Input name="data_inicio" type="date" /></div>
                 <div><Label>Data fechamento</Label><Input name="data_fechamento" type="date" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>% Empresa</Label><Input name="pct_empresa" type="number" step="0.01" placeholder="Ex.: 60" /></div>
+                <div><Label>% Terceiros</Label><Input name="pct_terceiros" type="number" step="0.01" placeholder="Ex.: 40" /></div>
               </div>
               <div>
                 <Label>Conta / Caixa</Label>

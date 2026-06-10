@@ -6,12 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LeadFunnelChart } from "@/components/crm/LeadFunnelChart";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { LEAD_STAGES, type Lead } from "@/lib/types";
+import { LEAD_STAGES, LEAD_ORIGINS, type Lead } from "@/lib/types";
 
-export default async function LeadsPage() {
+export default async function LeadsPage({ searchParams }: { searchParams: { origem?: string } }) {
   await requireSector(["recepcao", "administrativo", "admin_central"]);
   const supabase = createSupabaseServer();
-  const { data } = await supabase.from("leads").select("*").order("ultima_interacao_em", { ascending: false }).limit(500);
+  const origem = searchParams.origem ?? "";
+  let q = supabase.from("leads").select("*").order("ultima_interacao_em", { ascending: false }).limit(500);
+  if (origem) q = q.eq("origem", origem);
+  const { data } = await q;
   const leads = (data ?? []) as Lead[];
 
   // Stats
@@ -37,6 +40,25 @@ export default async function LeadsPage() {
         <Button asChild variant="gold">
           <Link href="/admin/leads/novo"><Plus size={16} /> Novo lead</Link>
         </Button>
+      </div>
+
+      {/* Filtro por origem (Instagram, Facebook, TikTok, WhatsApp, site…) */}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href="/admin/leads"
+          className={`px-3 py-1.5 rounded-md text-sm border ${!origem ? "bg-arini text-white border-arini" : "bg-white hover:bg-muted"}`}
+        >
+          Todas as origens
+        </Link>
+        {LEAD_ORIGINS.map((o) => (
+          <Link
+            key={o}
+            href={`/admin/leads?origem=${o}`}
+            className={`px-3 py-1.5 rounded-md text-sm border capitalize ${origem === o ? "bg-arini text-white border-arini" : "bg-white hover:bg-muted"}`}
+          >
+            {o.replace("_", " ")}
+          </Link>
+        ))}
       </div>
 
       <div className="grid md:grid-cols-4 gap-4">

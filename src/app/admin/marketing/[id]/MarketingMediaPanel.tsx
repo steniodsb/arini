@@ -7,8 +7,32 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { uploadMarketingMedia } from "@/lib/upload";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, Trash2 } from "lucide-react";
+import { Upload, Trash2, Download, Film, FileArchive, ImageIcon } from "lucide-react";
 import type { MarketingMedia, PropertyMedia } from "@/lib/types";
+
+function fileNameFromPath(path: string | null, fallback: string) {
+  if (!path) return fallback;
+  const last = path.split("/").pop();
+  return last || fallback;
+}
+
+// Baixa o arquivo original em alta qualidade (blob → download forçado).
+async function downloadFile(url: string, filename: string) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  } catch {
+    // fallback: abre em nova aba
+    window.open(url, "_blank");
+  }
+}
 
 export function MarketingMediaPanel({
   propertyId,
@@ -25,6 +49,7 @@ export function MarketingMediaPanel({
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<MarketingMedia[]>(edited);
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -57,23 +82,63 @@ export function MarketingMediaPanel({
     router.refresh();
   }
 
+  async function downloadOne(m: PropertyMedia) {
+    setDownloading(m.id);
+    await downloadFile(m.url, fileNameFromPath(m.storage_path, `midia-${m.id}`));
+    setDownloading(null);
+  }
+
+  async function downloadAll() {
+    setDownloading("all");
+    for (const m of raw) {
+      await downloadFile(m.url, fileNameFromPath(m.storage_path, `midia-${m.id}`));
+    }
+    setDownloading(null);
+  }
+
   return (
     <Card>
       <CardHeader><CardTitle>Mídias</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <div className="text-xs uppercase text-muted-foreground mb-2">Recebidas da captação (brutas)</div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs uppercase text-muted-foreground">Recebidas da captação (brutas — alta qualidade)</div>
+            {raw.length > 0 && (
+              <Button type="button" size="sm" variant="outline" disabled={downloading !== null} onClick={downloadAll}>
+                <Download size={14} /> {downloading === "all" ? "Baixando…" : `Baixar todas (${raw.length})`}
+              </Button>
+            )}
+          </div>
           {raw.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma mídia recebida ainda.</p>
           ) : (
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-              {raw.map((m) => (
-                <div key={m.id} className="relative aspect-square rounded-md overflow-hidden bg-muted">
-                  {m.tipo === "imagem"
-                    ? <Image src={m.url} alt="" fill className="object-cover" sizes="120px" />
-                    : <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">{m.tipo}</div>}
-                </div>
-              ))}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {raw.map((m) => {
+                const nome = fileNameFromPath(m.storage_path, m.tipo);
+                const isZip = nome.toLowerCase().endsWith(".zip");
+                return (
+                  <div key={m.id} className="relative rounded-md overflow-hidden border bg-muted group">
+                    <div className="relative aspect-square">
+                      {m.tipo === "imagem" ? (
+                        <Image src={m.url} alt="" fill className="object-cover" sizes="160px" />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground p-2">
+                          {m.tipo === "video" ? <Film size={28} /> : isZip ? <FileArchive size={28} /> : <ImageIcon size={28} />}
+                          <span className="text-[10px] text-center break-all leading-tight">{nome}</span>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => downloadOne(m)}
+                      disabled={downloading !== null}
+                      className="absolute bottom-0 inset-x-0 bg-arini/90 hover:bg-arini text-white text-xs py-1.5 inline-flex items-center justify-center gap-1"
+                    >
+                      <Download size={12} /> {downloading === m.id ? "Baixando…" : "Baixar original"}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -95,7 +160,12 @@ export function MarketingMediaPanel({
                 <div key={m.id} className="relative aspect-square rounded-md overflow-hidden bg-muted group">
                   {m.tipo === "imagem"
                     ? <Image src={m.url} alt="" fill className="object-cover" sizes="120px" />
-                    : <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">{m.tipo}</div>}
+                    : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground p-1">
+                        {m.tipo === "video" ? <Film size={22} /> : <FileArchive size={22} />}
+                        <span className="text-[9px] text-center break-all leading-tight">{fileNameFromPath(m.storage_path, m.tipo)}</span>
+                      </div>
+                    )}
                   <button
                     type="button"
                     onClick={() => removeItem(m)}

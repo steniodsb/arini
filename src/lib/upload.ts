@@ -137,6 +137,51 @@ export async function uploadMarketingMedia(
 }
 
 /**
+ * Upload de documentos de um IMÓVEL para o bucket property-documents,
+ * registrando em property_documents (arquivo jurídico do imóvel).
+ */
+export async function uploadPropertyDocuments(
+  supabase: SupabaseClient,
+  propertyId: string,
+  files: File[],
+  opts: { tipo?: string; onProgress?: (done: number, total: number, currentName: string) => void } = {},
+): Promise<UploadResult> {
+  const { tipo = "outro", onProgress } = opts;
+  const failed: { name: string; error: string }[] = [];
+  let ok = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    onProgress?.(i, files.length, file.name);
+    const path = `${propertyId}/${Date.now()}-${i}.${safeExt(file.name)}`;
+
+    let lastErr: string | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { error: upErr } = await supabase.storage
+        .from("property-documents")
+        .upload(path, file, { upsert: false, contentType: file.type || "application/octet-stream", cacheControl: "3600" });
+      if (!upErr) { lastErr = null; break; }
+      lastErr = upErr.message;
+    }
+    if (lastErr) { failed.push({ name: file.name, error: lastErr }); continue; }
+
+    const { data: urlData } = supabase.storage.from("property-documents").getPublicUrl(path);
+    const { error: insErr } = await supabase.from("property_documents").insert({
+      property_id: propertyId,
+      tipo,
+      nome: file.name,
+      url: urlData.publicUrl,
+      storage_path: path,
+    });
+    if (insErr) { failed.push({ name: file.name, error: insErr.message }); continue; }
+    ok++;
+  }
+
+  onProgress?.(files.length, files.length, "");
+  return { ok, failed };
+}
+
+/**
  * Upload de documentos de um cliente para o bucket client-documents,
  * registrando em client_documents.
  */

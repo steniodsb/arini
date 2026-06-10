@@ -1,4 +1,4 @@
-import { requireSector, isDiretoria } from "@/lib/auth";
+import { requireSector, isDiretoria, canCreateMoney } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,9 @@ import { ExpenseForm } from "./ExpenseForm";
 import { CashFlowChart } from "@/components/crm/CashFlowChart";
 import { ExpenseDateFilter } from "./ExpenseDateFilter";
 import { TransactionActions } from "@/components/crm/TransactionActions";
+import { MarkPaidButton } from "@/components/crm/MarkPaidButton";
+import { WalletSection } from "@/components/crm/WalletSection";
+import { CommissionsSection } from "./CommissionsSection";
 
 const EXPENSE_STATUS_OPTS = [
   { value: "pendente", label: "Pendente" },
@@ -18,6 +21,7 @@ const EXPENSE_STATUS_OPTS = [
 export default async function FinanceiroEmpresarialPage({ searchParams }: { searchParams: { from?: string; to?: string } }) {
   const { profile } = await requireSector(["financeiro", "administrativo", "admin_central"]);
   const canManage = isDiretoria(profile);
+  const podeLancar = canCreateMoney(profile);
   const supabase = createSupabaseServer();
 
   let expQuery = supabase.from("expenses").select("*, expense_categories(nome)").order("vencimento", { ascending: true }).limit(300);
@@ -74,12 +78,16 @@ export default async function FinanceiroEmpresarialPage({ searchParams }: { sear
         <Card><CardContent className="pt-6"><div className="text-xs uppercase text-muted-foreground">Receitas (mês)</div><div className="text-2xl text-gold-gradient font-semibold">{formatCurrencyBRL(totalReceitasMes)}</div></CardContent></Card>
       </div>
 
+      <WalletSection canManage={canManage} />
+
       <Card>
         <CardHeader><CardTitle>Fluxo de caixa — últimos 6 meses</CardTitle></CardHeader>
         <CardContent>
           <CashFlowChart data={chart} />
         </CardContent>
       </Card>
+
+      <CommissionsSection canManage={canManage} podeLancar={podeLancar} />
 
       <Card>
         <CardHeader><CardTitle>Nova despesa</CardTitle></CardHeader>
@@ -115,19 +123,22 @@ export default async function FinanceiroEmpresarialPage({ searchParams }: { sear
                   <td className="text-xs">{e.recorrencia}</td>
                   {canManage && (
                     <td>
-                      <TransactionActions
-                        table="expenses"
-                        id={e.id}
-                        title="Editar despesa"
-                        canManage={canManage}
-                        fields={[
-                          { name: "fornecedor", label: "Fornecedor", type: "text", value: e.fornecedor },
-                          { name: "descricao", label: "Descrição", type: "text", value: e.descricao },
-                          { name: "valor", label: "Valor (R$)", type: "number", step: "0.01", value: e.valor },
-                          { name: "vencimento", label: "Vencimento", type: "date", value: e.vencimento },
-                          { name: "status", label: "Status", type: "select", value: e.status, options: EXPENSE_STATUS_OPTS },
-                        ]}
-                      />
+                      <div className="flex items-center gap-1 justify-end">
+                        <MarkPaidButton id={e.id} paid={e.status === "pago"} />
+                        <TransactionActions
+                          table="expenses"
+                          id={e.id}
+                          title="Editar despesa"
+                          canManage={canManage}
+                          fields={[
+                            { name: "fornecedor", label: "Fornecedor", type: "text", value: e.fornecedor },
+                            { name: "descricao", label: "Descrição", type: "text", value: e.descricao },
+                            { name: "valor", label: "Valor (R$)", type: "number", step: "0.01", value: e.valor },
+                            { name: "vencimento", label: "Vencimento", type: "date", value: e.vencimento },
+                            { name: "status", label: "Status", type: "select", value: e.status, options: EXPENSE_STATUS_OPTS },
+                          ]}
+                        />
+                      </div>
                     </td>
                   )}
                 </tr>

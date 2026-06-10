@@ -3,6 +3,7 @@ import { SECTOR_LABELS } from "@/lib/types";
 import { SECTOR_NAV } from "@/lib/permissions";
 import { Logo } from "@/components/brand/Logo";
 import { TopBar } from "@/components/crm/TopBar";
+import { ChatWidget } from "@/components/crm/ChatWidget";
 import Link from "next/link";
 
 export default async function AdminLayout({
@@ -51,6 +52,7 @@ export default async function AdminLayout({
         />
         <div className="flex-1 p-8 overflow-y-auto">{children}</div>
       </main>
+      <ChatWidget userId={profile.id} sector={profile.sector} />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { requireSector } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { JuridicoForm } from "./JuridicoForm";
+import { PropertyDocuments } from "./PropertyDocuments";
 import { PROPERTY_TYPE_LABELS, type Property } from "@/lib/types";
 
 export default async function JuridicoDetailPage({ params }: { params: { id: string } }) {
@@ -13,6 +14,7 @@ export default async function JuridicoDetailPage({ params }: { params: { id: str
   const p = property as Property;
   const { data: legal } = await supabase.from("legal_records").select("*").eq("property_id", p.id).maybeSingle();
   const { data: contracts } = await supabase.from("contracts").select("*").eq("property_id", p.id).order("criado_em", { ascending: false });
+  const { data: docs } = await supabase.from("property_documents").select("*").eq("property_id", p.id).order("created_at", { ascending: false });
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -24,6 +26,11 @@ export default async function JuridicoDetailPage({ params }: { params: { id: str
         <CardHeader><CardTitle>Validação documental</CardTitle></CardHeader>
         <CardContent><JuridicoForm propertyId={p.id} initial={legal} /></CardContent>
       </Card>
+
+      <PropertyDocuments
+        propertyId={p.id}
+        initial={(docs ?? []) as { id: string; tipo: string; nome: string | null; url: string; storage_path: string | null; created_at: string }[]}
+      />
       <Card>
         <CardHeader><CardTitle>Contratos</CardTitle></CardHeader>
         <CardContent>

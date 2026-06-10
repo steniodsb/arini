@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { requireSector } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar as CalendarIcon, Phone, MessageCircle, Home, FileSignature, Users, type LucideIcon } from "lucide-react";
+import { Calendar as CalendarIcon, Phone, MessageCircle, Home, FileSignature, Users, Video, type LucideIcon } from "lucide-react";
 import { formatDateTimeBR } from "@/lib/utils";
+import { SECTOR_LABELS, type Sector } from "@/lib/types";
+import { NewEventDialog } from "./NewEventDialog";
 
 interface Appt {
   id: string;
@@ -16,12 +18,24 @@ interface Appt {
   leads: { nome: string; whatsapp: string | null; telefone: string | null } | null;
 }
 
+interface AgendaEvent {
+  id: string;
+  titulo: string;
+  tipo: string;
+  data_hora: string;
+  setor_destino: Sector | null;
+  criado_por_sector: Sector | null;
+  observacoes: string | null;
+  confirmado: boolean;
+}
+
 const TIPO_ICON: Record<string, LucideIcon> = {
   visita: Home,
   reuniao: Users,
   ligacao: Phone,
   retorno: MessageCircle,
   assinatura: FileSignature,
+  gravacao: Video,
 };
 
 const TIPO_COLOR: Record<string, string> = {
@@ -41,20 +55,35 @@ function startOfWeek(d: Date) {
 }
 
 export default async function AgendaPage({ searchParams }: { searchParams: { date?: string } }) {
-  await requireSector(["recepcao", "administrativo", "admin_central"]);
+  // Agenda aberta a todos os setores: cada um vê a sua + o que foi delegado.
+  const { user, profile } = await requireUser();
+  const sector = (profile?.sector ?? "recepcao") as Sector;
+  const isLeadSector = ["recepcao", "administrativo", "admin_central"].includes(sector) || profile?.is_admin_central;
   const baseDate = searchParams.date ? new Date(searchParams.date) : new Date();
   const weekStart = startOfWeek(baseDate);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 7);
 
   const supabase = createSupabaseServer();
-  const { data } = await supabase
-    .from("lead_appointments")
-    .select("*, leads(nome, whatsapp, telefone)")
+  // Agendamentos de leads (setores com acesso a leads) — RLS também filtra.
+  const { data } = isLeadSector
+    ? await supabase
+        .from("lead_appointments")
+        .select("*, leads(nome, whatsapp, telefone)")
+        .gte("data_hora", weekStart.toISOString())
+        .lt("data_hora", weekEnd.toISOString())
+        .order("data_hora", { ascending: true })
+    : { data: [] };
+  const appointments = (data ?? []) as Appt[];
+
+  // Compromissos próprios e delegados (RLS: criador, setor destino, diretoria).
+  const { data: eventsData } = await supabase
+    .from("agenda_events")
+    .select("*")
     .gte("data_hora", weekStart.toISOString())
     .lt("data_hora", weekEnd.toISOString())
     .order("data_hora", { ascending: true });
-  const appointments = (data ?? []) as Appt[];
+  const events = (eventsData ?? []) as AgendaEvent[];
 
   // Agrupa por dia
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -68,6 +97,13 @@ export default async function AgendaPage({ searchParams }: { searchParams: { dat
     const key = new Date(a.data_hora).toDateString();
     apptsByDay[key] = apptsByDay[key] ?? [];
     apptsByDay[key].push(a);
+  }
+
+  const eventsByDay: Record<string, AgendaEvent[]> = {};
+  for (const e of events) {
+    const key = new Date(e.data_hora).toDateString();
+    eventsByDay[key] = eventsByDay[key] ?? [];
+    eventsByDay[key].push(e);
   }
 
   const prevWeek = new Date(weekStart);
@@ -91,6 +127,7 @@ export default async function AgendaPage({ searchParams }: { searchParams: { dat
                 className="px-3 py-2 rounded-md border hover:bg-muted text-sm">Hoje</Link>
           <Link href={`/admin/agenda?date=${nextWeek.toISOString().slice(0, 10)}`}
                 className="px-3 py-2 rounded-md border hover:bg-muted text-sm">Próxima semana →</Link>
+          <NewEventDialog userId={user.id} sector={sector} />
         </div>
       </div>
 
@@ -105,6 +142,7 @@ export default async function AgendaPage({ searchParams }: { searchParams: { dat
           <div className="grid grid-cols-7 gap-3">
             {days.map((d) => {
               const dayAppts = apptsByDay[d.toDateString()] ?? [];
+              const dayEvents = eventsByDay[d.toDateString()] ?? [];
               const isToday = d.toDateString() === new Date().toDateString();
               const isPast = d < new Date(new Date().setHours(0,0,0,0));
               return (
@@ -118,9 +156,26 @@ export default async function AgendaPage({ searchParams }: { searchParams: { dat
                     </div>
                   </div>
                   <div className="mt-2 space-y-1">
-                    {dayAppts.length === 0 && (
+                    {dayAppts.length === 0 && dayEvents.length === 0 && (
                       <div className="text-[10px] text-muted-foreground/60 italic text-center py-3">Vazio</div>
                     )}
+                    {dayEvents.map((e) => {
+                      const Icon = TIPO_ICON[e.tipo] ?? CalendarIcon;
+                      const time = new Date(e.data_hora).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+                      return (
+                        <div key={e.id} className="block p-1.5 rounded bg-gold/10 border border-gold/40">
+                          <div className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gold-dark" />
+                            <span className="text-[10px] text-muted-foreground">{time}</span>
+                          </div>
+                          <div className="text-[11px] font-medium text-arini truncate">{e.titulo}</div>
+                          <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <Icon size={10} /> {e.tipo}
+                            {e.setor_destino && <span>→ {SECTOR_LABELS[e.setor_destino]}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
                     {dayAppts.map((a) => {
                       const Icon = TIPO_ICON[a.tipo] ?? CalendarIcon;
                       const color = TIPO_COLOR[a.tipo] ?? "bg-arini";
@@ -148,6 +203,32 @@ export default async function AgendaPage({ searchParams }: { searchParams: { dat
           </div>
         </CardContent>
       </Card>
+
+      {events.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Compromissos da semana ({events.length})</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {events.map((e) => (
+                <li key={e.id} className="py-3 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="text-arini font-medium">{e.titulo}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {e.criado_por_sector && `De ${SECTOR_LABELS[e.criado_por_sector]}`}
+                      {e.setor_destino && ` → para ${SECTOR_LABELS[e.setor_destino]}`}
+                      {e.observacoes && ` · ${e.observacoes}`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline">{e.tipo}</Badge>
+                    <span className="text-sm text-arini font-mono">{formatDateTimeBR(e.data_hora)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Próximos agendamentos da semana ({appointments.length})</CardTitle></CardHeader>

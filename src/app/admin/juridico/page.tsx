@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PROPERTY_TYPE_LABELS, CLIENT_TYPE_LABELS, type LegalStatus, type Property, type Client, type ClientType } from "@/lib/types";
 import { JuridicoTabs } from "./JuridicoTabs";
+import { ContratosSection } from "./ContratosSection";
 
 const STATUS_BADGE: Record<LegalStatus, "muted" | "warning" | "success" | "danger"> = {
   nao_iniciado: "muted",
@@ -14,7 +15,7 @@ const STATUS_BADGE: Record<LegalStatus, "muted" | "warning" | "success" | "dange
   reprovado: "danger",
 };
 
-export default async function JuridicoPage() {
+export default async function JuridicoPage({ searchParams }: { searchParams: { tab?: string } }) {
   const { profile } = await requireSector(["juridico", "administrativo", "admin_central"]);
   const diretoria = isDiretoria(profile);
   const supabase = createSupabaseServer();
@@ -68,7 +69,10 @@ export default async function JuridicoPage() {
         <Card><CardContent className="pt-6"><div className="text-xs uppercase text-muted-foreground">Docs. assinados</div><div className="text-2xl text-arini font-semibold">{clientDocsAssinados}</div></CardContent></Card>
       </div>
 
-      <JuridicoTabs diretoria={diretoria}>
+      <JuridicoTabs
+        diretoria={diretoria}
+        initialTab={searchParams.tab === "contratos" ? "contratos" : searchParams.tab === "clientes" ? "clientes" : undefined}
+      >
         {{
           imoveis: (
             <div className="grid lg:grid-cols-2 gap-4">
@@ -109,6 +113,7 @@ export default async function JuridicoPage() {
               </CardContent>
             </Card>
           ),
+          contratos: <ContratosSection canManage={diretoria} />,
         }}
       </JuridicoTabs>
     </div>

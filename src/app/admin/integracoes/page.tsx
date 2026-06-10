@@ -1,4 +1,4 @@
-import { requireDiretoria } from "@/lib/auth";
+import { requireSector } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { IntegrationCard } from "./IntegrationCard";
@@ -11,7 +11,8 @@ const PLATFORMS: { key: string; label: string; help: string }[] = [
 ];
 
 export default async function IntegracoesPage() {
-  await requireDiretoria();
+  // Integrações vivem no setor de marketing (diretoria também acessa).
+  await requireSector(["marketing", "admin_central"]);
   const supabase = createSupabaseServer();
   const { data: integrations } = await supabase.from("social_integrations").select("*");
   const byPlatform: Record<string, { id: string; ativo: boolean; config: Record<string, unknown> }> = {};
