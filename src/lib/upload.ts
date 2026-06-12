@@ -10,6 +10,17 @@ function safeExt(name: string): string {
   return ext && ext.length <= 6 ? ext.toLowerCase() : "bin";
 }
 
+/** Traduz erros de upload para mensagens claras (ex.: arquivo acima do limite). */
+export function uploadErrorMsg(raw: string): string {
+  if (/exceed|too large|413|maximum allowed|payload too large|file size/i.test(raw)) {
+    return "arquivo acima do limite de upload do servidor — reduza o arquivo ou aumente o limite em Supabase → Settings → Storage";
+  }
+  if (/mime|content type|not allowed/i.test(raw)) {
+    return "tipo de arquivo não permitido pelo bucket";
+  }
+  return raw;
+}
+
 /**
  * Faz upload de uma lista de arquivos para o bucket property-media e
  * registra cada um em property_media. Robusto: tenta cada arquivo, faz
@@ -52,7 +63,7 @@ export async function uploadPropertyMedia(
       lastErr = upErr.message;
     }
     if (lastErr) {
-      failed.push({ name: file.name, error: lastErr });
+      failed.push({ name: file.name, error: uploadErrorMsg(lastErr) });
       continue;
     }
 
@@ -114,7 +125,7 @@ export async function uploadMarketingMedia(
       if (!upErr) { lastErr = null; break; }
       lastErr = upErr.message;
     }
-    if (lastErr) { failed.push({ name: file.name, error: lastErr }); continue; }
+    if (lastErr) { failed.push({ name: file.name, error: uploadErrorMsg(lastErr) }); continue; }
 
     const { data: urlData } = supabase.storage.from("marketing-media").getPublicUrl(path);
     const tipo = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "imagem" : "arquivo";
@@ -163,7 +174,7 @@ export async function uploadPropertyDocuments(
       if (!upErr) { lastErr = null; break; }
       lastErr = upErr.message;
     }
-    if (lastErr) { failed.push({ name: file.name, error: lastErr }); continue; }
+    if (lastErr) { failed.push({ name: file.name, error: uploadErrorMsg(lastErr) }); continue; }
 
     const { data: urlData } = supabase.storage.from("property-documents").getPublicUrl(path);
     const { error: insErr } = await supabase.from("property_documents").insert({
@@ -208,7 +219,7 @@ export async function uploadClientDocuments(
       if (!upErr) { lastErr = null; break; }
       lastErr = upErr.message;
     }
-    if (lastErr) { failed.push({ name: file.name, error: lastErr }); continue; }
+    if (lastErr) { failed.push({ name: file.name, error: uploadErrorMsg(lastErr) }); continue; }
 
     const { data: urlData } = supabase.storage.from("client-documents").getPublicUrl(path);
     const { error: insErr } = await supabase.from("client_documents").insert({

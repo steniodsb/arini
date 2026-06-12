@@ -32,7 +32,7 @@ export function MediaUploader({
   accept = "image/*,video/*,.dng,.cr2,.cr3,.nef,.arw,.rw2,.zip",
   maxSizeMB = 1024,
   label = "Arraste arquivos aqui ou clique para selecionar",
-  hint = "Fotos, vídeos e mídia bruta. Vários arquivos de uma vez.",
+  hint,
 }: {
   onChange: (files: File[]) => void;
   accept?: string;
@@ -44,6 +44,7 @@ export function MediaUploader({
   const [dragOver, setDragOver] = useState(false);
   const [warn, setWarn] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const effectiveHint = hint ?? `Fotos, vídeos e mídia bruta. Limite de ${maxSizeMB} MB por arquivo.`;
 
   const addFiles = useCallback(
     (incoming: FileList | File[]) => {
@@ -105,7 +106,7 @@ export function MediaUploader({
       >
         <UploadCloud className="text-arini" size={28} />
         <div className="text-sm font-medium text-arini">{label}</div>
-        <div className="text-xs text-muted-foreground">{hint}</div>
+        <div className="text-xs text-muted-foreground">{effectiveHint}</div>
         <input
           ref={inputRef}
           type="file"
