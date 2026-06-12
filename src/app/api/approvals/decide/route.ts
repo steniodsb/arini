@@ -4,7 +4,7 @@ import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server
 export async function POST(req: Request) {
   const body = await req.json();
   const { approvalId, entityTable, entityId, stage, status, comentario } = body;
-  if (!approvalId || !status) return NextResponse.json({ error: "Parâmetros inválidos" }, { status: 400 });
+  if (!status || !entityId || !stage) return NextResponse.json({ error: "Parâmetros inválidos" }, { status: 400 });
 
   const ssr = createSupabaseServer();
   const { data: { user } } = await ssr.auth.getUser();
@@ -26,15 +26,29 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdmin();
 
-  await admin
-    .from("approvals")
-    .update({
+  // Se a approval existir, atualiza; senão, cria já decidida (auto-corrige
+  // itens "órfãos" que ficaram sem linha de aprovação).
+  if (approvalId) {
+    await admin
+      .from("approvals")
+      .update({
+        status,
+        aprovador_id: user.id,
+        comentario,
+        decidido_em: new Date().toISOString(),
+      })
+      .eq("id", approvalId);
+  } else {
+    await admin.from("approvals").insert({
+      entity_table: entityTable,
+      entity_id: entityId,
+      stage,
       status,
       aprovador_id: user.id,
       comentario,
       decidido_em: new Date().toISOString(),
-    })
-    .eq("id", approvalId);
+    });
+  }
 
   // Efeitos colaterais por stage
   if (entityTable === "properties") {

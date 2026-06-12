@@ -172,7 +172,8 @@ export function NovaCaptacaoForm() {
         }
       }
 
-      // Cria approval
+      // Cria approval (não-fatal: a inbox de aprovações também é dirigida pelo
+      // status do imóvel, então mesmo se isto falhar o item não se perde).
       const { error: apprErr } = await supabase.from("approvals").insert({
         entity_table: "properties",
         entity_id: property.id,
@@ -181,7 +182,7 @@ export function NovaCaptacaoForm() {
         solicitado_por: userId,
         payload: { codigo, type, category },
       });
-      if (apprErr) throw apprErr;
+      if (apprErr) console.warn("Falha ao criar aprovação (item ainda aparece na inbox por status):", apprErr.message);
 
       // Só navega automaticamente se tudo subiu; senão deixa a msg visível.
       if (uploadFailures === 0) {

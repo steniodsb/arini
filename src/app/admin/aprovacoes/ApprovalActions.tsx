@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 interface Props {
-  approvalId: string;
+  approvalId: string | null;
   entityTable: string;
   entityId: string;
   stage: string;
