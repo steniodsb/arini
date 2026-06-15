@@ -14,6 +14,7 @@ import { SectorObservations } from "@/components/crm/SectorObservations";
 import { DeletePropertyButton } from "@/components/crm/DeletePropertyButton";
 import { SendToMarketingButton } from "@/components/crm/SendToMarketingButton";
 import { ResubmitApprovalButton } from "@/components/crm/ResubmitApprovalButton";
+import { ApprovalActions } from "@/app/admin/aprovacoes/ApprovalActions";
 
 // Status nos quais o imóvel ainda não foi aprovado pela diretoria/gerência.
 const PRE_APPROVAL_STATUSES = ["rascunho", "aguardando_aprovacao_captacao", "aprovado_captacao"];
@@ -47,6 +48,17 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
   // Observações ficam liberadas após o imóvel ser aprovado (sai dos status pré-aprovação),
   // ou sempre para diretoria/administrativo/captação-dono.
   const canObserve = canEdit || !PRE_APPROVAL_STATUSES.includes(p.status);
+
+  // Decisão de aprovação direto na página do imóvel (revisar + aprovar/reprovar).
+  // Captação: administrativo ou diretoria. Marketing/publicação: só diretoria.
+  const stageAprovacao =
+    p.status === "aguardando_aprovacao_marketing" ? "marketing"
+    : p.status === "aguardando_aprovacao_captacao" ? "captacao"
+    : null;
+  const podeAprovar =
+    (stageAprovacao === "captacao" && (isDiretoria || profile?.sector === "administrativo")) ||
+    (stageAprovacao === "marketing" && isDiretoria);
+  const pendingApproval = ((approvals ?? []) as Approval[]).find((a) => a.status === "pendente") ?? null;
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -91,21 +103,52 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
         </div>
       </div>
 
+      {podeAprovar && stageAprovacao && (
+        <Card className="border-gold/40 bg-gold/5">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Aprovação pendente — etapa {stageAprovacao}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              Revise as informações e mídias acima e decida. Aprovar avança o imóvel para a próxima etapa.
+            </p>
+            <ApprovalActions
+              approvalId={pendingApproval?.id ?? null}
+              entityTable="properties"
+              entityId={p.id}
+              stage={stageAprovacao}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {mediaList.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>Mídia</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Mídia ({mediaList.length})</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
               {mediaList.map((m) => (
-                <div key={m.id} className="relative aspect-square rounded-md overflow-hidden bg-muted">
+                <a
+                  key={m.id}
+                  href={m.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative aspect-square rounded-md overflow-hidden bg-muted block group"
+                  title="Abrir em tamanho original"
+                >
                   {m.tipo === "imagem" ? (
-                    <Image src={m.url} alt="" fill className="object-cover" sizes="160px" />
+                    <Image src={m.url} alt="" fill className="object-cover group-hover:opacity-90" sizes="160px" />
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">{m.tipo}</div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-xs text-muted-foreground">
+                      <ExternalLink size={16} /> {m.tipo}
+                    </div>
                   )}
-                </div>
+                </a>
               ))}
             </div>
+            <p className="text-xs text-muted-foreground mt-2">Clique em uma mídia para abrir/baixar em tamanho original.</p>
           </CardContent>
         </Card>
       )}

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireSector } from "@/lib/auth";
+import { requireSector, isDiretoria } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { MarketingForm } from "./MarketingForm";
 import { MarketingMediaPanel } from "./MarketingMediaPanel";
@@ -7,6 +7,7 @@ import { MarketingContents } from "./MarketingContents";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/crm/StatusBadge";
 import { SectorObservations } from "@/components/crm/SectorObservations";
+import { ApprovalActions } from "@/app/admin/aprovacoes/ApprovalActions";
 import { Badge } from "@/components/ui/badge";
 import { PROPERTY_TYPE_LABELS, CATEGORY_LABELS, type Property, type PropertyMedia, type MarketingMedia, type MarketingContent, type SectorObservation, type Approval } from "@/lib/types";
 import { formatCurrencyBRL, formatDateTimeBR } from "@/lib/utils";
@@ -28,6 +29,9 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
   ]);
 
   const campaignId = campaign?.id ?? null;
+  // Aprovação de marketing/publicação é exclusiva da diretoria.
+  const podeAprovarMkt = isDiretoria(profile) && p.status === "aguardando_aprovacao_marketing";
+  const pendingMkt = ((approvals ?? []) as Approval[]).find((a) => a.status === "pendente") ?? null;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -42,6 +46,23 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
         </div>
         <div className="text-sm text-muted-foreground mt-1">{[p.endereco, p.bairro, p.cidade, p.uf].filter(Boolean).join(", ") || "—"}</div>
       </div>
+
+      {podeAprovarMkt && (
+        <Card className="border-gold/40 bg-gold/5">
+          <CardHeader><CardTitle>Aprovação de publicação (diretoria)</CardTitle></CardHeader>
+          <CardContent className="flex items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              Revise as mídias editadas e os conteúdos abaixo. Aprovar publica o imóvel no site.
+            </p>
+            <ApprovalActions
+              approvalId={pendingMkt?.id ?? null}
+              entityTable="properties"
+              entityId={p.id}
+              stage="marketing"
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Configuração de divulgação</CardTitle></CardHeader>

@@ -1,10 +1,12 @@
+import Link from "next/link";
 import { requireSector } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatDateTimeBR } from "@/lib/utils";
 import { ApprovalActions } from "./ApprovalActions";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Eye } from "lucide-react";
 
 // SLA padrão (dias) para sinalizar atraso quando não há prazo explícito.
 const SLA_DIAS = 3;
@@ -62,7 +64,9 @@ export default async function AprovacoesPage() {
         <Card><CardContent className="py-16 text-center text-muted-foreground">Nada pendente. 🎉</CardContent></Card>
       ) : (
         <div className="space-y-3">
-          {items.map(({ p, appr, stage, desde, diasAguardando, atrasado }) => (
+          {items.map(({ p, appr, stage, desde, diasAguardando, atrasado }) => {
+            const detailHref = stage === "marketing" ? `/admin/marketing/${p.id}` : `/admin/captacao/${p.id}`;
+            return (
             <Card key={p.id} className={atrasado ? "border-red-300 bg-red-50" : ""}>
               <CardContent className="p-5 flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -76,15 +80,23 @@ export default async function AprovacoesPage() {
                     )}
                     <span className="text-xs text-muted-foreground">aguardando desde {formatDateTimeBR(desde)}</span>
                   </div>
-                  <div className="mt-2 font-semibold text-arini">
+                  <Link
+                    href={detailHref}
+                    className="mt-2 inline-block font-semibold text-arini hover:text-gold-dark underline-offset-2 hover:underline"
+                  >
                     {p.codigo} — {p.titulo ?? p.cidade ?? ""}
-                  </div>
+                  </Link>
                   {appr?.comentario && <p className="text-sm text-muted-foreground mt-1">{appr.comentario}</p>}
                 </div>
-                <ApprovalActions approvalId={appr?.id ?? null} entityTable="properties" entityId={p.id} stage={stage} />
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={detailHref}><Eye size={14} /> Ver detalhes</Link>
+                  </Button>
+                  <ApprovalActions approvalId={appr?.id ?? null} entityTable="properties" entityId={p.id} stage={stage} />
+                </div>
               </CardContent>
             </Card>
-          ))}
+          );})}
         </div>
       )}
     </div>
