@@ -13,12 +13,73 @@ function safeExt(name: string): string {
 /** Traduz erros de upload para mensagens claras (ex.: arquivo acima do limite). */
 export function uploadErrorMsg(raw: string): string {
   if (/exceed|too large|413|maximum allowed|payload too large|file size/i.test(raw)) {
-    return "arquivo acima do limite de upload do servidor — reduza o arquivo ou aumente o limite em Supabase → Settings → Storage";
+    return "arquivo acima do limite de upload do servidor — reduza o arquivo ou aumente o limite de storage";
   }
   if (/mime|content type|not allowed/i.test(raw)) {
     return "tipo de arquivo não permitido pelo bucket";
   }
+  if (/cors|failed to fetch|networkerror/i.test(raw)) {
+    return "falha de rede/CORS no upload — verifique o CORS do bucket R2";
+  }
   return raw;
+}
+
+/** Mídia vai para o Cloudflare R2? (definido por env público no deploy) */
+export function isR2Active(): boolean {
+  return process.env.NEXT_PUBLIC_STORAGE_DRIVER === "r2";
+}
+
+/**
+ * Sobe UM arquivo direto no R2 via URL pré-assinada (presigned PUT).
+ * Retorna { url (pública), key }. Lança em caso de erro.
+ */
+async function putToR2(folder: string, file: File, index: number): Promise<{ url: string; key: string }> {
+  const contentType = file.type || "application/octet-stream";
+  const presign = await fetch("/api/storage/presign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder, filename: file.name, contentType, index }),
+  });
+  if (!presign.ok) {
+    const j = await presign.json().catch(() => ({}));
+    throw new Error(j.error || "falha ao preparar upload");
+  }
+  const { uploadUrl, publicUrl, key } = await presign.json();
+  const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
+  if (!put.ok) throw new Error(`falha no upload para o R2 (HTTP ${put.status})`);
+  return { url: publicUrl, key };
+}
+
+/**
+ * Guarda UM arquivo de mídia no driver ativo (R2 ou Supabase Storage) e
+ * devolve { url pública, key/path }. Lança em caso de erro.
+ *  - R2: um único bucket; o `bucket` lógico vira prefixo de pasta.
+ *  - Supabase: usa o bucket nomeado.
+ */
+async function storeMedia(
+  supabase: SupabaseClient,
+  bucket: string,
+  folder: string,
+  file: File,
+  index: number,
+): Promise<{ url: string; key: string }> {
+  if (isR2Active()) {
+    return putToR2(`${bucket}/${folder}`, file, index);
+  }
+  const path = `${folder}/${Date.now()}-${index}.${safeExt(file.name)}`;
+  let lastErr: string | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { error } = await supabase.storage.from(bucket).upload(path, file, {
+      upsert: false,
+      contentType: file.type || "application/octet-stream",
+      cacheControl: "3600",
+    });
+    if (!error) { lastErr = null; break; }
+    lastErr = error.message;
+  }
+  if (lastErr) throw new Error(lastErr);
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return { url: data.publicUrl, key: path };
 }
 
 /**
@@ -45,29 +106,15 @@ export async function uploadPropertyMedia(
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     onProgress?.(i, files.length, file.name);
-    const path = `${propertyId}/${Date.now()}-${i}.${safeExt(file.name)}`;
 
-    let lastErr: string | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const { error: upErr } = await supabase.storage
-        .from("property-media")
-        .upload(path, file, {
-          upsert: false,
-          contentType: file.type || "application/octet-stream",
-          cacheControl: "3600",
-        });
-      if (!upErr) {
-        lastErr = null;
-        break;
-      }
-      lastErr = upErr.message;
-    }
-    if (lastErr) {
-      failed.push({ name: file.name, error: uploadErrorMsg(lastErr) });
+    let url: string, key: string;
+    try {
+      ({ url, key } = await storeMedia(supabase, "property-media", `${propertyId}`, file, i));
+    } catch (e) {
+      failed.push({ name: file.name, error: uploadErrorMsg(e instanceof Error ? e.message : String(e)) });
       continue;
     }
 
-    const { data: urlData } = supabase.storage.from("property-media").getPublicUrl(path);
     const tipo = file.type.startsWith("video/")
       ? "video"
       : file.type.startsWith("image/")
@@ -77,8 +124,8 @@ export async function uploadPropertyMedia(
     const { error: insErr } = await supabase.from("property_media").insert({
       property_id: propertyId,
       tipo,
-      url: urlData.publicUrl,
-      storage_path: path,
+      url,
+      storage_path: key,
       ordem: startOrder + i,
       capa: markFirstAsCover && startOrder + i === 0,
       tamanho: file.size,
@@ -115,19 +162,15 @@ export async function uploadMarketingMedia(
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     onProgress?.(i, files.length, file.name);
-    const path = `${propertyId}/${fase}/${Date.now()}-${i}.${safeExt(file.name)}`;
 
-    let lastErr: string | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const { error: upErr } = await supabase.storage
-        .from("marketing-media")
-        .upload(path, file, { upsert: false, contentType: file.type || "application/octet-stream", cacheControl: "3600" });
-      if (!upErr) { lastErr = null; break; }
-      lastErr = upErr.message;
+    let url: string, key: string;
+    try {
+      ({ url, key } = await storeMedia(supabase, "marketing-media", `${propertyId}/${fase}`, file, i));
+    } catch (e) {
+      failed.push({ name: file.name, error: uploadErrorMsg(e instanceof Error ? e.message : String(e)) });
+      continue;
     }
-    if (lastErr) { failed.push({ name: file.name, error: uploadErrorMsg(lastErr) }); continue; }
 
-    const { data: urlData } = supabase.storage.from("marketing-media").getPublicUrl(path);
     const tipo = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "imagem" : "arquivo";
 
     const { error: insErr } = await supabase.from("marketing_media").insert({
@@ -135,8 +178,8 @@ export async function uploadMarketingMedia(
       campaign_id: campaignId,
       fase,
       tipo,
-      url: urlData.publicUrl,
-      storage_path: path,
+      url,
+      storage_path: key,
       ordem: i,
     });
     if (insErr) { failed.push({ name: file.name, error: insErr.message }); continue; }
