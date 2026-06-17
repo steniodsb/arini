@@ -5,6 +5,14 @@ export interface UploadResult {
   failed: { name: string; error: string }[];
 }
 
+/** Limite de tamanho por arquivo (1 GB). */
+export const MAX_UPLOAD_MB = 1024;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
+function tooBigMsg(): string {
+  return `arquivo acima do limite de ${MAX_UPLOAD_MB} MB (1 GB) por arquivo`;
+}
+
 function safeExt(name: string): string {
   const ext = name.split(".").pop();
   return ext && ext.length <= 6 ? ext.toLowerCase() : "bin";
@@ -63,6 +71,7 @@ async function storeMedia(
   file: File,
   index: number,
 ): Promise<{ url: string; key: string }> {
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error(tooBigMsg());
   if (isR2Active()) {
     return putToR2(`${bucket}/${folder}`, file, index);
   }
@@ -207,6 +216,7 @@ export async function uploadPropertyDocuments(
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     onProgress?.(i, files.length, file.name);
+    if (file.size > MAX_UPLOAD_BYTES) { failed.push({ name: file.name, error: tooBigMsg() }); continue; }
     const path = `${propertyId}/${Date.now()}-${i}.${safeExt(file.name)}`;
 
     let lastErr: string | null = null;
@@ -252,6 +262,7 @@ export async function uploadClientDocuments(
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     onProgress?.(i, files.length, file.name);
+    if (file.size > MAX_UPLOAD_BYTES) { failed.push({ name: file.name, error: tooBigMsg() }); continue; }
     const path = `${clientId}/${Date.now()}-${i}.${safeExt(file.name)}`;
 
     let lastErr: string | null = null;
