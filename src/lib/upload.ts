@@ -37,11 +37,19 @@ export function isR2Active(): boolean {
   return process.env.NEXT_PUBLIC_STORAGE_DRIVER === "r2";
 }
 
+/** Progresso por bytes de um arquivo em upload. */
+type FileProgress = (loaded: number, total: number) => void;
+
 /**
  * Sobe UM arquivo direto no R2 via URL pré-assinada (presigned PUT).
- * Retorna { url (pública), key }. Lança em caso de erro.
+ * Usa XHR para reportar progresso real (bytes). Retorna { url, key }.
  */
-async function putToR2(folder: string, file: File, index: number): Promise<{ url: string; key: string }> {
+async function putToR2(
+  folder: string,
+  file: File,
+  index: number,
+  onFileProgress?: FileProgress,
+): Promise<{ url: string; key: string }> {
   const contentType = file.type || "application/octet-stream";
   const presign = await fetch("/api/storage/presign", {
     method: "POST",
@@ -53,8 +61,22 @@ async function putToR2(folder: string, file: File, index: number): Promise<{ url
     throw new Error(j.error || "falha ao preparar upload");
   }
   const { uploadUrl, publicUrl, key } = await presign.json();
-  const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
-  if (!put.ok) throw new Error(`falha no upload para o R2 (HTTP ${put.status})`);
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) onFileProgress?.(ev.loaded, ev.total);
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`falha no upload para o R2 (HTTP ${xhr.status})`));
+    xhr.onerror = () => reject(new Error("erro de rede/CORS no upload"));
+    xhr.send(file);
+  });
+
   return { url: publicUrl, key };
 }
 
@@ -70,10 +92,11 @@ async function storeMedia(
   folder: string,
   file: File,
   index: number,
+  onFileProgress?: FileProgress,
 ): Promise<{ url: string; key: string }> {
   if (file.size > MAX_UPLOAD_BYTES) throw new Error(tooBigMsg());
   if (isR2Active()) {
-    return putToR2(`${bucket}/${folder}`, file, index);
+    return putToR2(`${bucket}/${folder}`, file, index, onFileProgress);
   }
   const path = `${folder}/${Date.now()}-${index}.${safeExt(file.name)}`;
   let lastErr: string | null = null;
@@ -87,6 +110,7 @@ async function storeMedia(
     lastErr = error.message;
   }
   if (lastErr) throw new Error(lastErr);
+  onFileProgress?.(file.size, file.size);
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return { url: data.publicUrl, key: path };
 }
@@ -106,11 +130,14 @@ export async function uploadPropertyMedia(
     startOrder?: number;
     markFirstAsCover?: boolean;
     onProgress?: (done: number, total: number, currentName: string) => void;
+    onByteProgress?: (loaded: number, total: number, currentName: string) => void;
   } = {},
 ): Promise<UploadResult> {
-  const { startOrder = 0, markFirstAsCover = true, onProgress } = opts;
+  const { startOrder = 0, markFirstAsCover = true, onProgress, onByteProgress } = opts;
   const failed: { name: string; error: string }[] = [];
   let ok = 0;
+  const totalBytes = files.reduce((s, f) => s + f.size, 0);
+  let baseBytes = 0;
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -118,7 +145,8 @@ export async function uploadPropertyMedia(
 
     let url: string, key: string;
     try {
-      ({ url, key } = await storeMedia(supabase, "property-media", `${propertyId}`, file, i));
+      ({ url, key } = await storeMedia(supabase, "property-media", `${propertyId}`, file, i,
+        (loaded) => onByteProgress?.(baseBytes + loaded, totalBytes, file.name)));
     } catch (e) {
       failed.push({ name: file.name, error: uploadErrorMsg(e instanceof Error ? e.message : String(e)) });
       continue;
@@ -143,6 +171,8 @@ export async function uploadPropertyMedia(
       failed.push({ name: file.name, error: insErr.message });
       continue;
     }
+    baseBytes += file.size;
+    onByteProgress?.(baseBytes, totalBytes, file.name);
     ok++;
   }
 
@@ -162,11 +192,14 @@ export async function uploadMarketingMedia(
     campaignId?: string | null;
     fase?: "bruta" | "editada";
     onProgress?: (done: number, total: number, currentName: string) => void;
+    onByteProgress?: (loaded: number, total: number, currentName: string) => void;
   } = {},
 ): Promise<UploadResult> {
-  const { campaignId = null, fase = "editada", onProgress } = opts;
+  const { campaignId = null, fase = "editada", onProgress, onByteProgress } = opts;
   const failed: { name: string; error: string }[] = [];
   let ok = 0;
+  const totalBytes = files.reduce((s, f) => s + f.size, 0);
+  let baseBytes = 0;
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -174,7 +207,8 @@ export async function uploadMarketingMedia(
 
     let url: string, key: string;
     try {
-      ({ url, key } = await storeMedia(supabase, "marketing-media", `${propertyId}/${fase}`, file, i));
+      ({ url, key } = await storeMedia(supabase, "marketing-media", `${propertyId}/${fase}`, file, i,
+        (loaded) => onByteProgress?.(baseBytes + loaded, totalBytes, file.name)));
     } catch (e) {
       failed.push({ name: file.name, error: uploadErrorMsg(e instanceof Error ? e.message : String(e)) });
       continue;
@@ -192,6 +226,8 @@ export async function uploadMarketingMedia(
       ordem: i,
     });
     if (insErr) { failed.push({ name: file.name, error: insErr.message }); continue; }
+    baseBytes += file.size;
+    onByteProgress?.(baseBytes, totalBytes, file.name);
     ok++;
   }
 

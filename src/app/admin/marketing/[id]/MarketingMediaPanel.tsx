@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { uploadMarketingMedia } from "@/lib/upload";
+import { UploadProgress, type UploadState } from "@/components/crm/UploadProgress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Upload, Trash2, Download, Film, FileArchive, ImageIcon } from "lucide-react";
@@ -50,7 +51,7 @@ export function MarketingMediaPanel({
   const [items, setItems] = useState<MarketingMedia[]>(edited);
   const [busy, setBusy] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
-  const [progress, setProgress] = useState("");
+  const [progress, setProgress] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function onFiles(files: FileList | null) {
@@ -58,13 +59,15 @@ export function MarketingMediaPanel({
     setBusy(true);
     setError(null);
     const supabase = createSupabaseBrowser();
+    const startedAt = Date.now();
     const res = await uploadMarketingMedia(supabase, propertyId, Array.from(files), {
       campaignId,
       fase: "editada",
-      onProgress: (d, t, name) => setProgress(`${d}/${t} ${name}`),
+      onByteProgress: (loaded, total, name) =>
+        setProgress((prev) => ({ loaded, total, name, startedAt: prev?.startedAt ?? startedAt })),
     });
     setBusy(false);
-    setProgress("");
+    setProgress(null);
     if (res.failed.length) setError(res.failed.map((f) => `${f.name}: ${f.error}`).join("; "));
     const { data } = await supabase.from("marketing_media").select("*").eq("property_id", propertyId).eq("fase", "editada").order("created_at", { ascending: false });
     setItems((data ?? []) as MarketingMedia[]);
@@ -148,9 +151,10 @@ export function MarketingMediaPanel({
             <div className="text-xs uppercase text-muted-foreground">Mídias editadas (para publicar)</div>
             <input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => onFiles(e.target.files)} />
             <Button type="button" size="sm" variant="gold" disabled={busy} onClick={() => inputRef.current?.click()}>
-              <Upload size={14} /> {busy ? `Enviando… ${progress}` : "Subir editadas"}
+              <Upload size={14} /> {busy ? "Enviando…" : "Subir editadas"}
             </Button>
           </div>
+          {progress && <div className="mb-2"><UploadProgress state={progress} /></div>}
           {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
           {items.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma mídia editada enviada.</p>

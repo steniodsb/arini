@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MediaUploader } from "@/components/crm/MediaUploader";
+import { UploadProgress, type UploadState } from "@/components/crm/UploadProgress";
 import { uploadPropertyMedia } from "@/lib/upload";
 import { errMessage } from "@/lib/utils";
 import {
@@ -92,6 +93,7 @@ export function NovaCaptacaoForm() {
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const [progress, setProgress] = useState<UploadState | null>(null);
   const [obsSector, setObsSector] = useState<Sector>("marketing");
   const [selType, setSelType] = useState<PropertyType>("casa");
   const [selCategory, setSelCategory] = useState<PropertyCategory>("venda");
@@ -227,12 +229,13 @@ export function NovaCaptacaoForm() {
       // Upload de mídia (robusto: retry + continua mesmo se algum falhar)
       let uploadFailures = 0;
       if (files.length > 0) {
+        const startedAt = Date.now();
         const result = await uploadPropertyMedia(supabase, property.id, files, {
-          onProgress: (done, total, name) =>
-            setUploadMsg(
-              done < total ? `Enviando mídia ${done + 1}/${total}: ${name}` : "Mídia enviada.",
-            ),
+          onByteProgress: (loaded, total, name) =>
+            setProgress((prev) => ({ loaded, total, name, startedAt: prev?.startedAt ?? startedAt })),
         });
+        setProgress(null);
+        setUploadMsg(result.failed.length === 0 ? "Mídia enviada." : null);
         uploadFailures = result.failed.length;
         if (uploadFailures > 0) {
           setError(
@@ -362,6 +365,7 @@ export function NovaCaptacaoForm() {
         <CardHeader><CardTitle>Mídia (fotos, vídeos e mídia bruta)</CardTitle></CardHeader>
         <CardContent>
           <MediaUploader onChange={setFiles} />
+          {progress && <div className="mt-3"><UploadProgress state={progress} /></div>}
           {uploadMsg && <p className="text-sm text-muted-foreground mt-3">{uploadMsg}</p>}
         </CardContent>
       </Card>
