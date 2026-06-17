@@ -36,6 +36,29 @@ type CaracConfig = {
   vagas: boolean;
   anoConstrucao: boolean;
 };
+// Categorias que fazem sentido por tipo de imóvel.
+function categoriasFor(t: PropertyType): PropertyCategory[] {
+  switch (t) {
+    case "fazenda":
+    case "sitio":
+    case "chacara":
+    case "rural":
+      return ["venda", "arrendamento", "rural", "locacao"];
+    case "terreno":
+      return ["venda", "arrendamento", "locacao"];
+    case "lote":
+    case "loteamento":
+      return ["venda", "venda_locacao"];
+    case "casa":
+    case "apartamento":
+    case "comercial":
+    case "galpao":
+      return ["venda", "locacao", "venda_locacao"];
+    default:
+      return ["venda", "locacao", "venda_locacao", "arrendamento", "rural"];
+  }
+}
+
 function caracConfig(t: PropertyType): CaracConfig {
   switch (t) {
     // Terra "crua": só área total (em hectares).
@@ -74,6 +97,14 @@ export function NovaCaptacaoForm() {
   const [selCategory, setSelCategory] = useState<PropertyCategory>("venda");
   const [codigoPrevisto, setCodigoPrevisto] = useState<string>("");
   const carac = caracConfig(selType);
+  const categoriasPermitidas = categoriasFor(selType);
+
+  // Se a categoria atual não couber no tipo escolhido, ajusta para a primeira válida.
+  useEffect(() => {
+    if (!categoriasFor(selType).includes(selCategory)) {
+      setSelCategory(categoriasFor(selType)[0]);
+    }
+  }, [selType, selCategory]);
 
   // Preview do próximo código da sequência (ex.: casa 01 existe → CSV-00002).
   // O código definitivo continua sendo gerado no salvamento, pela RPC.
@@ -255,8 +286,8 @@ export function NovaCaptacaoForm() {
           <div>
             <Label>Categoria*</Label>
             <Select name="category" required value={selCategory} onChange={(e) => setSelCategory(e.target.value as PropertyCategory)}>
-              {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
+              {categoriasPermitidas.map((k) => (
+                <option key={k} value={k}>{CATEGORY_LABELS[k]}</option>
               ))}
             </Select>
           </div>
