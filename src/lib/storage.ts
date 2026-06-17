@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
@@ -51,4 +51,9 @@ export async function presignUpload(key: string, contentType: string): Promise<s
     ContentType: contentType,
   });
   return getSignedUrl(r2(), cmd, { expiresIn: 600 });
+}
+
+/** Remove um objeto do bucket R2. */
+export async function deleteR2Object(key: string): Promise<void> {
+  await r2().send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET!, Key: key }));
 }
