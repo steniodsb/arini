@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MediaUploader } from "@/components/crm/MediaUploader";
 import { UploadProgress, type UploadState } from "@/components/crm/UploadProgress";
+import { SavingModal, type SaveStep } from "@/components/crm/SavingModal";
 import { uploadPropertyMedia } from "@/lib/upload";
 import { errMessage } from "@/lib/utils";
 import {
@@ -26,6 +27,16 @@ import {
 const TARGET_SECTORS: Sector[] = [
   "marketing", "administrativo", "juridico", "financeiro", "recepcao", "admin_central",
 ];
+
+// Etapas do salvamento (exibidas no modal central).
+const STEP_LABELS = [
+  "Gerando código do imóvel",
+  "Salvando dados do imóvel",
+  "Salvando informações da captação",
+  "Enviando mídias",
+  "Solicitando aprovação",
+  "Concluído",
+] as const;
 
 // Quais campos de características fazem sentido por tipo de imóvel.
 type CaracConfig = {
@@ -94,6 +105,7 @@ export function NovaCaptacaoForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [progress, setProgress] = useState<UploadState | null>(null);
+  const [stepIdx, setStepIdx] = useState(0);
   const [obsSector, setObsSector] = useState<Sector>("marketing");
   const [selType, setSelType] = useState<PropertyType>("casa");
   const [selCategory, setSelCategory] = useState<PropertyCategory>("venda");
@@ -133,6 +145,7 @@ export function NovaCaptacaoForm() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    setStepIdx(0);
 
     const fd = new FormData(e.currentTarget);
     const supabase = createSupabaseBrowser();
@@ -184,6 +197,7 @@ export function NovaCaptacaoForm() {
         slug_publico: codigo?.toLowerCase(),
       };
 
+      setStepIdx(1);
       const { data: property, error: insErr } = await supabase
         .from("properties")
         .insert(propertyPayload)
@@ -199,6 +213,7 @@ export function NovaCaptacaoForm() {
         tour: fd.get("mat_tour") === "on",
         drone: fd.get("mat_drone") === "on",
       };
+      setStepIdx(2);
       const relatorioText = (fd.get("relatorio") as string)?.trim() || null;
       const { error: capErr } = await supabase.from("property_capture_info").insert({
         property_id: property.id,
@@ -227,6 +242,7 @@ export function NovaCaptacaoForm() {
       }
 
       // Upload de mídia (robusto: retry + continua mesmo se algum falhar)
+      setStepIdx(3);
       let uploadFailures = 0;
       if (files.length > 0) {
         const startedAt = Date.now();
@@ -248,6 +264,7 @@ export function NovaCaptacaoForm() {
 
       // Cria approval (não-fatal: a inbox de aprovações também é dirigida pelo
       // status do imóvel, então mesmo se isto falhar o item não se perde).
+      setStepIdx(4);
       const { error: apprErr } = await supabase.from("approvals").insert({
         entity_table: "properties",
         entity_id: property.id,
@@ -260,6 +277,7 @@ export function NovaCaptacaoForm() {
 
       // Só navega automaticamente se tudo subiu; senão deixa a msg visível.
       if (uploadFailures === 0) {
+        setStepIdx(5);
         router.push(`/admin/captacao/${property.id}`);
         router.refresh();
       } else {
@@ -273,8 +291,14 @@ export function NovaCaptacaoForm() {
     }
   }
 
+  const saveSteps: SaveStep[] = STEP_LABELS.slice(0, 5).map((label, i) => ({
+    label,
+    status: i < stepIdx ? "done" : i === stepIdx ? "doing" : "pending",
+  }));
+
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <SavingModal open={loading} title="Salvando captação" steps={saveSteps} progress={progress} />
       <Card>
         <CardHeader><CardTitle>Dados básicos</CardTitle></CardHeader>
         <CardContent className="grid md:grid-cols-2 gap-4">
