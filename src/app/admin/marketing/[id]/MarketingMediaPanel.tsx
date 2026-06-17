@@ -6,6 +6,7 @@ import Image from "next/image";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { uploadMarketingMedia } from "@/lib/upload";
 import { UploadProgress, type UploadState } from "@/components/crm/UploadProgress";
+import { SavingModal } from "@/components/crm/SavingModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Upload, Trash2, Download, Film, FileArchive, ImageIcon } from "lucide-react";
@@ -101,6 +102,12 @@ export function MarketingMediaPanel({
 
   return (
     <Card>
+      <SavingModal
+        open={busy}
+        title="Enviando mídias editadas"
+        steps={[{ label: "Enviando arquivos para o servidor", status: "doing" }]}
+        progress={progress}
+      />
       <CardHeader><CardTitle>Mídias</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <div>

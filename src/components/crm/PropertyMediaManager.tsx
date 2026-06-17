@@ -7,6 +7,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { uploadPropertyMedia, isR2Active } from "@/lib/upload";
 import { MediaUploader } from "@/components/crm/MediaUploader";
 import { UploadProgress, type UploadState } from "@/components/crm/UploadProgress";
+import { SavingModal } from "@/components/crm/SavingModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Trash2, Star, Upload, ExternalLink } from "lucide-react";
@@ -83,6 +84,12 @@ export function PropertyMediaManager({
 
   return (
     <Card>
+      <SavingModal
+        open={busy}
+        title="Enviando mídias"
+        steps={[{ label: "Enviando arquivos para o servidor", status: "doing" }]}
+        progress={progress}
+      />
       <CardHeader>
         <CardTitle>Mídias ({items.length})</CardTitle>
         <p className="text-xs text-muted-foreground">Adicione, remova e defina a capa. Clique para abrir em alta.</p>

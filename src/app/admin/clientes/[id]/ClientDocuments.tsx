@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { SavingModal } from "@/components/crm/SavingModal";
 import { formatDateBR } from "@/lib/utils";
 import { Upload, FileText, ExternalLink } from "lucide-react";
 import type { ClientDocument } from "@/lib/types";
@@ -67,6 +68,12 @@ export function ClientDocuments({ clientId, initial }: { clientId: string; initi
 
   return (
     <Card>
+      <SavingModal
+        open={busy}
+        title="Enviando documento"
+        steps={[{ label: progress ? `Enviando… ${progress}` : "Enviando documento…", status: "doing" }]}
+        progress={null}
+      />
       <CardHeader>
         <CardTitle>Documentos do cliente</CardTitle>
         <p className="text-xs text-muted-foreground">Anexe e forneça documentos a este cliente.</p>

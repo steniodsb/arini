@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { SavingModal } from "@/components/crm/SavingModal";
 import { formatDateBR } from "@/lib/utils";
 import { Upload, FileText, ExternalLink, Trash2 } from "lucide-react";
 
@@ -79,6 +80,12 @@ export function PropertyDocuments({ propertyId, initial }: { propertyId: string;
 
   return (
     <Card>
+      <SavingModal
+        open={busy}
+        title="Enviando documento"
+        steps={[{ label: progress ? `Enviando… ${progress}` : "Enviando documento…", status: "doing" }]}
+        progress={null}
+      />
       <CardHeader>
         <CardTitle>Documentos do imóvel</CardTitle>
         <p className="text-xs text-muted-foreground">Anexe matrícula, escritura, contratos e outros arquivos para manter o arquivo do imóvel.</p>
