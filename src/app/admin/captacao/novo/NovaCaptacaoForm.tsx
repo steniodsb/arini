@@ -26,6 +26,43 @@ const TARGET_SECTORS: Sector[] = [
   "marketing", "administrativo", "juridico", "financeiro", "recepcao", "admin_central",
 ];
 
+// Quais campos de características fazem sentido por tipo de imóvel.
+type CaracConfig = {
+  areaUnit: "m²" | "ha";
+  areaConstruida: boolean;
+  dormitorios: boolean;
+  suites: boolean;
+  banheiros: boolean;
+  vagas: boolean;
+  anoConstrucao: boolean;
+};
+function caracConfig(t: PropertyType): CaracConfig {
+  switch (t) {
+    // Terra "crua": só área total (em hectares).
+    case "terreno":
+    case "rural":
+      return { areaUnit: "ha", areaConstruida: false, dormitorios: false, suites: false, banheiros: false, vagas: false, anoConstrucao: false };
+    // Lotes urbanos: só área total (em m²).
+    case "lote":
+    case "loteamento":
+      return { areaUnit: "m²", areaConstruida: false, dormitorios: false, suites: false, banheiros: false, vagas: false, anoConstrucao: false };
+    // Rurais com sede: hectares + construção/cômodos da casa.
+    case "fazenda":
+    case "sitio":
+    case "chacara":
+      return { areaUnit: "ha", areaConstruida: true, dormitorios: true, suites: false, banheiros: true, vagas: true, anoConstrucao: false };
+    // Comerciais: m² + construção, vagas e banheiros (sem dormitórios/suítes).
+    case "comercial":
+    case "galpao":
+      return { areaUnit: "m²", areaConstruida: true, dormitorios: false, suites: false, banheiros: true, vagas: true, anoConstrucao: true };
+    // Residenciais e "outros": tudo.
+    case "casa":
+    case "apartamento":
+    default:
+      return { areaUnit: "m²", areaConstruida: true, dormitorios: true, suites: true, banheiros: true, vagas: true, anoConstrucao: true };
+  }
+}
+
 export function NovaCaptacaoForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -36,6 +73,7 @@ export function NovaCaptacaoForm() {
   const [selType, setSelType] = useState<PropertyType>("casa");
   const [selCategory, setSelCategory] = useState<PropertyCategory>("venda");
   const [codigoPrevisto, setCodigoPrevisto] = useState<string>("");
+  const carac = caracConfig(selType);
 
   // Preview do próximo código da sequência (ex.: casa 01 existe → CSV-00002).
   // O código definitivo continua sendo gerado no salvamento, pela RPC.
@@ -104,8 +142,10 @@ export function NovaCaptacaoForm() {
         area_total: fd.get("area_total") ? Number(fd.get("area_total")) : null,
         area_construida: fd.get("area_construida") ? Number(fd.get("area_construida")) : null,
         dormitorios: fd.get("dormitorios") ? Number(fd.get("dormitorios")) : null,
+        suites: fd.get("suites") ? Number(fd.get("suites")) : null,
         banheiros: fd.get("banheiros") ? Number(fd.get("banheiros")) : null,
         vagas: fd.get("vagas") ? Number(fd.get("vagas")) : null,
+        ano_construcao: fd.get("ano_construcao") ? Number(fd.get("ano_construcao")) : null,
         captador_id: userId,
         placa_status: (fd.get("placa") === "on" ? "colocada" : "nao_colocada"),
         slug_publico: codigo?.toLowerCase(),
@@ -238,6 +278,38 @@ export function NovaCaptacaoForm() {
       </Card>
 
       <Card>
+        <CardHeader>
+          <CardTitle>Características e valor</CardTitle>
+          <p className="text-xs text-muted-foreground">Campos ajustados ao tipo: {PROPERTY_TYPE_LABELS[selType]}.</p>
+        </CardHeader>
+        <CardContent className="grid md:grid-cols-3 gap-4">
+          <div><Label>Valor (R$)*</Label><Input name="valor" type="number" step="0.01" required /></div>
+          <div>
+            <Label>Área total ({carac.areaUnit})</Label>
+            <Input name="area_total" type="number" step="0.01" placeholder={carac.areaUnit === "ha" ? "em hectares" : "em m²"} />
+          </div>
+          {carac.areaConstruida && (
+            <div><Label>Área construída (m²)</Label><Input name="area_construida" type="number" step="0.01" /></div>
+          )}
+          {carac.dormitorios && (
+            <div><Label>Dormitórios</Label><Input name="dormitorios" type="number" min="0" /></div>
+          )}
+          {carac.suites && (
+            <div><Label>Suítes</Label><Input name="suites" type="number" min="0" /></div>
+          )}
+          {carac.banheiros && (
+            <div><Label>Banheiros</Label><Input name="banheiros" type="number" min="0" /></div>
+          )}
+          {carac.vagas && (
+            <div><Label>Vagas</Label><Input name="vagas" type="number" min="0" /></div>
+          )}
+          {carac.anoConstrucao && (
+            <div><Label>Ano de construção</Label><Input name="ano_construcao" type="number" min="1900" max="2100" /></div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader><CardTitle>Localização</CardTitle></CardHeader>
         <CardContent className="grid md:grid-cols-3 gap-4">
           <div className="md:col-span-2"><Label>Endereço</Label><Input name="endereco" /></div>
@@ -252,18 +324,6 @@ export function NovaCaptacaoForm() {
           </div>
           <div><Label>Latitude</Label><Input name="lat" type="number" step="any" /></div>
           <div><Label>Longitude</Label><Input name="lng" type="number" step="any" /></div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Características e valor</CardTitle></CardHeader>
-        <CardContent className="grid md:grid-cols-3 gap-4">
-          <div><Label>Valor (R$)*</Label><Input name="valor" type="number" step="0.01" required /></div>
-          <div><Label>Área total (m²)</Label><Input name="area_total" type="number" step="0.01" /></div>
-          <div><Label>Área construída (m²)</Label><Input name="area_construida" type="number" step="0.01" /></div>
-          <div><Label>Dormitórios</Label><Input name="dormitorios" type="number" /></div>
-          <div><Label>Banheiros</Label><Input name="banheiros" type="number" /></div>
-          <div><Label>Vagas</Label><Input name="vagas" type="number" /></div>
         </CardContent>
       </Card>
 
