@@ -19,13 +19,14 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
   if (!property) notFound();
   const p = property as Property;
 
-  const [{ data: campaign }, { data: rawMedia }, { data: editedMedia }, { data: contents }, { data: observations }, { data: approvals }] = await Promise.all([
+  const [{ data: campaign }, { data: rawMedia }, { data: editedMedia }, { data: contents }, { data: observations }, { data: approvals }, { data: capture }] = await Promise.all([
     supabase.from("marketing_campaigns").select("*").eq("property_id", p.id).maybeSingle(),
     supabase.from("property_media").select("*").eq("property_id", p.id).order("ordem"),
     supabase.from("marketing_media").select("*").eq("property_id", p.id).eq("fase", "editada").order("created_at", { ascending: false }),
     supabase.from("marketing_contents").select("*").eq("property_id", p.id).order("data_publicacao", { ascending: true }),
     supabase.from("sector_observations").select("*").eq("entity_table", "marketing_campaigns").eq("entity_id", p.id).order("created_at", { ascending: false }),
     supabase.from("approvals").select("*").eq("entity_table", "properties").eq("entity_id", p.id).eq("stage", "marketing").order("created_at", { ascending: false }),
+    supabase.from("property_capture_info").select("link_midias").eq("property_id", p.id).maybeSingle(),
   ]);
 
   const campaignId = campaign?.id ?? null;
@@ -76,6 +77,7 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
         campaignId={campaignId}
         raw={(rawMedia ?? []) as PropertyMedia[]}
         edited={(editedMedia ?? []) as MarketingMedia[]}
+        driveLink={(capture as { link_midias?: string | null } | null)?.link_midias ?? null}
       />
 
       <MarketingContents

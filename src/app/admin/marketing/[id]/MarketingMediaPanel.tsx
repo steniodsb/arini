@@ -9,7 +9,7 @@ import { UploadProgress, type UploadState } from "@/components/crm/UploadProgres
 import { SavingModal } from "@/components/crm/SavingModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, Trash2, Download, Film, FileArchive, ImageIcon } from "lucide-react";
+import { Upload, Trash2, Download, Film, FileArchive, ImageIcon, ExternalLink } from "lucide-react";
 import type { MarketingMedia, PropertyMedia } from "@/lib/types";
 
 function fileNameFromPath(path: string | null, fallback: string) {
@@ -41,11 +41,13 @@ export function MarketingMediaPanel({
   campaignId,
   raw,
   edited,
+  driveLink,
 }: {
   propertyId: string;
   campaignId: string | null;
   raw: PropertyMedia[];
   edited: MarketingMedia[];
+  driveLink?: string | null;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -110,6 +112,16 @@ export function MarketingMediaPanel({
       />
       <CardHeader><CardTitle>Mídias</CardTitle></CardHeader>
       <CardContent className="space-y-4">
+        {driveLink && (
+          <a
+            href={driveLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-md border border-gold/40 bg-gold/5 px-3 py-2 text-sm text-arini hover:bg-gold/10"
+          >
+            <ExternalLink size={14} /> Pasta de mídias da captação (drive) — abrir
+          </a>
+        )}
         <div>
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs uppercase text-muted-foreground">Recebidas da captação (brutas — alta qualidade)</div>

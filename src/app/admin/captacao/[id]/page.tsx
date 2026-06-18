@@ -206,6 +206,14 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
                 .join(", ") || "—"}
             </div>
             <div>Placa: {capture.placa_colocada ? "Colocada" : "Não colocada"}</div>
+            {capture.link_midias && (
+              <div className="flex items-center gap-1">
+                Mídias (drive):{" "}
+                <a href={capture.link_midias} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-arini hover:text-gold-dark font-semibold">
+                  <ExternalLink size={12} /> Abrir pasta →
+                </a>
+              </div>
+            )}
             {capture.relatorio_texto && (
               <div className="mt-2 p-3 rounded-md bg-muted text-muted-foreground whitespace-pre-line">{capture.relatorio_texto}</div>
             )}

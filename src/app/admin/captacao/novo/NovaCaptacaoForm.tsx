@@ -224,6 +224,7 @@ export function NovaCaptacaoForm() {
         materiais,
         relatorio_texto: relatorioText,
         placa_colocada: fd.get("placa") === "on",
+        link_midias: (fd.get("link_midias") as string)?.trim() || null,
       });
       if (capErr) throw capErr;
 
@@ -391,6 +392,17 @@ export function NovaCaptacaoForm() {
           <MediaUploader onChange={setFiles} />
           {progress && <div className="mt-3"><UploadProgress state={progress} /></div>}
           {uploadMsg && <p className="text-sm text-muted-foreground mt-3">{uploadMsg}</p>}
+          <div className="mt-4 border-t pt-4">
+            <Label>Ou link de um drive com as mídias (opcional)</Label>
+            <Input
+              name="link_midias"
+              type="url"
+              placeholder="https://drive.google.com/… (Google Drive, OneDrive, WeTransfer, etc.)"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Use quando as mídias estiverem numa pasta externa. Você pode subir arquivos acima e/ou informar o link.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
