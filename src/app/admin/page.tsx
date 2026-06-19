@@ -11,13 +11,6 @@ const SECTOR_PROPERTY_STATUS: Record<string, PropertyStatus[]> = {
   captacao: ["rascunho", "aguardando_aprovacao_captacao", "aprovado_captacao"],
   marketing: ["em_marketing", "aguardando_aprovacao_marketing", "publicado"],
 };
-const SECTOR_APPROVAL_STAGE: Record<string, string[]> = {
-  captacao: ["captacao"],
-  marketing: ["marketing"],
-  juridico: ["juridico"],
-  financeiro: ["financeiro_imovel", "financeiro_empresarial"],
-};
-
 const SECTOR_FILTERS = ["", "captacao", "marketing", "juridico", "financeiro", "recepcao"] as const;
 
 export default async function AdminDashboard({ searchParams }: { searchParams: { error?: string; setor?: string } }) {
@@ -31,9 +24,17 @@ export default async function AdminDashboard({ searchParams }: { searchParams: {
   let propsQuery = supabase.from("properties").select("*", { count: "exact", head: true });
   if (SECTOR_PROPERTY_STATUS[setor]) propsQuery = propsQuery.in("status", SECTOR_PROPERTY_STATUS[setor]);
 
-  // Aprovações pendentes (com filtro de setor por stage)
-  let apprQuery = supabase.from("approvals").select("*", { count: "exact", head: true }).eq("status", "pendente");
-  if (SECTOR_APPROVAL_STAGE[setor]) apprQuery = apprQuery.in("stage", SECTOR_APPROVAL_STAGE[setor]);
+  // Aprovações pendentes = imóveis em status de espera (consistente com a
+  // inbox e imune a aprovações órfãs de imóveis deletados).
+  const waitingStatuses = setor === "captacao"
+    ? ["aguardando_aprovacao_captacao"]
+    : setor === "marketing"
+      ? ["aguardando_aprovacao_marketing"]
+      : ["aguardando_aprovacao_captacao", "aguardando_aprovacao_marketing"];
+  const apprQuery = supabase
+    .from("properties")
+    .select("*", { count: "exact", head: true })
+    .in("status", waitingStatuses);
 
   const [
     { count: propsCount },
