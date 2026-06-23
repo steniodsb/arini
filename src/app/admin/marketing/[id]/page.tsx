@@ -45,8 +45,35 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
             {PROPERTY_TYPE_LABELS[p.type]} · {CATEGORY_LABELS[p.category]} · {formatCurrencyBRL(p.valor)}
           </span>
         </div>
-        <div className="text-sm text-muted-foreground mt-1">{[p.endereco, p.bairro, p.cidade, p.uf].filter(Boolean).join(", ") || "—"}</div>
+        <div className="text-sm text-muted-foreground mt-1">{[p.bairro, p.cidade, p.uf].filter(Boolean).join(", ") || "—"}</div>
       </div>
+
+      <Card>
+        <CardHeader><CardTitle>Informações do imóvel</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+            <Info label="Tipo" value={PROPERTY_TYPE_LABELS[p.type]} />
+            <Info label="Categoria" value={CATEGORY_LABELS[p.category]} />
+            <Info label="Valor" value={formatCurrencyBRL(p.valor)} />
+            <Info label="Cidade" value={p.cidade} />
+            <Info label="Bairro" value={p.bairro} />
+            <Info label="UF" value={p.uf} />
+            <Info label="Área total" value={p.area_total ? `${p.area_total}` : null} />
+            <Info label="Área construída" value={p.area_construida ? `${p.area_construida} m²` : null} />
+            <Info label="Dormitórios" value={p.dormitorios?.toString()} />
+            <Info label="Suítes" value={p.suites?.toString()} />
+            <Info label="Banheiros" value={p.banheiros?.toString()} />
+            <Info label="Vagas" value={p.vagas?.toString()} />
+            <Info label="Ano construção" value={p.ano_construcao?.toString()} />
+          </div>
+          {p.descricao && (
+            <div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">Descrição</div>
+              <p className="text-sm whitespace-pre-line">{p.descricao}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {podeAprovarMkt && (
         <Card className="border-gold/40 bg-gold/5">
@@ -113,6 +140,15 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
           ))}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <div className="text-xs uppercase text-muted-foreground">{label}</div>
+      <div className="text-arini font-medium">{value || "—"}</div>
     </div>
   );
 }
