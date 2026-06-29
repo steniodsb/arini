@@ -7,8 +7,8 @@ import {
   CATEGORY_LABELS,
   PROPERTY_TYPE_LABELS,
   type Property,
-  type PropertyMedia,
 } from "@/lib/types";
+import { getPublicGallery } from "@/lib/publicMedia";
 import {
   MapPin,
   ArrowLeft,
@@ -50,14 +50,9 @@ export default async function PropertyDetailPage({
   if (!property) notFound();
   const p = property as Property;
 
-  const { data: media } = await supabase
-    .from("property_media")
-    .select("*")
-    .eq("property_id", p.id)
-    .order("capa", { ascending: false })
-    .order("ordem", { ascending: true });
-  const mediaList = (media ?? []) as PropertyMedia[];
-  const images = mediaList.filter((m) => m.tipo === "imagem");
+  // Galeria pública: fotos editadas do marketing entram no lugar das brutas;
+  // enquanto o marketing não sobe a editada, usa a bruta da captação.
+  const images = await getPublicGallery(supabase, p.id);
 
   const status = STATUS_BADGE[p.status] ?? STATUS_BADGE.publicado;
 

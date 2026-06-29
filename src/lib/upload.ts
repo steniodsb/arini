@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { compressImageFile } from "./imageCompress";
 
 export interface UploadResult {
   ok: number;
@@ -140,7 +141,9 @@ export async function uploadPropertyMedia(
   let baseBytes = 0;
 
   for (let i = 0; i < files.length; i++) {
-    const file = files[i];
+    // Compressão leve no navegador antes de subir (só imagens).
+    let file = files[i];
+    if (file.type.startsWith("image/")) file = await compressImageFile(file);
     onProgress?.(i, files.length, file.name);
 
     let url: string, key: string;
@@ -202,7 +205,9 @@ export async function uploadMarketingMedia(
   let baseBytes = 0;
 
   for (let i = 0; i < files.length; i++) {
-    const file = files[i];
+    // Compressão leve no navegador antes de subir (só imagens).
+    let file = files[i];
+    if (file.type.startsWith("image/")) file = await compressImageFile(file);
     onProgress?.(i, files.length, file.name);
 
     let url: string, key: string;

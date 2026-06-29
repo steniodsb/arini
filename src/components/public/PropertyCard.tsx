@@ -1,35 +1,35 @@
 import Link from "next/link";
-import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Property } from "@/lib/types";
 import { Bed, Bath, Car, Maximize2 } from "lucide-react";
+import { PropertyCardCarousel } from "./PropertyCardCarousel";
+import type { GalleryImage } from "@/lib/publicMedia";
 
 interface Props {
   property: Property;
   coverUrl?: string | null;
+  /** Quando informado (>1), o card vira um mini-carrossel de fotos. */
+  images?: GalleryImage[];
 }
 
-export function PropertyCard({ property, coverUrl }: Props) {
+export function PropertyCard({ property, coverUrl, images }: Props) {
+  const alt = property.titulo || property.codigo;
+  // Fonte das imagens: lista da galeria, se houver; senão a capa única.
+  const gallery: GalleryImage[] =
+    images && images.length > 0
+      ? images
+      : coverUrl
+        ? [{ id: property.id, url: coverUrl }]
+        : [];
+
   return (
     <Link
       href={`/imoveis/${property.codigo}`}
       className="group block rounded-lg overflow-hidden border bg-card shadow-sm hover:shadow-lg transition-all"
     >
       <div className="relative aspect-[4/3] bg-muted">
-        {coverUrl ? (
-          <Image
-            src={coverUrl}
-            alt={property.titulo || property.codigo}
-            fill
-            className="object-cover transition-transform group-hover:scale-105"
-            sizes="(max-width: 768px) 100vw, 33vw"
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-arini-radial text-gold/40 text-xs font-semibold">
-            ARINI
-          </div>
-        )}
+        <PropertyCardCarousel images={gallery} alt={alt} />
         <div className="absolute top-3 left-3 flex gap-2">
           <Badge variant="gold">{CATEGORY_LABELS[property.category]}</Badge>
           <Badge variant="outline" className="bg-white/90">

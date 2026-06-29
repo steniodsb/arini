@@ -3,10 +3,10 @@
 import { useState, useRef } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { PropertyMedia } from "@/lib/types";
+import type { GalleryImage } from "@/lib/publicMedia";
 
 interface Props {
-  images: PropertyMedia[];
+  images: GalleryImage[];
   title: string;
 }
 

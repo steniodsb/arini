@@ -3,7 +3,8 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { PropertyCard } from "@/components/public/PropertyCard";
 import { Button } from "@/components/ui/button";
 import { Search, ShieldCheck, MapPinned, Sparkles, MapPin } from "lucide-react";
-import type { Property, PropertyMedia } from "@/lib/types";
+import type { Property } from "@/lib/types";
+import { getPublicGalleries } from "@/lib/publicMedia";
 
 export const revalidate = 60;
 
@@ -18,21 +19,12 @@ async function getFeatured() {
     .limit(6);
 
   const ids = (properties ?? []).map((p) => p.id);
-  let mediaByProp: Record<string, string> = {};
-  if (ids.length) {
-    const { data: media } = await supabase
-      .from("property_media")
-      .select("property_id, url, capa, ordem")
-      .in("property_id", ids);
-    for (const m of (media ?? []) as PropertyMedia[]) {
-      if (!mediaByProp[m.property_id] || m.capa) mediaByProp[m.property_id] = m.url;
-    }
-  }
-  return { properties: (properties ?? []) as Property[], mediaByProp };
+  const galleriesByProp = await getPublicGalleries(supabase, ids);
+  return { properties: (properties ?? []) as Property[], galleriesByProp };
 }
 
 export default async function HomePage() {
-  const { properties, mediaByProp } = await getFeatured();
+  const { properties, galleriesByProp } = await getFeatured();
 
   return (
     <>
@@ -96,7 +88,7 @@ export default async function HomePage() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {properties.map((p) => (
-              <PropertyCard key={p.id} property={p} coverUrl={mediaByProp[p.id]} />
+              <PropertyCard key={p.id} property={p} images={galleriesByProp[p.id]} />
             ))}
           </div>
         )}

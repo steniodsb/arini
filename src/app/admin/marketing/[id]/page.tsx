@@ -8,8 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/crm/StatusBadge";
 import { SectorObservations } from "@/components/crm/SectorObservations";
 import { ApprovalActions } from "@/app/admin/aprovacoes/ApprovalActions";
+import { PropertyClientsPanel, type ClientOption, type LinkedClient } from "@/components/crm/PropertyClientsPanel";
 import { Badge } from "@/components/ui/badge";
-import { PROPERTY_TYPE_LABELS, CATEGORY_LABELS, type Property, type PropertyMedia, type MarketingMedia, type MarketingContent, type SectorObservation, type Approval } from "@/lib/types";
+import { PROPERTY_TYPE_LABELS, CATEGORY_LABELS, type Property, type PropertyMedia, type MarketingMedia, type MarketingContent, type SectorObservation, type Approval, type ClientType } from "@/lib/types";
 import { formatCurrencyBRL, formatDateTimeBR } from "@/lib/utils";
 
 export default async function MarketingDetailPage({ params }: { params: { id: string } }) {
@@ -33,6 +34,40 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
   // Aprovação de marketing/publicação é exclusiva da diretoria.
   const podeAprovarMkt = isDiretoria(profile) && p.status === "aguardando_aprovacao_marketing";
   const pendingMkt = ((approvals ?? []) as Approval[]).find((a) => a.status === "pendente") ?? null;
+
+  // Antes da publicação (aprovação final) é possível vincular o imóvel ao
+  // cliente/parceiro que o trouxe. Controle interno: administrativo e diretoria.
+  // (A RLS de property_clients reforça isso; o setor marketing não enxerga.)
+  const canControlMkt = isDiretoria(profile) || profile?.sector === "administrativo";
+  let linkedClients: LinkedClient[] = [];
+  let clientOptions: ClientOption[] = [];
+  if (canControlMkt) {
+    const [{ data: links }, { data: clients }] = await Promise.all([
+      supabase
+        .from("property_clients")
+        .select("id, client_id, papel, observacao, client:clients(nome, telefone)")
+        .eq("property_id", p.id)
+        .order("created_at", { ascending: true }),
+      supabase.from("clients").select("id, nome, tipo").eq("ativo", true).order("nome"),
+    ]);
+    linkedClients = (links ?? []).map((r) => {
+      const cli = r.client as { nome?: string; telefone?: string | null } | { nome?: string; telefone?: string | null }[] | null;
+      const c = Array.isArray(cli) ? cli[0] : cli;
+      return {
+        id: r.id as string,
+        client_id: r.client_id as string,
+        papel: r.papel as ClientType,
+        observacao: (r.observacao as string | null) ?? null,
+        nome: c?.nome ?? "—",
+        telefone: c?.telefone ?? null,
+      };
+    });
+    clientOptions = (clients ?? []).map((c) => ({
+      id: c.id as string,
+      nome: c.nome as string,
+      tipo: c.tipo as ClientType,
+    }));
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -90,6 +125,14 @@ export default async function MarketingDetailPage({ params }: { params: { id: st
             />
           </CardContent>
         </Card>
+      )}
+
+      {canControlMkt && (
+        <PropertyClientsPanel
+          propertyId={p.id}
+          initial={linkedClients}
+          clients={clientOptions}
+        />
       )}
 
       <Card>

@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Property, type PropertyCategory, type PropertyMedia, type PropertyType } from "@/lib/types";
+import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Property } from "@/lib/types";
+import { getPublicGalleries } from "@/lib/publicMedia";
 
 export const revalidate = 60;
 
@@ -28,16 +29,7 @@ export default async function ImoveisPage({ searchParams }: { searchParams: SP }
 
   const { data: properties } = await q.order("created_at", { ascending: false }).limit(60);
   const ids = (properties ?? []).map((p) => p.id);
-  const mediaByProp: Record<string, string> = {};
-  if (ids.length) {
-    const { data: media } = await supabase
-      .from("property_media")
-      .select("property_id, url, capa")
-      .in("property_id", ids);
-    for (const m of (media ?? []) as PropertyMedia[]) {
-      if (!mediaByProp[m.property_id] || m.capa) mediaByProp[m.property_id] = m.url;
-    }
-  }
+  const galleriesByProp = await getPublicGalleries(supabase, ids);
   const list = (properties ?? []) as Property[];
 
   return (
@@ -93,7 +85,7 @@ export default async function ImoveisPage({ searchParams }: { searchParams: SP }
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {list.map((p) => (
-            <PropertyCard key={p.id} property={p} coverUrl={mediaByProp[p.id]} />
+            <PropertyCard key={p.id} property={p} images={galleriesByProp[p.id]} />
           ))}
         </div>
       )}

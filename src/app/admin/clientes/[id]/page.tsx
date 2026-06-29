@@ -3,9 +3,10 @@ import { requireSector, isDiretoria } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CLIENT_TYPE_LABELS, CLIENT_TYPES, type Client, type ClientDocument, type ClientType } from "@/lib/types";
+import { CLIENT_TYPE_LABELS, CLIENT_TYPES, type Client, type ClientDocument, type ClientType, type PropertyType } from "@/lib/types";
 import { ClientDocuments } from "./ClientDocuments";
 import { TransactionActions } from "@/components/crm/TransactionActions";
+import { ClientPropertiesPanel, type LinkedProperty, type PropertyOption } from "@/components/crm/ClientPropertiesPanel";
 
 const CLIENT_TYPE_OPTS = CLIENT_TYPES.map((t) => ({ value: t, label: CLIENT_TYPE_LABELS[t] }));
 
@@ -22,6 +23,39 @@ export default async function ClienteDetailPage({ params }: { params: { id: stri
     .select("*")
     .eq("client_id", c.id)
     .order("created_at", { ascending: false });
+
+  // Imóveis vinculados a este cliente (origem / controle interno) + lista de
+  // imóveis disponíveis para vincular pela própria página do cliente.
+  const [{ data: linksData }, { data: propsData }] = await Promise.all([
+    supabase
+      .from("property_clients")
+      .select("id, papel, observacao, property:properties(id, codigo, titulo, type, cidade)")
+      .eq("client_id", c.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("properties")
+      .select("id, codigo, titulo, type, cidade")
+      .order("created_at", { ascending: false })
+      .limit(500),
+  ]);
+  const linkedProperties: LinkedProperty[] = (linksData ?? []).map((r) => {
+    const prop = r.property as
+      | { id: string; codigo: string; titulo: string | null; type: PropertyType; cidade: string | null }
+      | { id: string; codigo: string; titulo: string | null; type: PropertyType; cidade: string | null }[]
+      | null;
+    const pr = Array.isArray(prop) ? prop[0] : prop;
+    return {
+      id: r.id as string,
+      property_id: pr?.id ?? "",
+      codigo: pr?.codigo ?? "—",
+      titulo: pr?.titulo ?? null,
+      type: (pr?.type ?? "outro") as PropertyType,
+      cidade: pr?.cidade ?? null,
+      papel: r.papel as ClientType,
+      observacao: (r.observacao as string | null) ?? null,
+    };
+  });
+  const propertyOptions = (propsData ?? []) as PropertyOption[];
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -66,6 +100,13 @@ export default async function ClienteDetailPage({ params }: { params: { id: stri
           {c.observacoes && <div className="md:col-span-2 text-muted-foreground whitespace-pre-line">{c.observacoes}</div>}
         </CardContent>
       </Card>
+
+      <ClientPropertiesPanel
+        clientId={c.id}
+        defaultPapel={c.tipo as ClientType}
+        initial={linkedProperties}
+        properties={propertyOptions}
+      />
 
       <ClientDocuments clientId={c.id} initial={(docs ?? []) as ClientDocument[]} />
     </div>

@@ -5,6 +5,7 @@ export type Sector =
   | "juridico"
   | "recepcao"
   | "financeiro"
+  | "aluguel"
   | "admin_central";
 
 export type PropertyType =
@@ -166,8 +167,54 @@ export const SECTOR_LABELS: Record<Sector, string> = {
   juridico: "Jurídico",
   recepcao: "Recepção / Leads",
   financeiro: "Financeiro",
+  aluguel: "Gestão de Aluguéis",
   admin_central: "Diretoria",
 };
+
+// =====================================================================
+// Gestão de Aluguéis (locação)
+// =====================================================================
+export type LeaseContractStatus = "ativo" | "encerrado" | "suspenso";
+export type LeasePaymentStatus = "pendente" | "pago" | "atrasado" | "cancelado";
+export type LeaseRepasseStatus = "pendente" | "repassado" | "retido";
+
+export interface LeaseContract {
+  id: string;
+  property_id: string;
+  owner_id: string | null;
+  client_id: string | null;
+  inquilino_nome: string | null;
+  inquilino_telefone: string | null;
+  valor_aluguel: number;
+  taxa_administracao: number;
+  dia_vencimento: number;
+  dias_repasse: number;
+  data_inicio: string;
+  data_fim: string | null;
+  contrato_url: string | null;
+  status: LeaseContractStatus;
+  observacoes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeasePayment {
+  id: string;
+  contract_id: string;
+  competencia: string;
+  vencimento: string;
+  valor: number;
+  status: LeasePaymentStatus;
+  pago_em: string | null;
+  repasse_vencimento: string | null;
+  valor_repasse: number | null;
+  repasse_status: LeaseRepasseStatus;
+  repasse_em: string | null;
+  conta_id: string | null;
+  observacoes: string | null;
+  created_at: string;
+}
 
 export interface SectorObservation {
   id: string;
@@ -278,6 +325,16 @@ export interface Client {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PropertyClient {
+  id: string;
+  property_id: string;
+  client_id: string;
+  papel: ClientType;
+  observacao: string | null;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface ClientDocument {

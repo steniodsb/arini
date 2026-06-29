@@ -4,7 +4,8 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrencyBRL } from "@/lib/utils";
-import { Building2, Users, Search } from "lucide-react";
+import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/types";
+import { Building2, Users, UserSquare2, Search } from "lucide-react";
 
 export default async function BuscaPage({ searchParams }: { searchParams: { q?: string } }) {
   await requireUser();
@@ -19,10 +20,13 @@ export default async function BuscaPage({ searchParams }: { searchParams: { q?: 
   }
   const supabase = createSupabaseServer();
   const like = `%${q}%`;
-  const [props, leads, owners] = await Promise.all([
+  const [props, leads, owners, clients] = await Promise.all([
     supabase.from("properties").select("id, codigo, titulo, cidade, bairro, valor, status").or(`codigo.ilike.${like},titulo.ilike.${like},bairro.ilike.${like},cidade.ilike.${like},endereco.ilike.${like}`).limit(20),
     supabase.from("leads").select("id, nome, telefone, whatsapp, email, stage").or(`nome.ilike.${like},telefone.ilike.${like},whatsapp.ilike.${like},email.ilike.${like}`).limit(20),
     supabase.from("owners").select("id, nome, cpf_cnpj, telefone, email").or(`nome.ilike.${like},cpf_cnpj.ilike.${like},telefone.ilike.${like},email.ilike.${like}`).limit(20),
+    // Clientes: a RLS já restringe o retorno aos setores autorizados
+    // (jurídico/administrativo/financeiro/recepção/diretoria).
+    supabase.from("clients").select("id, nome, tipo, cidade, telefone, whatsapp, email").or(`nome.ilike.${like},cpf_cnpj.ilike.${like},telefone.ilike.${like},whatsapp.ilike.${like},email.ilike.${like},cidade.ilike.${like}`).limit(20),
   ]);
 
   return (
@@ -30,7 +34,7 @@ export default async function BuscaPage({ searchParams }: { searchParams: { q?: 
       <div>
         <h1 className="font-display text-3xl text-arini">Resultados para &quot;{q}&quot;</h1>
         <p className="text-muted-foreground mt-1">
-          {(props.data?.length ?? 0) + (leads.data?.length ?? 0) + (owners.data?.length ?? 0)} resultados
+          {(props.data?.length ?? 0) + (leads.data?.length ?? 0) + (owners.data?.length ?? 0) + (clients.data?.length ?? 0)} resultados
         </p>
       </div>
 
@@ -55,6 +59,31 @@ export default async function BuscaPage({ searchParams }: { searchParams: { q?: 
                       <div className="text-arini font-semibold">{formatCurrencyBRL(p.valor)}</div>
                       <Badge variant="outline" className="mt-1">{p.status}</Badge>
                     </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><UserSquare2 size={18} /> Clientes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {(clients.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum cliente encontrado.</p>
+          ) : (
+            <ul className="divide-y">
+              {clients.data!.map((c) => (
+                <li key={c.id}>
+                  <Link href={`/admin/clientes/${c.id}`} className="flex items-center justify-between py-3 hover:bg-muted/50 px-2 -mx-2 rounded">
+                    <div>
+                      <div className="text-arini font-medium">{c.nome}</div>
+                      <div className="text-xs text-muted-foreground">{c.whatsapp ?? c.telefone ?? c.email ?? "—"}{c.cidade && ` · ${c.cidade}`}</div>
+                    </div>
+                    <Badge variant="outline">{CLIENT_TYPE_LABELS[c.tipo as ClientType] ?? c.tipo}</Badge>
                   </Link>
                 </li>
               ))}

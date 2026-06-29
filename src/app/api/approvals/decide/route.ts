@@ -53,8 +53,12 @@ export async function POST(req: Request) {
   // Efeitos colaterais por stage
   if (entityTable === "properties") {
     if (stage === "captacao") {
-      // aprovado → aprovado_captacao; reprovado → inativo; corrigir → rascunho (editável p/ reenvio)
-      const newStatus = status === "aprovado" ? "aprovado_captacao" : status === "reprovado" ? "inativo" : "rascunho";
+      // aprovado → aprovado_captacao. Reprovado E correção voltam para "rascunho":
+      // o imóvel retorna à captação 100% editável (mantendo o MESMO código e o
+      // vínculo do Google Drive), para corrigir o que estava errado e reenviar —
+      // sem precisar excluir e recriar. Mesmo padrão da etapa de marketing, que
+      // devolve o item ao estado de trabalho editável em vez de inativá-lo.
+      const newStatus = status === "aprovado" ? "aprovado_captacao" : "rascunho";
       await admin.from("properties").update({ status: newStatus }).eq("id", entityId);
     } else if (stage === "marketing") {
       if (status === "aprovado") {

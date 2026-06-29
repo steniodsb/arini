@@ -7,10 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
-import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Approval, type Property, type PropertyMedia, type SectorObservation } from "@/lib/types";
+import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Approval, type ClientType, type Property, type PropertyMedia, type SectorObservation } from "@/lib/types";
 import { Pencil, ExternalLink, MapPin } from "lucide-react";
 import Image from "next/image";
 import { SectorObservations } from "@/components/crm/SectorObservations";
+import { PropertyClientsPanel, type ClientOption, type LinkedClient } from "@/components/crm/PropertyClientsPanel";
+import { PropertyDocuments } from "@/app/admin/juridico/[id]/PropertyDocuments";
 import { DeletePropertyButton } from "@/components/crm/DeletePropertyButton";
 import { SendToMarketingButton } from "@/components/crm/SendToMarketingButton";
 import { ResubmitApprovalButton } from "@/components/crm/ResubmitApprovalButton";
@@ -18,6 +20,15 @@ import { ApprovalActions } from "@/app/admin/aprovacoes/ApprovalActions";
 
 // Status nos quais o imóvel ainda não foi aprovado pela diretoria/gerência.
 const PRE_APPROVAL_STATUSES = ["rascunho", "aguardando_aprovacao_captacao", "aprovado_captacao"];
+
+type PropertyDocItem = {
+  id: string;
+  tipo: string;
+  nome: string | null;
+  url: string;
+  storage_path: string | null;
+  created_at: string;
+};
 
 export default async function PropertyDetailAdminPage({ params }: { params: { id: string } }) {
   const { user, profile } = await requireUser();
@@ -39,15 +50,54 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
     isDiretoria ||
     profile?.sector === "administrativo" ||
     (profile?.sector === "captacao" && p.captador_id === user.id && PRE_APPROVAL_STATUSES.includes(p.status));
-  // Edição/observações: diretoria e administrativo sempre; captação só enquanto
-  // não aprovado e dono do imóvel. Demais setores não editam imóvel não aprovado.
+  // Edição: diretoria e administrativo sempre; captação edita o PRÓPRIO imóvel
+  // em qualquer status (decisão do cliente — ver migration 0020). Demais setores
+  // seguem a regra da RLS (marketing na fase de marketing, jurídico sempre).
   const canEdit =
     isDiretoria ||
     profile?.sector === "administrativo" ||
-    (profile?.sector === "captacao" && p.captador_id === user.id && PRE_APPROVAL_STATUSES.includes(p.status));
-  // Observações ficam liberadas após o imóvel ser aprovado (sai dos status pré-aprovação),
-  // ou sempre para diretoria/administrativo/captação-dono.
-  const canObserve = canEdit || !PRE_APPROVAL_STATUSES.includes(p.status);
+    (profile?.sector === "captacao" && p.captador_id === user.id);
+  // Observações: liberadas para qualquer setor com acesso ao imóvel, inclusive
+  // ANTES da aprovação (a RLS de sector_observations já permite o insert).
+  const canObserve = true;
+
+  // Controle interno do imóvel (origem / clientes vinculados): administrativo,
+  // jurídico e diretoria. A RLS de property_clients reforça isso no banco.
+  const canControl = isDiretoria || profile?.sector === "administrativo" || profile?.sector === "juridico";
+  let linkedClients: LinkedClient[] = [];
+  let clientOptions: ClientOption[] = [];
+  // Documentos do imóvel (matrícula, contrato de compra e venda, etc.) anexados
+  // ao longo do processo — direto na "aba Imóveis", para o controle interno.
+  let propertyDocs: PropertyDocItem[] = [];
+  if (canControl) {
+    const [{ data: links }, { data: clients }, { data: docs }] = await Promise.all([
+      supabase
+        .from("property_clients")
+        .select("id, client_id, papel, observacao, client:clients(nome, telefone)")
+        .eq("property_id", p.id)
+        .order("created_at", { ascending: true }),
+      supabase.from("clients").select("id, nome, tipo").eq("ativo", true).order("nome"),
+      supabase.from("property_documents").select("*").eq("property_id", p.id).order("created_at", { ascending: false }),
+    ]);
+    propertyDocs = (docs ?? []) as PropertyDocItem[];
+    linkedClients = (links ?? []).map((r) => {
+      const cli = r.client as { nome?: string; telefone?: string | null } | { nome?: string; telefone?: string | null }[] | null;
+      const c = Array.isArray(cli) ? cli[0] : cli;
+      return {
+        id: r.id as string,
+        client_id: r.client_id as string,
+        papel: r.papel as ClientType,
+        observacao: (r.observacao as string | null) ?? null,
+        nome: c?.nome ?? "—",
+        telefone: c?.telefone ?? null,
+      };
+    });
+    clientOptions = (clients ?? []).map((c) => ({
+      id: c.id as string,
+      nome: c.nome as string,
+      tipo: c.tipo as ClientType,
+    }));
+  }
 
   // Decisão de aprovação direto na página do imóvel (revisar + aprovar/reprovar).
   // Captação: administrativo ou diretoria. Marketing/publicação: só diretoria.
@@ -77,8 +127,8 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
           <div className="text-3xl text-gold-gradient font-semibold">{formatCurrencyBRL(p.valor)}</div>
           <div className="mt-3 flex gap-2 justify-end">
             {canEdit && (
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/admin/captacao/${p.id}/editar`}><Pencil size={14} /> Editar</Link>
+              <Button asChild variant="gold" size="sm">
+                <Link href={`/admin/captacao/${p.id}/editar`}><Pencil size={14} /> Editar imóvel</Link>
               </Button>
             )}
             {p.publicado_no_site && (
@@ -220,6 +270,16 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
           </CardContent>
         </Card>
       )}
+
+      {canControl && (
+        <PropertyClientsPanel
+          propertyId={p.id}
+          initial={linkedClients}
+          clients={clientOptions}
+        />
+      )}
+
+      {canControl && <PropertyDocuments propertyId={p.id} initial={propertyDocs} />}
 
       {profile && (
         <SectorObservations
