@@ -91,8 +91,8 @@ export function PropertyMediaManager({
         progress={progress}
       />
       <CardHeader>
-        <CardTitle>Mídias ({items.length})</CardTitle>
-        <p className="text-xs text-muted-foreground">Adicione, remova e defina a capa. Clique para abrir em alta.</p>
+        <CardTitle>Mídias brutas (captação) ({items.length})</CardTitle>
+        <p className="text-xs text-muted-foreground">Fotos/vídeos originais da captação. Adicione, remova e defina a capa. Clique para abrir em alta.</p>
       </CardHeader>
       <CardContent className="space-y-4">
         {items.length === 0 ? (

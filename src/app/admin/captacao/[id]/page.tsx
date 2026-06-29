@@ -189,44 +189,30 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
         />
       ) : (
         (mediaList.length > 0 || editedList.length > 0 || p.foto_principal_url) && (
-          <Card>
-            <CardHeader><CardTitle>Mídia ({mediaList.length + editedList.length})</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-                {p.foto_principal_url && (
+          <div className="space-y-4">
+            {/* Foto principal (capa) */}
+            {p.foto_principal_url && (
+              <Card>
+                <CardHeader><CardTitle>Foto principal (capa do site)</CardTitle></CardHeader>
+                <CardContent>
                   <a
                     href={p.foto_principal_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="relative aspect-square rounded-md overflow-hidden bg-muted block group"
+                    className="relative aspect-[4/3] w-48 rounded-md overflow-hidden bg-muted block group"
                     title="Foto principal (capa)"
                   >
-                    <Image src={p.foto_principal_url} alt="" fill className="object-cover group-hover:opacity-90" sizes="160px" />
+                    <Image src={p.foto_principal_url} alt="" fill className="object-cover group-hover:opacity-90" sizes="192px" />
                     <span className="absolute top-1 left-1 bg-gold-gradient text-arini text-[9px] font-bold px-1.5 py-0.5 rounded">CAPA</span>
                   </a>
-                )}
-                {[...editedList, ...mediaList].map((m) => (
-                  <a
-                    key={m.id}
-                    href={m.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative aspect-square rounded-md overflow-hidden bg-muted block group"
-                    title="Abrir em tamanho original"
-                  >
-                    {m.tipo === "imagem" ? (
-                      <Image src={m.url} alt="" fill className="object-cover group-hover:opacity-90" sizes="160px" />
-                    ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-xs text-muted-foreground">
-                        <ExternalLink size={16} /> {m.tipo}
-                      </div>
-                    )}
-                  </a>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">Clique em uma mídia para abrir/baixar em tamanho original.</p>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+            {/* Mídias brutas (captação) */}
+            <ReadOnlyMediaGrid title="Mídias brutas (captação)" items={mediaList} />
+            {/* Mídias editadas (vão para o site) */}
+            <ReadOnlyMediaGrid title="Mídias editadas (publicadas no site)" items={editedList} />
+          </div>
         )
       )}
 
@@ -337,5 +323,44 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// Grade só-leitura de mídias (para setores sem permissão de edição).
+function ReadOnlyMediaGrid({
+  title,
+  items,
+}: {
+  title: string;
+  items: { id: string; url: string; tipo: string }[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>{title} ({items.length})</CardTitle></CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+          {items.map((m) => (
+            <a
+              key={m.id}
+              href={m.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative aspect-square rounded-md overflow-hidden bg-muted block group"
+              title="Abrir em tamanho original"
+            >
+              {m.tipo === "imagem" ? (
+                <Image src={m.url} alt="" fill className="object-cover group-hover:opacity-90" sizes="160px" />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-xs text-muted-foreground">
+                  <ExternalLink size={16} /> {m.tipo}
+                </div>
+              )}
+            </a>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">Clique em uma mídia para abrir/baixar em tamanho original.</p>
+      </CardContent>
+    </Card>
   );
 }
