@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
-import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Approval, type ClientType, type Property, type PropertyMedia, type SectorObservation } from "@/lib/types";
+import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Approval, type ClientType, type MarketingMedia, type Property, type PropertyMedia, type SectorObservation } from "@/lib/types";
 import { Pencil, ExternalLink, MapPin } from "lucide-react";
 import Image from "next/image";
+import { PropertyMediaBlock } from "@/components/crm/PropertyMediaBlock";
 import { SectorObservations } from "@/components/crm/SectorObservations";
 import { PropertyClientsPanel, type ClientOption, type LinkedClient } from "@/components/crm/PropertyClientsPanel";
 import { PropertyDocuments } from "@/app/admin/juridico/[id]/PropertyDocuments";
@@ -37,13 +38,16 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
   if (!property) notFound();
   const p = property as Property;
 
-  const [{ data: media }, { data: capture }, { data: approvals }, { data: observations }] = await Promise.all([
+  const [{ data: media }, { data: editedMedia }, { data: campaign }, { data: capture }, { data: approvals }, { data: observations }] = await Promise.all([
     supabase.from("property_media").select("*").eq("property_id", p.id).order("ordem"),
+    supabase.from("marketing_media").select("*").eq("property_id", p.id).eq("fase", "editada").order("created_at", { ascending: false }),
+    supabase.from("marketing_campaigns").select("id").eq("property_id", p.id).maybeSingle(),
     supabase.from("property_capture_info").select("*").eq("property_id", p.id).maybeSingle(),
     supabase.from("approvals").select("*").eq("entity_table", "properties").eq("entity_id", p.id).order("created_at", { ascending: false }),
     supabase.from("sector_observations").select("*").eq("entity_table", "properties").eq("entity_id", p.id).order("created_at", { ascending: false }),
   ]);
   const mediaList = (media ?? []) as PropertyMedia[];
+  const editedList = (editedMedia ?? []) as MarketingMedia[];
 
   const isDiretoria = profile?.is_admin_central || profile?.sector === "admin_central";
   const canDelete =
@@ -174,33 +178,56 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
         </Card>
       )}
 
-      {mediaList.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Mídia ({mediaList.length})</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-              {mediaList.map((m) => (
-                <a
-                  key={m.id}
-                  href={m.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="relative aspect-square rounded-md overflow-hidden bg-muted block group"
-                  title="Abrir em tamanho original"
-                >
-                  {m.tipo === "imagem" ? (
-                    <Image src={m.url} alt="" fill className="object-cover group-hover:opacity-90" sizes="160px" />
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-xs text-muted-foreground">
-                      <ExternalLink size={16} /> {m.tipo}
-                    </div>
-                  )}
-                </a>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">Clique em uma mídia para abrir/baixar em tamanho original.</p>
-          </CardContent>
-        </Card>
+      {canEdit ? (
+        <PropertyMediaBlock
+          propertyId={p.id}
+          coverUrl={p.foto_principal_url}
+          coverPath={p.foto_principal_path}
+          campaignId={(campaign?.id as string | undefined) ?? null}
+          rawMedia={mediaList}
+          editedMedia={editedList}
+        />
+      ) : (
+        (mediaList.length > 0 || editedList.length > 0 || p.foto_principal_url) && (
+          <Card>
+            <CardHeader><CardTitle>Mídia ({mediaList.length + editedList.length})</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                {p.foto_principal_url && (
+                  <a
+                    href={p.foto_principal_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative aspect-square rounded-md overflow-hidden bg-muted block group"
+                    title="Foto principal (capa)"
+                  >
+                    <Image src={p.foto_principal_url} alt="" fill className="object-cover group-hover:opacity-90" sizes="160px" />
+                    <span className="absolute top-1 left-1 bg-gold-gradient text-arini text-[9px] font-bold px-1.5 py-0.5 rounded">CAPA</span>
+                  </a>
+                )}
+                {[...editedList, ...mediaList].map((m) => (
+                  <a
+                    key={m.id}
+                    href={m.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative aspect-square rounded-md overflow-hidden bg-muted block group"
+                    title="Abrir em tamanho original"
+                  >
+                    {m.tipo === "imagem" ? (
+                      <Image src={m.url} alt="" fill className="object-cover group-hover:opacity-90" sizes="160px" />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-xs text-muted-foreground">
+                        <ExternalLink size={16} /> {m.tipo}
+                      </div>
+                    )}
+                  </a>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Clique em uma mídia para abrir/baixar em tamanho original.</p>
+            </CardContent>
+          </Card>
+        )
       )}
 
       <div className="grid md:grid-cols-2 gap-4">

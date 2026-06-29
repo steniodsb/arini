@@ -88,7 +88,7 @@ export default async function HomePage() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {properties.map((p) => (
-              <PropertyCard key={p.id} property={p} images={galleriesByProp[p.id]} />
+              <PropertyCard key={p.id} property={p} coverUrl={p.foto_principal_url} images={galleriesByProp[p.id]} />
             ))}
           </div>
         )}

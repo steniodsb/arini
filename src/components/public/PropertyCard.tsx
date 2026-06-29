@@ -15,13 +15,14 @@ interface Props {
 
 export function PropertyCard({ property, coverUrl, images }: Props) {
   const alt = property.titulo || property.codigo;
-  // Fonte das imagens: lista da galeria, se houver; senão a capa única.
-  const gallery: GalleryImage[] =
-    images && images.length > 0
+  // Capa: se houver foto principal (coverUrl), ela é a capa fixa do card e tem
+  // prioridade sobre o carrossel. Sem foto principal, usa a galeria (editadas/
+  // cruas) como mini-carrossel.
+  const gallery: GalleryImage[] = coverUrl
+    ? [{ id: property.id, url: coverUrl }]
+    : images && images.length > 0
       ? images
-      : coverUrl
-        ? [{ id: property.id, url: coverUrl }]
-        : [];
+      : [];
 
   return (
     <Link

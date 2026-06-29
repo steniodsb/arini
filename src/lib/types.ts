@@ -106,6 +106,8 @@ export interface Property {
   slug_publico: string | null;
   publicado_no_site: boolean;
   destaque: boolean;
+  foto_principal_url: string | null;
+  foto_principal_path: string | null;
   enviado_para_marketing: boolean;
   enviado_marketing_em: string | null;
   enviado_marketing_por: string | null;

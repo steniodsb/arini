@@ -184,6 +184,83 @@ export async function uploadPropertyMedia(
 }
 
 /**
+ * Sobe (ou troca) a FOTO PRINCIPAL do imóvel — a capa fixa do site.
+ * Guarda 1 imagem no bucket property-media (pasta `${propertyId}/cover`) e
+ * grava url/path em properties.foto_principal_url/_path. Antes de subir a
+ * nova, remove o arquivo anterior do storage para não acumular lixo.
+ * Retorna a nova URL pública.
+ */
+export async function uploadPropertyCover(
+  supabase: SupabaseClient,
+  propertyId: string,
+  file: File,
+  opts: {
+    previousPath?: string | null;
+    onByteProgress?: (loaded: number, total: number) => void;
+  } = {},
+): Promise<{ url: string; path: string }> {
+  const { previousPath = null, onByteProgress } = opts;
+  let f = file;
+  if (f.type.startsWith("image/")) f = await compressImageFile(f);
+
+  const { url, key } = await storeMedia(
+    supabase,
+    "property-media",
+    `${propertyId}/cover`,
+    f,
+    0,
+    (loaded, total) => onByteProgress?.(loaded, total),
+  );
+
+  const { error } = await supabase
+    .from("properties")
+    .update({ foto_principal_url: url, foto_principal_path: key })
+    .eq("id", propertyId);
+  if (error) throw new Error(error.message);
+
+  // Remove o arquivo antigo só depois de gravar o novo com sucesso.
+  if (previousPath && previousPath !== key) {
+    await removeStoredFile(supabase, "property-media", previousPath).catch(() => {});
+  }
+  return { url, path: key };
+}
+
+/**
+ * Remove a foto principal: apaga o arquivo do storage e zera as colunas.
+ */
+export async function removePropertyCover(
+  supabase: SupabaseClient,
+  propertyId: string,
+  path: string | null,
+): Promise<void> {
+  if (path) await removeStoredFile(supabase, "property-media", path).catch(() => {});
+  const { error } = await supabase
+    .from("properties")
+    .update({ foto_principal_url: null, foto_principal_path: null })
+    .eq("id", propertyId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Apaga um arquivo do driver ativo (R2 via rota; Supabase Storage direto).
+ */
+async function removeStoredFile(
+  supabase: SupabaseClient,
+  bucket: string,
+  path: string,
+): Promise<void> {
+  if (isR2Active()) {
+    await fetch("/api/storage/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: path }),
+    });
+    return;
+  }
+  await supabase.storage.from(bucket).remove([path]);
+}
+
+/**
  * Upload de mídias de marketing (brutas ou editadas) para o bucket
  * marketing-media, registrando em marketing_media.
  */
