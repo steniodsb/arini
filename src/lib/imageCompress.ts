@@ -1,9 +1,11 @@
 /**
  * Compressão LEVE de imagens no navegador, antes do upload.
  *
- * Objetivo: reduzir o peso dos arquivos (hoje fotos de 8 MB deixam o site
- * lento) SEM perda visível de qualidade. Por isso:
- *   - mantém a RESOLUÇÃO original por padrão (não redimensiona — só reencoda);
+ * Objetivo: reduzir o peso dos arquivos (fotos de 8 MB deixam o site lento)
+ * SEM perda visível de qualidade. Por isso:
+ *   - limita a no máximo 2560px no maior lado (mais que suficiente para
+ *     qualquer tela; é o mesmo teto usado no reprocessamento das fotos antigas).
+ *     Fotos menores que isso não são ampliadas;
  *   - usa qualidade ALTA (0.9);
  *   - reencoda para WebP (preserva nitidez e transparência, com ótimo tamanho);
  *   - só aproveita o resultado se ele for realmente menor (senão mantém o
@@ -29,8 +31,9 @@ const MIN_BYTES = 400 * 1024; // 400 KB
 /** Só usa o resultado se economizar pelo menos isto (10%). */
 const MIN_SAVINGS = 0.1;
 
-/** Teto de segurança de resolução — fotos normais ficam bem abaixo disso. */
-const MAX_DIMENSION = 6000;
+/** Teto de resolução (maior lado). 2560px cobre qualquer tela; deixa a foto
+ *  leve e o otimizador rápido. Mesmo valor do reprocessamento das antigas. */
+const MAX_DIMENSION = 2560;
 
 /**
  * Reencoda UMA imagem de forma leve. Retorna um novo File (.webp) menor, ou o
