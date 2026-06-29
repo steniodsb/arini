@@ -3,10 +3,11 @@ import { requireSector } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { EditPropertyForm } from "./EditPropertyForm";
 import { PropertyMediaBlock } from "@/components/crm/PropertyMediaBlock";
-import type { MarketingMedia, Property, PropertyMedia } from "@/lib/types";
+import { PropertyClientsPanel, type ClientOption, type LinkedClient } from "@/components/crm/PropertyClientsPanel";
+import type { ClientType, MarketingMedia, Property, PropertyMedia } from "@/lib/types";
 
 export default async function EditPropertyPage({ params }: { params: { id: string } }) {
-  await requireSector(["captacao", "administrativo", "admin_central"]);
+  const { profile } = await requireSector(["captacao", "administrativo", "admin_central"]);
   const supabase = createSupabaseServer();
   const { data } = await supabase.from("properties").select("*").eq("id", params.id).single();
   if (!data) notFound();
@@ -17,6 +18,40 @@ export default async function EditPropertyPage({ params }: { params: { id: strin
     supabase.from("marketing_campaigns").select("id").eq("property_id", params.id).maybeSingle(),
   ]);
   const p = data as Property;
+
+  // Controle interno (origem / clientes vinculados): administrativo, jurídico e
+  // diretoria — mesma regra do detalhe e da RLS de property_clients.
+  const canControl =
+    profile?.is_admin_central || profile?.sector === "administrativo" || profile?.sector === "juridico";
+  let linkedClients: LinkedClient[] = [];
+  let clientOptions: ClientOption[] = [];
+  if (canControl) {
+    const [{ data: links }, { data: clients }] = await Promise.all([
+      supabase
+        .from("property_clients")
+        .select("id, client_id, papel, observacao, client:clients(nome, telefone)")
+        .eq("property_id", params.id)
+        .order("created_at", { ascending: true }),
+      supabase.from("clients").select("id, nome, tipo").eq("ativo", true).order("nome"),
+    ]);
+    linkedClients = (links ?? []).map((r) => {
+      const cli = r.client as { nome?: string; telefone?: string | null } | { nome?: string; telefone?: string | null }[] | null;
+      const c = Array.isArray(cli) ? cli[0] : cli;
+      return {
+        id: r.id as string,
+        client_id: r.client_id as string,
+        papel: r.papel as ClientType,
+        observacao: (r.observacao as string | null) ?? null,
+        nome: c?.nome ?? "—",
+        telefone: c?.telefone ?? null,
+      };
+    });
+    clientOptions = (clients ?? []).map((c) => ({
+      id: c.id as string,
+      nome: c.nome as string,
+      tipo: c.tipo as ClientType,
+    }));
+  }
 
   return (
     <div className="max-w-4xl">
@@ -32,6 +67,9 @@ export default async function EditPropertyPage({ params }: { params: { id: strin
           rawMedia={(media ?? []) as PropertyMedia[]}
           editedMedia={(edited ?? []) as MarketingMedia[]}
         />
+        {canControl && (
+          <PropertyClientsPanel propertyId={params.id} initial={linkedClients} clients={clientOptions} />
+        )}
       </div>
     </div>
   );

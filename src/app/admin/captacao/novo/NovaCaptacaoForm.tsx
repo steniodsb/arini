@@ -9,15 +9,21 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Image from "next/image";
+import { ImageUp, X } from "lucide-react";
 import { MediaUploader } from "@/components/crm/MediaUploader";
 import { UploadProgress, type UploadState } from "@/components/crm/UploadProgress";
 import { SavingModal, type SaveStep } from "@/components/crm/SavingModal";
-import { uploadPropertyMedia } from "@/lib/upload";
+import { uploadPropertyMedia, uploadPropertyCover, uploadMarketingMedia } from "@/lib/upload";
 import { errMessage } from "@/lib/utils";
+import type { ClientOption } from "@/components/crm/PropertyClientsPanel";
 import {
   CATEGORY_LABELS,
+  CLIENT_TYPES,
+  CLIENT_TYPE_LABELS,
   PROPERTY_TYPE_LABELS,
   SECTOR_LABELS,
+  type ClientType,
   type PropertyCategory,
   type PropertyType,
   type Sector,
@@ -98,11 +104,23 @@ function caracConfig(t: PropertyType): CaracConfig {
   }
 }
 
-export function NovaCaptacaoForm() {
+export function NovaCaptacaoForm({
+  canControl = false,
+  clients = [],
+}: {
+  canControl?: boolean;
+  clients?: ClientOption[];
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [editedFiles, setEditedFiles] = useState<File[]>([]);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [clientId, setClientId] = useState<string>("");
+  const [clientPapel, setClientPapel] = useState<ClientType>("parceiro");
+  const [clientObs, setClientObs] = useState<string>("");
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [progress, setProgress] = useState<UploadState | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
@@ -140,6 +158,19 @@ export function NovaCaptacaoForm() {
     })();
     return () => { active = false; };
   }, [selType, selCategory]);
+
+  function pickCover(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setError("A foto principal deve ser uma imagem."); return; }
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  }
+
+  function onSelectClient(id: string) {
+    setClientId(id);
+    const found = clients.find((c) => c.id === id);
+    if (found) setClientPapel(found.tipo);
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -261,6 +292,40 @@ export function NovaCaptacaoForm() {
               .join(", ")}. Abra a edição do imóvel para reenviá-los.`,
           );
         }
+      }
+
+      // Foto principal (capa fixa do site), se enviada.
+      if (coverFile) {
+        try {
+          await uploadPropertyCover(supabase, property.id, coverFile);
+        } catch (err) {
+          console.warn("Falha ao enviar foto principal:", err);
+        }
+      }
+
+      // Mídias editadas (marketing), se enviadas já no cadastro.
+      if (editedFiles.length > 0) {
+        const r = await uploadMarketingMedia(supabase, property.id, editedFiles, { fase: "editada" });
+        if (r.failed.length) {
+          uploadFailures += r.failed.length;
+          setError(
+            `Imóvel criado, mas ${r.failed.length} mídia(s) editada(s) falharam: ${r.failed
+              .map((f) => f.name)
+              .join(", ")}. Reenvie pela edição do imóvel.`,
+          );
+        }
+      }
+
+      // Vínculo de cliente (controle interno — só administrativo/jurídico/diretoria).
+      if (canControl && clientId) {
+        const { error: pcErr } = await supabase.from("property_clients").insert({
+          property_id: property.id,
+          client_id: clientId,
+          papel: clientPapel,
+          observacao: clientObs || null,
+          created_by: userId,
+        });
+        if (pcErr) console.warn("Falha ao vincular cliente:", pcErr.message);
       }
 
       // Cria approval (não-fatal: a inbox de aprovações também é dirigida pelo
@@ -387,7 +452,41 @@ export function NovaCaptacaoForm() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Mídia (fotos, vídeos e mídia bruta)</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Foto principal (capa do site)</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Imagem que fica como capa do imóvel no site, mesmo que existam fotos editadas. Opcional.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {coverPreview ? (
+            <div className="flex items-start gap-4">
+              <div className="relative aspect-[4/3] w-48 rounded-md overflow-hidden bg-muted border shrink-0">
+                <Image src={coverPreview} alt="Foto principal" fill className="object-cover" sizes="192px" unoptimized />
+                <span className="absolute top-1 left-1 bg-gold-gradient text-arini text-[9px] font-bold px-1.5 py-0.5 rounded">CAPA</span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => { setCoverFile(null); setCoverPreview(null); }}
+              >
+                <X size={14} /> Remover
+              </Button>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center cursor-pointer border-muted-foreground/25 hover:border-arini/50 transition-colors">
+              <ImageUp className="text-arini" size={28} />
+              <span className="text-sm font-medium text-arini">Enviar foto principal</span>
+              <span className="text-xs text-muted-foreground">Uma imagem que ficará como capa no site.</span>
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => pickCover(e.target.files?.[0])} />
+            </label>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Mídia bruta (fotos, vídeos e arquivos da captação)</CardTitle></CardHeader>
         <CardContent>
           <MediaUploader onChange={setFiles} />
           {progress && <div className="mt-3"><UploadProgress state={progress} /></div>}
@@ -403,6 +502,18 @@ export function NovaCaptacaoForm() {
               Use quando as mídias estiverem numa pasta externa. Você pode subir arquivos acima e/ou informar o link.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Mídia editada (vai para o site)</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Fotos/vídeos já editados. No site, as editadas substituem as brutas. Opcional — o marketing também pode subir depois.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <MediaUploader onChange={setEditedFiles} label="Arraste as mídias editadas ou clique para selecionar" />
         </CardContent>
       </Card>
 
@@ -466,6 +577,41 @@ export function NovaCaptacaoForm() {
           </div>
         </CardContent>
       </Card>
+
+      {canControl && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Cliente / origem do imóvel (opcional)</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              De quem veio o imóvel (vendedor, proprietário, parceiro que trouxe…). Controle interno — visível só para
+              administrativo, jurídico e diretoria. Mais vínculos podem ser adicionados depois na edição.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid md:grid-cols-[1fr_180px] gap-2">
+              <Select value={clientId} onChange={(e) => onSelectClient(e.target.value)}>
+                <option value="">— Selecione um cliente —</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome} ({CLIENT_TYPE_LABELS[c.tipo]})</option>
+                ))}
+              </Select>
+              <Select value={clientPapel} onChange={(e) => setClientPapel(e.target.value as ClientType)}>
+                {CLIENT_TYPES.map((t) => <option key={t} value={t}>{CLIENT_TYPE_LABELS[t]}</option>)}
+              </Select>
+            </div>
+            <Input
+              placeholder="Observação (ex.: trouxe as áreas A, B e C)"
+              value={clientObs}
+              onChange={(e) => setClientObs(e.target.value)}
+            />
+            {clients.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Nenhum cliente cadastrado ainda. Cadastre em “Clientes” ou vincule depois pela edição do imóvel.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {error && <div className="text-sm text-red-600 p-3 rounded-md bg-red-50 border border-red-200">{error}</div>}
 
