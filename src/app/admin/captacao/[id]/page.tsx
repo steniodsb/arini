@@ -18,6 +18,9 @@ import { DeletePropertyButton } from "@/components/crm/DeletePropertyButton";
 import { SendToMarketingButton } from "@/components/crm/SendToMarketingButton";
 import { ResubmitApprovalButton } from "@/components/crm/ResubmitApprovalButton";
 import { ApprovalActions } from "@/app/admin/aprovacoes/ApprovalActions";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { HistoryTimeline } from "@/components/crm/HistoryTimeline";
+import { buildPropertyHistory } from "@/lib/history";
 
 // Status nos quais o imóvel ainda não foi aprovado pela diretoria/gerência.
 const PRE_APPROVAL_STATUSES = ["rascunho", "aguardando_aprovacao_captacao", "aprovado_captacao"];
@@ -114,6 +117,8 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
     (stageAprovacao === "marketing" && isDiretoria);
   const pendingApproval = ((approvals ?? []) as Approval[]).find((a) => a.status === "pendente") ?? null;
 
+  const history = await buildPropertyHistory(supabase, p.id, p);
+
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="flex items-start justify-between">
@@ -156,6 +161,14 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
           )}
         </div>
       </div>
+
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Visão geral</TabsTrigger>
+          <TabsTrigger value="history">Histórico</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
 
       {podeAprovar && stageAprovacao && (
         <Card className="border-gold/40 bg-gold/5">
@@ -322,6 +335,12 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="history">
+          <HistoryTimeline events={history} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

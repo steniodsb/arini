@@ -35,7 +35,9 @@ export default async function UsuariosPage() {
             <tbody>
               {list.map((u) => (
                 <tr key={u.id} className="border-t">
-                  <td className="py-2">{u.nome}</td>
+                  <td className="py-2">
+                    <a href={`/admin/usuarios/${u.id}`} className="text-arini hover:text-gold-dark font-medium">{u.nome}</a>
+                  </td>
                   <td>{u.email}</td>
                   <td>
                     {u.is_admin_central ? <Badge variant="gold">Admin Central</Badge> : <Badge variant="outline">{SECTOR_LABELS[u.sector]}</Badge>}

@@ -7,6 +7,9 @@ import { CLIENT_TYPE_LABELS, CLIENT_TYPES, type Client, type ClientDocument, typ
 import { ClientDocuments } from "./ClientDocuments";
 import { TransactionActions } from "@/components/crm/TransactionActions";
 import { ClientPropertiesPanel, type LinkedProperty, type PropertyOption } from "@/components/crm/ClientPropertiesPanel";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { HistoryTimeline } from "@/components/crm/HistoryTimeline";
+import { buildClientHistory } from "@/lib/history";
 
 const CLIENT_TYPE_OPTS = CLIENT_TYPES.map((t) => ({ value: t, label: CLIENT_TYPE_LABELS[t] }));
 
@@ -57,6 +60,8 @@ export default async function ClienteDetailPage({ params }: { params: { id: stri
   });
   const propertyOptions = (propsData ?? []) as PropertyOption[];
 
+  const history = await buildClientHistory(supabase, c.id, c);
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-start justify-between">
@@ -89,26 +94,39 @@ export default async function ClienteDetailPage({ params }: { params: { id: stri
         )}
       </div>
 
-      <Card>
-        <CardHeader><CardTitle>Dados</CardTitle></CardHeader>
-        <CardContent className="grid md:grid-cols-2 gap-2 text-sm">
-          <div>CPF/CNPJ: {c.cpf_cnpj ?? "—"}</div>
-          <div>Telefone: {c.telefone ?? "—"}</div>
-          <div>WhatsApp: {c.whatsapp ?? "—"}</div>
-          <div>E-mail: {c.email ?? "—"}</div>
-          <div className="md:col-span-2">Endereço: {[c.endereco, c.cidade, c.uf].filter(Boolean).join(", ") || "—"}</div>
-          {c.observacoes && <div className="md:col-span-2 text-muted-foreground whitespace-pre-line">{c.observacoes}</div>}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Visão geral</TabsTrigger>
+          <TabsTrigger value="history">Histórico</TabsTrigger>
+        </TabsList>
 
-      <ClientPropertiesPanel
-        clientId={c.id}
-        defaultPapel={c.tipo as ClientType}
-        initial={linkedProperties}
-        properties={propertyOptions}
-      />
+        <TabsContent value="overview" className="space-y-6">
+          <Card>
+            <CardHeader><CardTitle>Dados</CardTitle></CardHeader>
+            <CardContent className="grid md:grid-cols-2 gap-2 text-sm">
+              <div>CPF/CNPJ: {c.cpf_cnpj ?? "—"}</div>
+              <div>Telefone: {c.telefone ?? "—"}</div>
+              <div>WhatsApp: {c.whatsapp ?? "—"}</div>
+              <div>E-mail: {c.email ?? "—"}</div>
+              <div className="md:col-span-2">Endereço: {[c.endereco, c.cidade, c.uf].filter(Boolean).join(", ") || "—"}</div>
+              {c.observacoes && <div className="md:col-span-2 text-muted-foreground whitespace-pre-line">{c.observacoes}</div>}
+            </CardContent>
+          </Card>
 
-      <ClientDocuments clientId={c.id} initial={(docs ?? []) as ClientDocument[]} />
+          <ClientPropertiesPanel
+            clientId={c.id}
+            defaultPapel={c.tipo as ClientType}
+            initial={linkedProperties}
+            properties={propertyOptions}
+          />
+
+          <ClientDocuments clientId={c.id} initial={(docs ?? []) as ClientDocument[]} />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <HistoryTimeline events={history} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
