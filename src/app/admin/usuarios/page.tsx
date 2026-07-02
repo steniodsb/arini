@@ -2,8 +2,11 @@ import { requireSector } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { SECTOR_LABELS, type Profile } from "@/lib/types";
 import { formatDateBR } from "@/lib/utils";
+import { Pencil } from "lucide-react";
+import Link from "next/link";
 import { NovoUsuarioForm } from "./NovoUsuarioForm";
 import { UsuarioActions } from "./UsuarioActions";
 
@@ -44,7 +47,14 @@ export default async function UsuariosPage() {
                   </td>
                   <td><Badge variant={u.ativo ? "success" : "muted"}>{u.ativo ? "Ativo" : "Inativo"}</Badge></td>
                   <td>{formatDateBR(u.created_at)}</td>
-                  <td><UsuarioActions user={u} currentUserId={user.id} /></td>
+                  <td>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/admin/usuarios/${u.id}`}><Pencil size={14} /> Abrir</Link>
+                      </Button>
+                      <UsuarioActions user={u} currentUserId={user.id} />
+                    </div>
+                  </td>
                 </tr>
               ))}
               {list.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">Nenhum usuário cadastrado.</td></tr>}

@@ -3,7 +3,7 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { Search, Pencil } from "lucide-react";
 import Link from "next/link";
 import { CLIENT_TYPE_LABELS, type Client, type ClientType } from "@/lib/types";
 import { NewClientDialog } from "./NewClientDialog";
@@ -85,7 +85,7 @@ export default async function ClientesPage({
         <CardContent>
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase text-muted-foreground">
-              <tr><th className="py-2">Nome</th><th>Tipo</th><th>Telefone</th><th>E-mail</th><th>Cidade</th></tr>
+              <tr><th className="py-2">Nome</th><th>Tipo</th><th>Telefone</th><th>E-mail</th><th>Cidade</th><th className="text-right">Ações</th></tr>
             </thead>
             <tbody>
               {list.map((c) => (
@@ -97,9 +97,14 @@ export default async function ClientesPage({
                   <td>{c.telefone ?? c.whatsapp ?? "—"}</td>
                   <td>{c.email ?? "—"}</td>
                   <td>{c.cidade ?? "—"}</td>
+                  <td className="py-2 text-right">
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/admin/clientes/${c.id}`}><Pencil size={14} /> Abrir</Link>
+                    </Button>
+                  </td>
                 </tr>
               ))}
-              {list.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">{q ? "Nenhum cliente encontrado para essa busca." : "Nenhum cliente cadastrado."}</td></tr>}
+              {list.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">{q ? "Nenhum cliente encontrado para essa busca." : "Nenhum cliente cadastrado."}</td></tr>}
             </tbody>
           </table>
         </CardContent>

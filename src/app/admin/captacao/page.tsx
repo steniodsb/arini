@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/crm/StatusBadge";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
 import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, STATUS_LABELS, type Property } from "@/lib/types";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Pencil } from "lucide-react";
 
 interface SP {
   status?: string;
@@ -115,7 +115,9 @@ export default async function CaptacaoListPage({ searchParams }: { searchParams:
                 <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
                 <td className="px-4 py-3">{formatDateBR(p.data_entrada)}</td>
                 <td className="px-4 py-3 text-right">
-                  <Link href={`/admin/captacao/${p.id}`} className="text-arini hover:text-gold-dark text-xs font-semibold">Abrir →</Link>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/admin/captacao/${p.id}`}><Pencil size={14} /> Abrir</Link>
+                  </Button>
                 </td>
               </tr>
             ))}
