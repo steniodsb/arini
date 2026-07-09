@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pencil, Trash2, Save, X } from "lucide-react";
+import { Pencil, Trash2, Save, X, ExternalLink } from "lucide-react";
 
 interface Owner {
   id: string;
@@ -96,7 +97,11 @@ export function OwnersTable({ owners, counts }: { owners: Owner[]; counts: Recor
             </tr>
           ) : (
             <tr key={o.id} className="border-t hover:bg-muted/30">
-              <td className="py-3 font-medium text-arini">{o.nome}</td>
+              <td className="py-3 font-medium">
+                <Link href={`/admin/proprietarios/${o.id}`} className="text-arini hover:text-gold-dark">
+                  {o.nome}
+                </Link>
+              </td>
               <td>{o.cpf_cnpj ?? "—"}</td>
               <td className="text-muted-foreground">{o.telefone ?? o.email ?? "—"}</td>
               <td>
@@ -104,7 +109,13 @@ export function OwnersTable({ owners, counts }: { owners: Owner[]; counts: Recor
                   {counts[o.id] ?? 0}
                 </span>
               </td>
-              <td className="text-right">
+              <td className="text-right whitespace-nowrap">
+                <Link
+                  href={`/admin/proprietarios/${o.id}`}
+                  className="inline-flex items-center gap-1 text-arini hover:text-gold-dark p-1.5 text-xs font-medium"
+                >
+                  <ExternalLink size={14} /> Abrir
+                </Link>
                 <button onClick={() => setEditingId(o.id)} className="text-arini hover:text-gold-dark p-1.5"><Pencil size={14} /></button>
                 <button onClick={() => remove(o.id, o.nome)} className="text-red-600 hover:text-red-800 p-1.5"><Trash2 size={14} /></button>
               </td>
