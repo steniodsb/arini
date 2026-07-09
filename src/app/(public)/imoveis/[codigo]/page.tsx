@@ -100,9 +100,12 @@ export default async function PropertyDetailPage({
           <ArrowLeft size={16} /> Voltar para imóveis
         </Link>
 
-        <div className="grid lg:grid-cols-[1fr_380px] gap-8">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_380px] gap-8">
           {/* COLUNA PRINCIPAL */}
-          <div className="space-y-8">
+          {/* min-w-0: sem isto, o track 1fr do grid cresce para caber a fita
+              de miniaturas (largura mínima = soma das thumbs) e estica a página
+              inteira em vez de deixar o overflow-x-auto rolar. */}
+          <div className="space-y-8 min-w-0">
             {/* Galeria */}
             <PropertyGallery images={images} title={p.titulo ?? p.codigo} />
 

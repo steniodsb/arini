@@ -57,7 +57,7 @@ export function PropertyGallery({ images, title }: Props) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0">
       {/* Imagem principal — altura travada; a foto NUNCA dimensiona a página */}
       <div className="relative h-[260px] sm:h-[400px] lg:h-[480px] rounded-xl overflow-hidden bg-muted">
         <Image
@@ -113,10 +113,10 @@ export function PropertyGallery({ images, title }: Props) {
           As setas revelam as escondidas conforme rola. A fita tem largura
           fixa (overflow-x), então NÃO cresce com o número de fotos. */}
       {images.length > 1 && (
-        <div className="relative">
+        <div className="relative min-w-0 max-w-full">
           <div
             ref={stripRef}
-            className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth pb-1"
+            className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth pb-1 min-w-0 max-w-full"
           >
             {images.map((img, idx) => (
               <button
