@@ -41,15 +41,41 @@ export function PropertyCardCarousel({
     setActive(idx);
   }
 
+  // Vizinhas para pré-carregar — deixa o "passar foto" instantâneo no card.
+  const neighborIdx =
+    images.length > 1
+      ? Array.from(
+          new Set([
+            (active + 1) % images.length,
+            (active - 1 + images.length) % images.length,
+          ]),
+        )
+      : [];
+
   return (
     <>
       <Image
         src={images[active].url}
         alt={alt}
         fill
+        quality={70}
         className="object-cover transition-transform duration-300 group-hover:scale-105"
         sizes="(max-width: 768px) 100vw, 33vw"
       />
+
+      {/* Pré-carga invisível das fotos vizinhas do card. */}
+      {neighborIdx.map((i) => (
+        <Image
+          key={`preload-${images[i].id}`}
+          src={images[i].url}
+          alt=""
+          fill
+          aria-hidden
+          quality={70}
+          className="object-cover opacity-0 pointer-events-none"
+          sizes="(max-width: 768px) 100vw, 33vw"
+        />
+      ))}
 
       {images.length > 1 && (
         <>
