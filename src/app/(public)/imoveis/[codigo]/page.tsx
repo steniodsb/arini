@@ -106,10 +106,7 @@ export default async function PropertyDetailPage({
               de miniaturas (largura mínima = soma das thumbs) e estica a página
               inteira em vez de deixar o overflow-x-auto rolar. */}
           <div className="space-y-8 min-w-0">
-            {/* Galeria */}
-            <PropertyGallery images={images} title={p.titulo ?? p.codigo} />
-
-            {/* Header info */}
+            {/* Header info — acima do carrossel */}
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <Badge className={`${status.className} border-0 rounded-full px-3 py-1 font-semibold tracking-wide uppercase text-xs`}>
@@ -140,6 +137,9 @@ export default async function PropertyDetailPage({
                 </span>
               </div>
             </div>
+
+            {/* Galeria */}
+            <PropertyGallery images={images} title={p.titulo ?? p.codigo} />
 
             {/* Diferenciais */}
             {diferenciais.length > 0 && (
