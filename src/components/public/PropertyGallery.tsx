@@ -109,14 +109,25 @@ export function PropertyGallery({ images, title }: Props) {
         )}
       </div>
 
-      {/* Strip de thumbnails — carrossel: mostra algumas, oculta o resto.
-          As setas revelam as escondidas conforme rola. A fita tem largura
-          fixa (overflow-x), então NÃO cresce com o número de fotos. */}
+      {/* Strip de thumbnails — mostra POUCAS (cabe ~5); as demais ficam ocultas
+          e aparecem ao navegar pelas setas (ou rolando, no touch). A fita é
+          compacta e centralizada — nunca ocupa a largura toda nem estica a
+          página. max-w-[432px] = 5 miniaturas de 80px + 4 espaços de 8px. */}
       {images.length > 1 && (
-        <div className="relative min-w-0 max-w-full">
+        <div className="flex items-center justify-center gap-2">
+          {images.length > 5 && (
+            <button
+              type="button"
+              onClick={() => scrollStrip(-1)}
+              aria-label="Miniaturas anteriores"
+              className="shrink-0 w-8 h-8 rounded-full bg-white border shadow-sm text-arini hover:bg-muted flex items-center justify-center transition-colors"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
           <div
             ref={stripRef}
-            className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth pb-1 min-w-0 max-w-full"
+            className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth pb-1 min-w-0 max-w-[432px]"
           >
             {images.map((img, idx) => (
               <button
@@ -124,35 +135,23 @@ export function PropertyGallery({ images, title }: Props) {
                 key={img.id}
                 data-thumb={idx}
                 onClick={() => setActive(idx)}
-                className={`relative aspect-square w-20 sm:w-24 shrink-0 rounded-md overflow-hidden border-2 transition-all ${
+                className={`relative aspect-square w-20 shrink-0 rounded-md overflow-hidden border-2 transition-all ${
                   idx === active ? "border-gold" : "border-transparent opacity-70 hover:opacity-100"
                 }`}
               >
-                <Image src={img.url} alt="" fill className="object-cover" sizes="96px" quality={45} />
+                <Image src={img.url} alt="" fill className="object-cover" sizes="80px" quality={45} />
               </button>
             ))}
           </div>
-
-          {/* Setas do carrossel de miniaturas (só quando há muitas fotos) */}
           {images.length > 5 && (
-            <>
-              <button
-                type="button"
-                onClick={() => scrollStrip(-1)}
-                aria-label="Miniaturas anteriores"
-                className="absolute left-0 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-arini flex items-center justify-center shadow-md transition-all"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => scrollStrip(1)}
-                aria-label="Próximas miniaturas"
-                className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-arini flex items-center justify-center shadow-md transition-all"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => scrollStrip(1)}
+              aria-label="Próximas miniaturas"
+              className="shrink-0 w-8 h-8 rounded-full bg-white border shadow-sm text-arini hover:bg-muted flex items-center justify-center transition-colors"
+            >
+              <ChevronRight size={16} />
+            </button>
           )}
         </div>
       )}
