@@ -10,7 +10,7 @@ export type Sector =
 
 export type PropertyType =
   | "casa" | "apartamento" | "lote" | "terreno" | "loteamento" | "fazenda"
-  | "sitio" | "chacara" | "comercial" | "galpao" | "rural" | "outros";
+  | "sitio" | "chacara" | "rancho" | "comercial" | "galpao" | "rural" | "outros";
 
 export type PropertyCategory = "venda" | "locacao" | "venda_locacao" | "rural" | "arrendamento";
 
@@ -235,7 +235,8 @@ export interface SectorObservation {
 export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
   casa: "Casa", apartamento: "Apartamento", lote: "Lote", terreno: "Terreno",
   loteamento: "Loteamento",
-  fazenda: "Fazenda", sitio: "Sítio", chacara: "Chácara", comercial: "Comercial",
+  fazenda: "Fazenda", sitio: "Sítio", chacara: "Chácara", rancho: "Rancho",
+  comercial: "Comercial",
   galpao: "Galpão", rural: "Rural", outros: "Outros",
 };
 
@@ -252,6 +253,7 @@ export const TYPE_NAV_GROUPS: { label: string; types: PropertyType[] }[] = [
   { label: "Casas",       types: ["casa"] },
   { label: "Apartamentos", types: ["apartamento"] },
   { label: "Rurais",      types: ["fazenda", "sitio", "chacara", "rural"] },
+  { label: "Ranchos",     types: ["rancho"] },
   { label: "Terrenos",    types: ["terreno", "lote"] },
   { label: "Loteamentos", types: ["loteamento"] },
   { label: "Comerciais",  types: ["comercial", "galpao"] },

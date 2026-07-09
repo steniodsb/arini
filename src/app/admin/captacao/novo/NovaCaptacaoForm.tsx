@@ -60,6 +60,7 @@ function categoriasFor(t: PropertyType): PropertyCategory[] {
     case "fazenda":
     case "sitio":
     case "chacara":
+    case "rancho":
     case "rural":
       return ["venda", "arrendamento", "rural", "locacao"];
     case "terreno":
@@ -91,6 +92,7 @@ function caracConfig(t: PropertyType): CaracConfig {
     case "fazenda":
     case "sitio":
     case "chacara":
+    case "rancho":
       return { areaUnit: "ha", areaConstruida: true, dormitorios: true, suites: false, banheiros: true, vagas: true, anoConstrucao: false };
     // Comerciais: m² + construção, vagas e banheiros (sem dormitórios/suítes).
     case "comercial":

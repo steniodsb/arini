@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { PropertyCard } from "@/components/public/PropertyCard";
+import { PropertyFilterBar } from "@/components/public/PropertyFilterBar";
 import { Button } from "@/components/ui/button";
 import { Search, ShieldCheck, MapPinned, Sparkles, MapPin } from "lucide-react";
 import type { Property } from "@/lib/types";
@@ -77,6 +78,11 @@ export default async function HomePage() {
           <Button asChild variant="link">
             <Link href="/imoveis">Ver todos →</Link>
           </Button>
+        </div>
+
+        {/* Filtro rápido — leva para /imoveis já com os parâmetros aplicados */}
+        <div className="mb-10">
+          <PropertyFilterBar />
         </div>
 
         {properties.length === 0 ? (
