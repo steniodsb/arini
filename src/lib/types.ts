@@ -41,6 +41,22 @@ export type ClientType =
   | "comprador" | "vendedor" | "locatario" | "locador" | "proprietario"
   | "fornecedor" | "parceiro" | "investidor" | "outro";
 
+export interface Corretor {
+  id: string;
+  nome: string;
+  cpf_cnpj: string | null;
+  creci: string | null;
+  telefone: string | null;
+  email: string | null;
+  observacoes: string | null;
+  // Vínculo opcional ao usuário do sistema (quem tem login). Nulo = corretor
+  // parceiro sem acesso ao sistema.
+  user_id: string | null;
+  ativo: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
 export type SocialPlatform = "instagram" | "facebook" | "whatsapp" | "tiktok";
 
 export type TimeEntryType = "entrada" | "intervalo_inicio" | "intervalo_fim" | "saida";
