@@ -16,7 +16,8 @@ import { UploadProgress, type UploadState } from "@/components/crm/UploadProgres
 import { SavingModal, type SaveStep } from "@/components/crm/SavingModal";
 import { uploadPropertyMedia, uploadPropertyCover, uploadMarketingMedia } from "@/lib/upload";
 import { errMessage } from "@/lib/utils";
-import type { ClientOption } from "@/components/crm/PropertyClientsPanel";
+import { ensureClientForOwner } from "@/lib/owners";
+import type { ClientOption, OwnerOption } from "@/components/crm/PropertyClientsPanel";
 import {
   CATEGORY_LABELS,
   CLIENT_TYPES,
@@ -106,12 +107,21 @@ function caracConfig(t: PropertyType): CaracConfig {
   }
 }
 
+// Prefixo que identifica um proprietário (owners) no seletor de origem.
+const OWNER_PREFIX = "owner:";
+
+function norm(v: string | null | undefined): string {
+  return (v ?? "").trim().toLowerCase();
+}
+
 export function NovaCaptacaoForm({
   canControl = false,
   clients = [],
+  owners = [],
 }: {
   canControl?: boolean;
   clients?: ClientOption[];
+  owners?: OwnerOption[];
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -168,8 +178,18 @@ export function NovaCaptacaoForm({
     setCoverPreview(URL.createObjectURL(file));
   }
 
+  // Proprietários que ainda não têm cliente equivalente (dedup por doc/nome).
+  const clientDocs = new Set(clients.map((c) => norm(c.cpf_cnpj)).filter(Boolean));
+  const clientNames = new Set(clients.map((c) => norm(c.nome)).filter(Boolean));
+  const ownersSemCliente = owners.filter((o) => {
+    const doc = norm(o.cpf_cnpj);
+    if (doc && clientDocs.has(doc)) return false;
+    return !clientNames.has(norm(o.nome));
+  });
+
   function onSelectClient(id: string) {
     setClientId(id);
+    if (id.startsWith(OWNER_PREFIX)) { setClientPapel("proprietario"); return; }
     const found = clients.find((c) => c.id === id);
     if (found) setClientPapel(found.tipo);
   }
@@ -319,15 +339,28 @@ export function NovaCaptacaoForm({
       }
 
       // Vínculo de cliente (controle interno — só administrativo/jurídico/diretoria).
+      // Se a seleção for um proprietário (owner:<id>), garante/reaproveita o
+      // cliente equivalente antes de vincular.
       if (canControl && clientId) {
-        const { error: pcErr } = await supabase.from("property_clients").insert({
-          property_id: property.id,
-          client_id: clientId,
-          papel: clientPapel,
-          observacao: clientObs || null,
-          created_by: userId,
-        });
-        if (pcErr) console.warn("Falha ao vincular cliente:", pcErr.message);
+        try {
+          let realClientId = clientId;
+          if (clientId.startsWith(OWNER_PREFIX)) {
+            const owner = owners.find((o) => o.id === clientId.slice(OWNER_PREFIX.length));
+            if (owner) realClientId = await ensureClientForOwner(supabase, owner, userId);
+          }
+          if (!realClientId.startsWith(OWNER_PREFIX)) {
+            const { error: pcErr } = await supabase.from("property_clients").insert({
+              property_id: property.id,
+              client_id: realClientId,
+              papel: clientPapel,
+              observacao: clientObs || null,
+              created_by: userId,
+            });
+            if (pcErr) console.warn("Falha ao vincular cliente:", pcErr.message);
+          }
+        } catch (linkErr) {
+          console.warn("Falha ao vincular origem do imóvel:", errMessage(linkErr));
+        }
       }
 
       // Cria approval (não-fatal: a inbox de aprovações também é dirigida pelo
@@ -592,10 +625,21 @@ export function NovaCaptacaoForm({
           <CardContent className="space-y-3">
             <div className="grid md:grid-cols-[1fr_180px] gap-2">
               <Select value={clientId} onChange={(e) => onSelectClient(e.target.value)}>
-                <option value="">— Selecione um cliente —</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nome} ({CLIENT_TYPE_LABELS[c.tipo]})</option>
-                ))}
+                <option value="">— Selecione cliente ou proprietário —</option>
+                {clients.length > 0 && (
+                  <optgroup label="Clientes cadastrados">
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>{c.nome} ({CLIENT_TYPE_LABELS[c.tipo]})</option>
+                    ))}
+                  </optgroup>
+                )}
+                {ownersSemCliente.length > 0 && (
+                  <optgroup label="Proprietários">
+                    {ownersSemCliente.map((o) => (
+                      <option key={o.id} value={`${OWNER_PREFIX}${o.id}`}>{o.nome} (Proprietário)</option>
+                    ))}
+                  </optgroup>
+                )}
               </Select>
               <Select value={clientPapel} onChange={(e) => setClientPapel(e.target.value as ClientType)}>
                 {CLIENT_TYPES.map((t) => <option key={t} value={t}>{CLIENT_TYPE_LABELS[t]}</option>)}
@@ -606,9 +650,9 @@ export function NovaCaptacaoForm({
               value={clientObs}
               onChange={(e) => setClientObs(e.target.value)}
             />
-            {clients.length === 0 && (
+            {clients.length === 0 && ownersSemCliente.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                Nenhum cliente cadastrado ainda. Cadastre em “Clientes” ou vincule depois pela edição do imóvel.
+                Nenhum cliente ou proprietário cadastrado ainda. Cadastre em “Clientes” ou “Proprietários”, ou vincule depois pela edição do imóvel.
               </p>
             )}
           </CardContent>

@@ -12,7 +12,7 @@ import { Pencil, ExternalLink, MapPin } from "lucide-react";
 import Image from "next/image";
 import { PropertyMediaBlock } from "@/components/crm/PropertyMediaBlock";
 import { SectorObservations } from "@/components/crm/SectorObservations";
-import { PropertyClientsPanel, type ClientOption, type LinkedClient } from "@/components/crm/PropertyClientsPanel";
+import { PropertyClientsPanel, type ClientOption, type LinkedClient, type OwnerOption } from "@/components/crm/PropertyClientsPanel";
 import { PropertyDocuments } from "@/app/admin/juridico/[id]/PropertyDocuments";
 import { DeletePropertyButton } from "@/components/crm/DeletePropertyButton";
 import { SendToMarketingButton } from "@/components/crm/SendToMarketingButton";
@@ -73,17 +73,19 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
   const canControl = isDiretoria || profile?.sector === "administrativo" || profile?.sector === "juridico";
   let linkedClients: LinkedClient[] = [];
   let clientOptions: ClientOption[] = [];
+  let ownerOptions: OwnerOption[] = [];
   // Documentos do imóvel (matrícula, contrato de compra e venda, etc.) anexados
   // ao longo do processo — direto na "aba Imóveis", para o controle interno.
   let propertyDocs: PropertyDocItem[] = [];
   if (canControl) {
-    const [{ data: links }, { data: clients }, { data: docs }] = await Promise.all([
+    const [{ data: links }, { data: clients }, { data: owners }, { data: docs }] = await Promise.all([
       supabase
         .from("property_clients")
         .select("id, client_id, papel, observacao, client:clients(nome, telefone)")
         .eq("property_id", p.id)
         .order("created_at", { ascending: true }),
-      supabase.from("clients").select("id, nome, tipo").eq("ativo", true).order("nome"),
+      supabase.from("clients").select("id, nome, tipo, cpf_cnpj").eq("ativo", true).order("nome"),
+      supabase.from("owners").select("id, nome, cpf_cnpj, telefone, email").order("nome"),
       supabase.from("property_documents").select("*").eq("property_id", p.id).order("created_at", { ascending: false }),
     ]);
     propertyDocs = (docs ?? []) as PropertyDocItem[];
@@ -103,6 +105,14 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
       id: c.id as string,
       nome: c.nome as string,
       tipo: c.tipo as ClientType,
+      cpf_cnpj: (c.cpf_cnpj as string | null) ?? null,
+    }));
+    ownerOptions = (owners ?? []).map((o) => ({
+      id: o.id as string,
+      nome: o.nome as string,
+      cpf_cnpj: (o.cpf_cnpj as string | null) ?? null,
+      telefone: (o.telefone as string | null) ?? null,
+      email: (o.email as string | null) ?? null,
     }));
   }
 
@@ -302,6 +312,7 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
           propertyId={p.id}
           initial={linkedClients}
           clients={clientOptions}
+          owners={ownerOptions}
         />
       )}
 

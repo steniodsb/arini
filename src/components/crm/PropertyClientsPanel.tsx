@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, UserPlus, Phone } from "lucide-react";
 import { CLIENT_TYPES, CLIENT_TYPE_LABELS, type ClientType } from "@/lib/types";
+import { ensureClientForOwner } from "@/lib/owners";
 
 export interface LinkedClient {
   id: string; // id do vínculo (property_clients)
@@ -26,6 +27,25 @@ export interface ClientOption {
   id: string;
   nome: string;
   tipo: ClientType;
+  cpf_cnpj?: string | null;
+}
+
+// Proprietário cadastrado em "Proprietários" (tabela owners), oferecido também
+// na vinculação do imóvel. Ao vincular, vira/reaproveita um cliente.
+export interface OwnerOption {
+  id: string;
+  nome: string;
+  cpf_cnpj: string | null;
+  telefone: string | null;
+  email: string | null;
+}
+
+// Prefixo usado no <option> para diferenciar um proprietário de um cliente.
+const OWNER_PREFIX = "owner:";
+
+// Normaliza texto para deduplicar proprietário x cliente (nome/documento).
+function norm(v: string | null | undefined): string {
+  return (v ?? "").trim().toLowerCase();
 }
 
 /**
@@ -37,10 +57,12 @@ export function PropertyClientsPanel({
   propertyId,
   initial,
   clients,
+  owners = [],
 }: {
   propertyId: string;
   initial: LinkedClient[];
   clients: ClientOption[];
+  owners?: OwnerOption[];
 }) {
   const router = useRouter();
   const [items, setItems] = useState<LinkedClient[]>(initial);
@@ -50,6 +72,17 @@ export function PropertyClientsPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+
+  // Proprietários que ainda NÃO têm um cliente equivalente (por documento ou
+  // nome). Só estes precisam aparecer no grupo "Proprietários" do seletor —
+  // os demais já estão na lista de clientes.
+  const clientDocs = new Set(clients.map((c) => norm(c.cpf_cnpj)).filter(Boolean));
+  const clientNames = new Set(clients.map((c) => norm(c.nome)).filter(Boolean));
+  const ownersSemCliente = owners.filter((o) => {
+    const doc = norm(o.cpf_cnpj);
+    if (doc && clientDocs.has(doc)) return false;
+    return !clientNames.has(norm(o.nome));
+  });
 
   // Cadastro inline de cliente novo
   const [novoNome, setNovoNome] = useState("");
@@ -98,6 +131,30 @@ export function PropertyClientsPanel({
     router.refresh();
   }
 
+  // Vincula a seleção atual do seletor: se for um proprietário (owner:<id>),
+  // primeiro garante o cliente equivalente; senão vincula o cliente direto.
+  async function vincularSelecionado() {
+    if (!clientId) return;
+    if (clientId.startsWith(OWNER_PREFIX)) {
+      const ownerId = clientId.slice(OWNER_PREFIX.length);
+      const owner = owners.find((o) => o.id === ownerId);
+      if (!owner) { setError("Proprietário não encontrado."); return; }
+      setBusy(true);
+      setError(null);
+      try {
+        const supabase = createSupabaseBrowser();
+        const { data: { user } } = await supabase.auth.getUser();
+        const realClientId = await ensureClientForOwner(supabase, owner, user?.id);
+        await vincular(realClientId, papel);
+      } catch (e) {
+        setBusy(false);
+        setError(e instanceof Error ? e.message : "Falha ao vincular proprietário.");
+      }
+      return;
+    }
+    await vincular(clientId, papel);
+  }
+
   async function criarEVincular() {
     if (!novoNome.trim()) { setError("Informe o nome do cliente."); return; }
     setBusy(true);
@@ -130,9 +187,10 @@ export function PropertyClientsPanel({
     router.refresh();
   }
 
-  // Sugere o papel = tipo do cliente selecionado
+  // Sugere o papel = tipo do cliente selecionado (proprietário, se for owner).
   function onSelectClient(id: string) {
     setClientId(id);
+    if (id.startsWith(OWNER_PREFIX)) { setPapel("proprietario"); return; }
     const found = clients.find((c) => c.id === id);
     if (found) setPapel(found.tipo);
   }
@@ -182,13 +240,27 @@ export function PropertyClientsPanel({
 
         {/* Vincular cliente existente */}
         <div className="border-t pt-4 space-y-3">
-          <Label className="text-sm">Vincular cliente já cadastrado</Label>
+          <Label className="text-sm">Vincular cliente ou proprietário já cadastrado</Label>
+          <p className="text-xs text-muted-foreground">
+            Proprietários cadastrados em “Proprietários” já aparecem aqui — não é preciso recadastrá-los como cliente.
+          </p>
           <div className="grid md:grid-cols-[1fr_180px] gap-2">
             <Select value={clientId} onChange={(e) => onSelectClient(e.target.value)}>
-              <option value="">— Selecione um cliente —</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.nome} ({CLIENT_TYPE_LABELS[c.tipo]})</option>
-              ))}
+              <option value="">— Selecione cliente ou proprietário —</option>
+              {clients.length > 0 && (
+                <optgroup label="Clientes cadastrados">
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nome} ({CLIENT_TYPE_LABELS[c.tipo]})</option>
+                  ))}
+                </optgroup>
+              )}
+              {ownersSemCliente.length > 0 && (
+                <optgroup label="Proprietários">
+                  {ownersSemCliente.map((o) => (
+                    <option key={o.id} value={`${OWNER_PREFIX}${o.id}`}>{o.nome} (Proprietário)</option>
+                  ))}
+                </optgroup>
+              )}
             </Select>
             <Select value={papel} onChange={(e) => setPapel(e.target.value as ClientType)}>
               {CLIENT_TYPES.map((t) => <option key={t} value={t}>{CLIENT_TYPE_LABELS[t]}</option>)}
@@ -204,7 +276,7 @@ export function PropertyClientsPanel({
               type="button"
               variant="gold"
               disabled={busy || !clientId}
-              onClick={() => vincular(clientId, papel)}
+              onClick={vincularSelecionado}
             >
               <Plus size={14} /> Vincular
             </Button>
