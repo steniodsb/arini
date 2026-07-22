@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,13 +11,37 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { SECTOR_LABELS, type Sector, type SectorObservation } from "@/lib/types";
 import { formatDateBR } from "@/lib/utils";
-import { Send, Check } from "lucide-react";
+import { Send, Check, Building2, ArrowRight } from "lucide-react";
 
 const TARGET_SECTORS: Sector[] = [
   "captacao", "marketing", "administrativo", "juridico", "financeiro", "recepcao", "admin_central",
 ];
 
-function Msg({ o, onResolve }: { o: SectorObservation; onResolve?: (id: string) => void }) {
+export type PropertyRefMap = Record<string, { codigo: string; titulo: string | null }>;
+
+// Resolve a qual imóvel uma observação se refere. As observações de imóvel
+// nascem com o property_id em entity_id: 'properties' (captação) abre em
+// /admin/captacao, 'marketing_campaigns' (marketing) em /admin/marketing.
+// Mensagens gerais da caixa usam entity_table 'comunicacao' → sem imóvel.
+function propertyRef(o: SectorObservation, properties: PropertyRefMap) {
+  if (o.entity_table !== "properties" && o.entity_table !== "marketing_campaigns") return null;
+  const p = properties[o.entity_id];
+  if (!p) return null;
+  const href =
+    o.entity_table === "marketing_campaigns"
+      ? `/admin/marketing/${o.entity_id}`
+      : `/admin/captacao/${o.entity_id}`;
+  return { href, codigo: p.codigo, titulo: p.titulo };
+}
+
+function Msg({
+  o, properties, onResolve,
+}: {
+  o: SectorObservation;
+  properties: PropertyRefMap;
+  onResolve?: (id: string) => void;
+}) {
+  const ref = propertyRef(o, properties);
   return (
     <div className={`rounded-md border p-3 text-sm ${o.resolvido ? "opacity-60 bg-muted/30" : "bg-card"}`}>
       <div className="flex items-center justify-between gap-2 mb-1">
@@ -29,6 +54,19 @@ function Msg({ o, onResolve }: { o: SectorObservation; onResolve?: (id: string) 
         <span className="text-[11px] text-muted-foreground">{formatDateBR(o.created_at)}</span>
       </div>
       <div className="whitespace-pre-line">{o.texto}</div>
+      {ref && (
+        <Link
+          href={ref.href}
+          className="mt-2 flex items-center gap-1.5 rounded-md border border-gold/40 bg-gold/5 px-2 py-1.5 text-xs font-medium text-arini hover:bg-gold/10"
+        >
+          <Building2 size={13} className="shrink-0 text-gold-dark" />
+          <span className="truncate">
+            Imóvel {ref.codigo}
+            {ref.titulo ? ` — ${ref.titulo}` : ""}
+          </span>
+          <ArrowRight size={12} className="ml-auto shrink-0 opacity-60" />
+        </Link>
+      )}
       {!o.resolvido && onResolve && (
         <button type="button" onClick={() => onResolve(o.id)} className="mt-2 inline-flex items-center gap-1 text-xs text-arini hover:text-gold-dark font-semibold">
           <Check size={12} /> Marcar como resolvida
@@ -39,12 +77,13 @@ function Msg({ o, onResolve }: { o: SectorObservation; onResolve?: (id: string) 
 }
 
 export function CommunicationBox({
-  currentUserId, currentSector, recebidas, enviadas,
+  currentUserId, currentSector, recebidas, enviadas, properties,
 }: {
   currentUserId: string;
   currentSector: Sector;
   recebidas: SectorObservation[];
   enviadas: SectorObservation[];
+  properties: PropertyRefMap;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"recebidas" | "enviadas">("recebidas");
@@ -117,10 +156,10 @@ export function CommunicationBox({
       <div className="space-y-2">
         {tab === "recebidas" && (inbox.length === 0
           ? <p className="text-sm text-muted-foreground">Nenhuma mensagem recebida.</p>
-          : inbox.map((o) => <Msg key={o.id} o={o} onResolve={resolve} />))}
+          : inbox.map((o) => <Msg key={o.id} o={o} properties={properties} onResolve={resolve} />))}
         {tab === "enviadas" && (sent.length === 0
           ? <p className="text-sm text-muted-foreground">Nenhuma mensagem enviada.</p>
-          : sent.map((o) => <Msg key={o.id} o={o} />))}
+          : sent.map((o) => <Msg key={o.id} o={o} properties={properties} />))}
       </div>
     </div>
   );
