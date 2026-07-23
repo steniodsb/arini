@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import Link from "next/link";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { CHANNEL_LABELS, type Conversation, type Message } from "@/lib/types";
 import { formatDateTimeBR } from "@/lib/utils";
-import { Send, RefreshCw, ExternalLink, Inbox } from "lucide-react";
+import { Send, RefreshCw, Inbox } from "lucide-react";
 
 const CHANNEL_DOT: Record<string, string> = {
   whatsapp: "bg-green-500",
@@ -188,14 +187,9 @@ export function AtendimentoInbox({
                   {selected.contato_telefone ? ` · ${selected.contato_telefone}` : ""}
                 </div>
               </div>
-              {selected.lead_id && (
-                <Link
-                  href={`/admin/leads/${selected.lead_id}`}
-                  className="inline-flex items-center gap-1 text-xs text-arini hover:text-gold-dark font-medium shrink-0"
-                >
-                  Ver lead <ExternalLink size={12} />
-                </Link>
-              )}
+              <span className="text-[11px] text-muted-foreground shrink-0">
+                {selected.status === "resolvida" ? "Resolvida" : "Em aberto"}
+              </span>
             </header>
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">

@@ -80,6 +80,8 @@ export interface Profile {
   is_admin_central: boolean;
   ativo: boolean;
   avatar_url: string | null;
+  /** Libera o sistema de Atendimento (atendimento.<dominio>), independente do setor. */
+  atendimento_access: boolean;
   created_at: string;
   updated_at: string;
 }
