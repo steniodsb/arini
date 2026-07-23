@@ -307,6 +307,61 @@ export const LEAD_STAGES: { key: LeadStage; label: string; color: string }[] = [
   { key: "pos_venda", label: "Pós-venda", color: "bg-teal-500" },
 ];
 
+// =====================================================================
+// Atendimento omnichannel (conversas + mensagens) — migration 0025
+// =====================================================================
+export type ConversationChannel = "whatsapp" | "instagram" | "facebook" | "messenger";
+export type ConversationStatus = "aberta" | "pendente" | "resolvida";
+export type MessageDirecao = "in" | "out";
+export type MessageRemetente = "cliente" | "atendente" | "sistema" | "ia";
+export type MessageTipo =
+  | "texto" | "imagem" | "audio" | "documento" | "video" | "template" | "sistema";
+export type MessageStatus = "recebida" | "enviada" | "entregue" | "lida" | "falha";
+
+export interface Conversation {
+  id: string;
+  canal: ConversationChannel;
+  external_id: string;
+  lead_id: string | null;
+  contato_nome: string | null;
+  contato_telefone: string | null;
+  setor_responsavel: Sector | null;
+  responsavel_id: string | null;
+  status: ConversationStatus;
+  last_message_at: string;
+  last_message_preview: string | null;
+  unread_count: number;
+  created_at: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  direcao: MessageDirecao;
+  remetente: MessageRemetente;
+  autor_id: string | null;
+  tipo: MessageTipo;
+  conteudo: string | null;
+  media_url: string | null;
+  external_id: string | null;
+  raw_payload: Record<string, unknown> | null;
+  status: MessageStatus;
+  created_at: string;
+}
+
+export const CHANNEL_LABELS: Record<ConversationChannel, string> = {
+  whatsapp: "WhatsApp",
+  instagram: "Instagram",
+  facebook: "Facebook",
+  messenger: "Messenger",
+};
+
+export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
+  aberta: "Aberta",
+  pendente: "Pendente",
+  resolvida: "Resolvida",
+};
+
 export const LEAD_ORIGINS: LeadOrigin[] = [
   "instagram","facebook","site","whatsapp","ligacao",
   "indicacao","trafego_pago","placa","portal","tiktok","messenger","outros"

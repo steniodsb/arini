@@ -11,6 +11,7 @@ export const SECTOR_NAV: Record<Sector, { href: string; label: string; group?: s
   ],
   marketing: [
     { href: "/admin", label: "Dashboard" },
+    { href: "/admin/atendimento", label: "Atendimento" },
     { href: "/admin/marketing", label: "Marketing" },
     { href: "/admin/integracoes", label: "Integrações" },
     { href: "/admin/agenda", label: "Agenda" },
@@ -20,6 +21,7 @@ export const SECTOR_NAV: Record<Sector, { href: string; label: string; group?: s
   ],
   administrativo: [
     { href: "/admin", label: "Dashboard" },
+    { href: "/admin/atendimento", label: "Atendimento" },
     { href: "/admin/captacao", label: "Captação" },
     { href: "/admin/marketing", label: "Marketing" },
     { href: "/admin/administrativo", label: "Imóveis" },
@@ -41,6 +43,7 @@ export const SECTOR_NAV: Record<Sector, { href: string; label: string; group?: s
   ],
   juridico: [
     { href: "/admin", label: "Dashboard" },
+    { href: "/admin/atendimento", label: "Atendimento" },
     { href: "/admin/juridico", label: "Jurídico" },
     { href: "/admin/clientes", label: "Clientes" },
     { href: "/admin/alugueis", label: "Aluguéis" },
@@ -51,6 +54,7 @@ export const SECTOR_NAV: Record<Sector, { href: string; label: string; group?: s
   ],
   recepcao: [
     { href: "/admin", label: "Dashboard" },
+    { href: "/admin/atendimento", label: "Atendimento" },
     { href: "/admin/consulta-imoveis", label: "Imóveis" },
     { href: "/admin/leads", label: "Leads" },
     { href: "/admin/agenda", label: "Agenda" },
@@ -60,6 +64,7 @@ export const SECTOR_NAV: Record<Sector, { href: string; label: string; group?: s
   ],
   financeiro: [
     { href: "/admin", label: "Dashboard" },
+    { href: "/admin/atendimento", label: "Atendimento" },
     { href: "/admin/financeiro-imovel", label: "Financ. Imóvel" },
     { href: "/admin/financeiro-empresarial", label: "Financ. Empresa" },
     { href: "/admin/financeiro-empresarial#comissoes", label: "Comissões" },
@@ -71,6 +76,7 @@ export const SECTOR_NAV: Record<Sector, { href: string; label: string; group?: s
   ],
   aluguel: [
     { href: "/admin", label: "Dashboard" },
+    { href: "/admin/atendimento", label: "Atendimento" },
     { href: "/admin/alugueis", label: "Aluguéis" },
     { href: "/admin/agenda", label: "Agenda" },
     { href: "/admin/comunicacao", label: "Comunicação" },
@@ -79,6 +85,7 @@ export const SECTOR_NAV: Record<Sector, { href: string; label: string; group?: s
   ],
   admin_central: [
     { href: "/admin", label: "Dashboard" },
+    { href: "/admin/atendimento", label: "Atendimento" },
     { href: "/admin/captacao", label: "Captação" },
     { href: "/admin/marketing", label: "Marketing" },
     { href: "/admin/administrativo", label: "Imóveis" },
@@ -100,6 +107,5 @@ export const SECTOR_NAV: Record<Sector, { href: string; label: string; group?: s
     { href: "/admin/notificacoes", label: "Notificações" },
     { href: "/admin/usuarios", label: "Usuários" },
     { href: "/admin/auditoria", label: "Auditoria" },
-    { href: "/admin/configuracoes", label: "Configurações" },
   ],
 };
