@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getAtendimentoUser, hasAtendimentoAccess } from "@/lib/atendimento-auth";
 import { Logo } from "@/components/brand/Logo";
 import { LogoutButton } from "./LogoutButton";
@@ -19,6 +20,20 @@ export default async function AtendimentoLayout({
         <div className="flex items-center gap-3 min-w-0">
           <Logo variant="light" size={26} href="/atendimento" />
           <span className="font-display text-lg leading-none">Atendimento</span>
+          <nav className="flex items-center gap-1 ml-3 text-sm">
+            <Link
+              href="/atendimento"
+              className="px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors"
+            >
+              Conversas
+            </Link>
+            <Link
+              href="/atendimento/canais"
+              className="px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors"
+            >
+              Canais
+            </Link>
+          </nav>
         </div>
         <div className="flex items-center gap-4 text-sm min-w-0">
           <span className="truncate text-white/80">{profile?.nome}</span>

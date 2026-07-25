@@ -358,6 +358,45 @@ export const CHANNEL_LABELS: Record<ConversationChannel, string> = {
   messenger: "Messenger",
 };
 
+// ===== Canais do Atendimento (como o WhatsApp é conectado) ===========
+// Três modos, com trade-offs bem diferentes — ver 0027_atendimento_canais.sql.
+export type ChannelProvider = "evolution" | "cloud_api" | "cloud_api_coexistence";
+
+export type ChannelStatus =
+  | "desconectado"
+  | "aguardando_qr"
+  | "conectando"
+  | "conectado"
+  | "erro";
+
+/** Canal sem credenciais — o que a UI do Atendimento enxerga. */
+export interface AtendimentoChannelSafe {
+  id: string;
+  nome: string;
+  canal: ConversationChannel;
+  provedor: ChannelProvider;
+  status: ChannelStatus;
+  telefone: string | null;
+  ultimo_erro: string | null;
+  conectado_em: string | null;
+  created_at: string;
+  instance_name: string | null;
+}
+
+export const CHANNEL_PROVIDER_LABELS: Record<ChannelProvider, string> = {
+  evolution: "Evolution API (QR Code)",
+  cloud_api: "API Oficial da Meta",
+  cloud_api_coexistence: "API Oficial — mantendo o número no celular",
+};
+
+export const CHANNEL_STATUS_LABELS: Record<ChannelStatus, string> = {
+  desconectado: "Desconectado",
+  aguardando_qr: "Aguardando leitura do QR Code",
+  conectando: "Conectando",
+  conectado: "Conectado",
+  erro: "Erro",
+};
+
 export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
   aberta: "Aberta",
   pendente: "Pendente",
