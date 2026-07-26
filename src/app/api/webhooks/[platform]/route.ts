@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { verifyMetaSignature } from "@/lib/whatsapp";
+import { dispararAutomacoes } from "@/lib/atendimento/triggers";
 import type { ConversationChannel, MessageTipo } from "@/lib/types";
 
 // Plataformas suportadas e a origem de lead correspondente.
@@ -201,7 +202,20 @@ export async function POST(req: Request, { params }: { params: { platform: strin
 
   await notifyRecepcao(admin, origem, extracted.mensagem);
 
-  return NextResponse.json({ ok: true, conversation_id: conversationId });
+  // Automações cadastradas na tela de Regras (boas-vindas, roteamento,
+  // etiquetagem). Nunca lança — webhook precisa responder 200.
+  const automacao = await dispararAutomacoes(admin, conversationId, {
+    conversaNova: !existingConv,
+    conteudo: extracted.mensagem,
+    direcao: "in",
+    interna: false,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    conversation_id: conversationId,
+    automacoes: automacao.regrasDisparadas,
+  });
 }
 
 async function notifyRecepcao(

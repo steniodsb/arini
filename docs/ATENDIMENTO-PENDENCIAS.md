@@ -8,25 +8,39 @@ mensagem nenhuma.
 
 ---
 
-## 1. Banco de dados — aplicar as migrações (5 min) ⚠️ BLOQUEANTE
+## 0. Banco de dados — ✅ JÁ FEITO, não precisa fazer nada
 
-Rode no **SQL Editor do Supabase**, nesta ordem, o conteúdo de:
+As migrações `0031` e `0032` **já foram aplicadas** no Supabase de produção
+(`vdqbwlxmaagjnfpcajwt`). Verificado em 26/07/2026 direto no banco:
 
-```
-supabase/migrations/0031_atendimento_onda_b.sql
-supabase/migrations/0032_atendimento_helpcenter_campanhas.sql
-```
+| Item | Estado |
+|---|---|
+| Tabelas `atendimento_*` | 22 criadas |
+| Colunas novas em `conversations` | `prioridade`, `snoozed_until`, `inbox_id` ✅ |
+| Função `fn_despertar_conversas_adiadas` | existe |
+| Caixa de entrada padrão | 1 |
+| Horário comercial | 7 linhas (seg–sex 8–18, sáb 8–12) |
+| Política de SLA "Padrão" | 1 |
+| Etiquetas / respostas rápidas / macros | 5 / 4 / 1 |
+| Atributos personalizados | 3 |
+| Central de Ajuda | 1 portal, 3 categorias |
 
-São idempotentes — pode rodar de novo sem medo. Confira antes que a `0027`,
-`0028`, `0029` e `0030` já foram aplicadas.
+## 1. Liberar o acesso dos atendentes ⚠️ BLOQUEANTE (2 min)
 
-**Sem isso, quase toda tela nova quebra**, porque as tabelas não existem.
-
-Depois, libere o acesso de cada atendente (ainda não há tela para isso):
+Hoje **só 1 pessoa** tem acesso ao atendimento (a diretoria). Todo o resto do
+time vai bater na tela "sem acesso". Ainda não existe tela para isso — rode no
+SQL Editor do Supabase, um por atendente:
 
 ```sql
 update public.profiles set atendimento_access = true
 where email = 'pessoa@arininegociosimobiliarios.com.br';
+```
+
+Para conferir quem já tem:
+
+```sql
+select nome, email, atendimento_access, is_admin_central
+from public.profiles where ativo order by nome;
 ```
 
 ## 2. Deploy e domínio ⚠️ BLOQUEANTE
@@ -102,9 +116,10 @@ Tudo da Opção B, **mais**:
       (`cearini22@gmail.com`).
 - [ ] Definir quem é `admin_central` — só esse perfil cadastra canais e vê tokens.
 
-## 6. Configuração inicial dentro do sistema (10 min, depois do item 1)
+## 6. Configuração inicial dentro do sistema (10 min)
 
-Nada disso é obrigatório, mas deixa o sistema com a sua cara:
+Nada disso é obrigatório — tudo já veio semeado e funcionando. É só ajustar
+para a cara da Arini:
 
 - [ ] **Configurações › Caixas de entrada** — renomear a caixa padrão, escolher
       os agentes, ligar saudação e mensagem de ausência.
@@ -141,6 +156,13 @@ Nada disso é obrigatório, mas deixa o sistema com a sua cara:
 - `npx tsc --noEmit` — limpo.
 - `npm run build` — 45 rotas, sem erro.
 - `npx next lint` — só avisos pré-existentes de import não usado.
-- ❗ **Nada foi testado contra o banco real** (as migrações ainda não foram
-  aplicadas) nem contra um WhatsApp conectado. Espere ajustes finos na
-  primeira rodada com dados de verdade.
+- Banco de produção — conferido por consulta direta: 22 tabelas, colunas
+  novas e seeds no lugar (tabela da seção 0).
+- Mecanismo de tema — testado no navegador: `escuro` → classe `dark`,
+  `claro` → `light`, `sistema` segue o SO, e as variáveis CSS trocam de
+  fato (`--background` 0 0% 100% ↔ 153 60% 8%).
+- ❗ **Nenhuma tela foi vista logada.** O shell autenticado exige sessão, e
+  eu não entro com a sua senha. Também **nada foi testado com um WhatsApp
+  conectado** (não há canal cadastrado ainda). Espere ajustes finos na
+  primeira rodada com mensagem de verdade — em especial no webhook da
+  Evolution, que só dá para validar com tráfego real.

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { toChannelStatus, type EvolutionState } from "@/lib/evolution";
+import { dispararAutomacoes } from "@/lib/atendimento/triggers";
 import type { MessageTipo } from "@/lib/types";
 
 type Admin = ReturnType<typeof createSupabaseAdmin>;
@@ -301,7 +302,23 @@ export async function POST(req: Request) {
     await notificarRecepcao(admin, preview);
   }
 
-  return NextResponse.json({ ok: true, conversation_id: conversationId });
+  // 5) Automações. Só mensagem do cliente dispara regra — eco de mensagem
+  //    nossa (fromMe) não deve reprocessar boas-vindas nem reatribuir.
+  let automacao: Awaited<ReturnType<typeof dispararAutomacoes>> | null = null;
+  if (!fromMe) {
+    automacao = await dispararAutomacoes(admin, conversationId, {
+      conversaNova: !convExistente,
+      conteudo: conteudo.texto,
+      direcao: "in",
+      interna: false,
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    conversation_id: conversationId,
+    automacoes: automacao?.regrasDisparadas ?? 0,
+  });
 }
 
 async function notificarRecepcao(admin: Admin, mensagem: string) {
