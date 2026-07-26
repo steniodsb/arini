@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { toChannelStatus, type EvolutionState } from "@/lib/evolution";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import {
   emitirContatoCriado,
   emitirConversaCriada,
@@ -286,6 +287,12 @@ export async function POST(req: Request) {
       contato_telefone: telefone,
       lead_id: leadId,
     });
+
+    // Agent bot: a conversa nasceu numa caixa com bot? Então ela já nasce
+    // conduzida por ele. Awaitado (diferente dos `emitir*`) porque é este
+    // passo que grava `bot_status='ativo'` — sem ele a entrega lá embaixo
+    // veria 'sem_bot' e não mandaria nada. São updates locais, não rede.
+    await ativarBotNaConversa(admin, conversationId);
   }
 
   // 3) Grava a mensagem.
@@ -367,6 +374,23 @@ export async function POST(req: Request) {
       conteudo: conteudo.texto,
       direcao: "in",
       interna: false,
+    });
+
+    // 6) Agent bot — mesma regra das automações: só mensagem do CLIENTE
+    //    vai para o bot. O eco de `fromMe` é resposta dada pelo celular
+    //    pelo próprio time; mandá-la ao bot o faria responder a si mesmo.
+    //    `entregarAoBot` nunca lança e sai na primeira linha quando a
+    //    caixa não tem bot ou quando um humano já assumiu.
+    await entregarAoBot(admin, conversationId, {
+      id: (msgCriada?.id as string) ?? null,
+      direcao: "in",
+      remetente: "cliente",
+      tipo: conteudo.tipo,
+      texto: conteudo.texto,
+      mediaUrl: conteudo.mediaUrl,
+      mediaNome: conteudo.mediaNome,
+      mediaMime: conteudo.mediaMime,
+      criadaEm: (msgCriada?.created_at as string) ?? null,
     });
   }
 

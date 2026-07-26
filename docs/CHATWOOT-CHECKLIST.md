@@ -9,7 +9,7 @@ Legenda: ✅ pronto · 🟡 parcial · 🧩 scaffold (tela existe, lógica míni
 
 Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot/chatwoot.
 
-> **Estado geral (Ondas A–H entregues):** **117 rotas** compilando, `npm run build`
+> **Estado geral (Ondas A–I entregues):** **128 rotas** compilando, `npm run build`
 > verde, migrações **0031–0036 aplicadas** em produção. O que falta é quase todo
 > **infra/credencial** (🔑): conectar um canal, ligar o cron dos jobs e liberar o
 > acesso dos atendentes. Ver `ATENDIMENTO-PENDENCIAS.md`.
@@ -32,13 +32,14 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
 - ✅ **Menções @** em nota interna + notificação + aba "Menções"
 - ✅ Aba "Não atendidas" (sem primeira resposta)
 - ✅ **Emoji picker** · **assinatura do agente** · **citar mensagem**
+- ✅ **Gravar áudio no composer** (nota de voz) com medidor, pausa e preview
 - ✅ **Command bar (Ctrl/Cmd+K)** + **atalhos de teclado** (Ctrl+/ lista todos)
 - ✅ Filtros avançados (canal, prioridade, equipe, etiqueta) + 4 ordenações
 - ✅ Separadores de dia, status de entrega (✓/✓✓/lida), autor na bolha
 
 ## P1 — Operação de equipe (config essencial)
-- ✅ Contatos: lista, detalhe (drawer), criar/editar, **mesclar**, **importar CSV**,
-      notas, atributos personalizados, ações em massa
+- ✅ Contatos: lista, detalhe (drawer), criar/editar, **mesclar**, **importar** e
+      **exportar CSV**, notas, atributos personalizados, ações em massa, bloqueados
 - ✅ Empresas: lista, CRUD, drawer de detalhe com contatos vinculados
 - ✅ Config › Agentes (liberar acesso `atendimento_access`)
 - ✅ Config › Equipes (times) — CRUD + membros
@@ -47,7 +48,9 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
 - ✅ Config › **Caixas de entrada** — 6 abas (Geral, Agentes, Mensagens
       automáticas, Atribuição, Pré-chat, CSAT)
 - ✅ **Relatórios completos**: visão geral, agentes, equipes, etiquetas, caixas,
-      conversas no tempo (heatmap 7×24) + **exportar CSV**
+      conversas no tempo (heatmap 7×24), SLA, **ao vivo** (tempo real + modo TV)
+      e **bots** + exportar CSV
+- ✅ **Assistente de primeiros passos** com detecção automática do que já foi feito
 - ✅ **Perfil do agente**: dados, avatar (URL), assinatura, aparência,
       disponibilidade, notificações, trocar senha
 - 🟡 Canais (WhatsApp: Evolution/Cloud/Coexistence) — 🔑 falta credencial real
@@ -93,6 +96,13 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
       acesso de fato ainda é a RLS, não o papel
 - ✅ **Conta**: nome, idioma, fuso, auto-resolver, ocultar nome do agente
 
+## P4.5 — Agent Bots
+- ✅ **Bot como agente**: cadastro, token, entrega assinada por HMAC, log e
+      auto-desativação após 10 falhas
+- ✅ **API do bot** (`/api/bot/v1`): responder, transferir, etiquetar, ler conversa
+- ✅ **Handoff bot → humano** com estado na conversa e botão "Assumir"
+- 🟡 Caminho de volta (bot chamando a API) sem teste com bot real
+
 ## P5 — IA (Capitão / Agentes IA)
 - ✅ **Copiloto** dentro da conversa: sugerir resposta, resumir, classificar
       intenção — com cache e regras antialucinação — 🔑 exige `ANTHROPIC_API_KEY`
@@ -125,6 +135,9 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
 8. **Onda H (feito)**: webhooks de saída disparando nos eventos, auditoria
    instrumentada, triagem e auto-resposta por IA, relatório de SLA, bloqueio
    de contato valendo em todos os canais, categorias de resposta rápida
-9. **Onda I (próxima)**: fazer os papéis mandarem de verdade (reescrever a
+9. **Onda I (feito)**: gravar áudio, Agent Bots, relatório ao vivo e de bot,
+   exportar contatos, assistente de primeiros passos
+10. **Onda J (próxima)**: fazer os papéis mandarem de verdade (reescrever a
    RLS — 🔑 decisão do Stenio), auditoria nas telas de config, anexo MIME no
-   e-mail, domínio próprio do portal, excluir canal
+   e-mail, domínio próprio do portal, excluir canal, API pública `/api/v1`,
+   auto-atribuição round-robin

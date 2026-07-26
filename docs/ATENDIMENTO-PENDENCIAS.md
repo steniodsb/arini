@@ -1,7 +1,7 @@
 # Atendimento — o que depende de VOCÊ (Stenio)
 
-Tudo aqui é ação **fora do código**. As ondas **A a H** estão entregues:
-`npm run build` verde com **117 rotas**, migrações **0031–0036 já aplicadas**
+Tudo aqui é ação **fora do código**. As ondas **A a I** estão entregues:
+`npm run build` verde com **128 rotas**, migrações **0031–0037 já aplicadas**
 em produção.
 
 Ordem sugerida: 1 → 2 → 3. Sem os itens 1 e 2 o sistema abre mas não recebe
@@ -183,6 +183,12 @@ para a cara da Arini:
 | Categorias de respostas rápidas | ✅ agrupamento e filtro |
 | `dominio_customizado` do portal de ajuda | ❌ a coluna existe, mas nada a usa |
 | Excluir canal | ❌ não existe rota nem botão |
+| Gravar áudio no composer | ✅ com medidor, pausa e preview — 🟡 sem teste com microfone real |
+| Agent Bots (motor, API `/api/bot/v1`, handoff) | ✅ ida provada pelo botão Testar; volta sem bot real |
+| Relatório ao vivo (tempo real + modo TV) | ✅ |
+| Relatório de bot | ✅ código pronto; sem dado real para validar |
+| Exportar contatos em CSV | ✅ busca o filtro inteiro no banco, em lotes |
+| Assistente de primeiros passos | ✅ com detecção automática do que já está feito |
 
 ## 8. Verificação feita nesta entrega
 
@@ -211,6 +217,18 @@ para a cara da Arini:
   aberto num navegador nem embutido num site de verdade.
 
 ---
+
+## 8.1 Armadilha do Agent Bot ⚠️
+
+O bot só dispara quando a conversa tem caixa de entrada resolvida.
+`conversations.inbox_id` **só é preenchido pelo chat do site** — WhatsApp,
+Telegram, e-mail e SMS abrem conversa sem caixa. O código cai num plano B
+que casa `atendimento_inboxes.channel_id` com o canal da conversa.
+
+**Na prática:** se a caixa não estiver amarrada à conexão em
+**Configurações › Caixas de entrada**, o bot nunca vai disparar nesses
+canais — e a tela não avisa disso. Se for usar bot fora do chat do site,
+confira esse vínculo primeiro.
 
 ## 9. Uma decisão que eu NÃO tomei por você 🔑
 

@@ -4,6 +4,7 @@ import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { getFileUrl } from "@/lib/telegram";
 import { guardarMidiaRecebida } from "@/lib/atendimento/media-inbound";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import { autoResposta, triagemAutomatica } from "@/lib/atendimento/ia-triagem";
 import {
   emitirContatoCriado,
@@ -367,6 +368,12 @@ export async function POST(req: Request) {
       contato_telefone: null,
       lead_id: leadId,
     });
+
+    // Agent bot: se a caixa desta conversa tem bot, ela já nasce conduzida
+    // por ele. Awaitado (ao contrário dos `emitir*`) porque é este passo
+    // que grava `bot_status='ativo'` — sem ele a entrega mais abaixo veria
+    // 'sem_bot' e não mandaria nada. São updates locais, não rede.
+    await ativarBotNaConversa(admin, conversationId);
   }
 
   // 3) Grava a mensagem. Update de bot só chega para mensagem do cliente —
@@ -454,6 +461,25 @@ export async function POST(req: Request) {
     conteudo: conteudo.texto,
     direcao: "in",
     interna: false,
+  });
+
+  // 5.5) Agent bot — depois das automações (que podem etiquetar/rotear, e
+  //      o payload do bot já sai com esse estado) e ANTES da IA: quando a
+  //      caixa tem bot, é ele quem conduz, não o copiloto interno.
+  //      `entregarAoBot` nunca lança e sai na primeira linha quando a caixa
+  //      não tem bot ou quando um humano já assumiu.
+  await entregarAoBot(admin, conversationId, {
+    id: (msgCriada?.id as string) ?? null,
+    direcao: "in",
+    remetente: "cliente",
+    tipo: conteudo.tipo,
+    texto: conteudo.texto,
+    // A URL guardada no nosso storage, nunca a temporária do Telegram —
+    // aquela carrega o token do bot e morre em ~1 h.
+    mediaUrl: guardada?.url ?? null,
+    mediaNome: conteudo.mediaNome,
+    mediaMime: guardada?.mime ?? conteudo.mediaMime,
+    criadaEm: (msgCriada?.created_at as string) ?? null,
   });
 
   // 6) IA — triagem e auto-resposta, na mesma ordem sempre: primeiro

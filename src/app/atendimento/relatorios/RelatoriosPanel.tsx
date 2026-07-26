@@ -18,9 +18,11 @@ import {
 } from "recharts";
 import {
   BarChart3,
+  Bot,
   CalendarClock,
   Download,
   Inbox as InboxIcon,
+  Radio,
   Tag,
   Timer,
   Users,
@@ -35,10 +37,13 @@ import {
   PRIORITY_LABELS,
   PRIORITY_ORDER,
   WEEKDAY_LABELS,
+  type BotStatus,
   type ConversationChannel,
   type ConversationPriority,
   type ConversationStatus,
 } from "@/lib/types";
+import { AoVivoPanel } from "./AoVivoPanel";
+import { BotsPanel, type RelBot, type RelEntregaBot, type RelMensagemBot } from "./BotsPanel";
 
 // =====================================================================
 // Painel de relatórios do Atendimento.
@@ -69,6 +74,10 @@ export type RelConversa = {
   sla_policy_id: string | null;
   sla_first_response_due: string | null;
   sla_resolution_due: string | null;
+  /** Estado do agent bot NESTA conversa (0037) — alimenta a aba "Bots". */
+  bot_status: BotStatus;
+  bot_id: string | null;
+  bot_transferida_em: string | null;
 };
 
 /** Política de SLA — só os campos que o relatório usa. */
@@ -289,16 +298,26 @@ const CANAL_CAIXA_LABELS: Record<string, string> = {
 
 // ===== Abas e período ================================================
 
-type Aba = "visao" | "agentes" | "equipes" | "etiquetas" | "caixas" | "tempo" | "sla";
+type Aba =
+  | "visao" | "aovivo" | "agentes" | "equipes"
+  | "etiquetas" | "caixas" | "tempo" | "sla" | "bots";
 type Periodo = "hoje" | "7" | "30" | "90" | "custom";
+
+/**
+ * A aba "Ao vivo" ignora o período: ela mostra o AGORA. Manter essa
+ * exceção numa constante evita espalhar `aba === "aovivo"` pela árvore.
+ */
+const ABAS_SEM_PERIODO: Aba[] = ["aovivo"];
 
 const ABAS: { chave: Aba; label: string; icone: typeof BarChart3 }[] = [
   { chave: "visao", label: "Visão geral", icone: BarChart3 },
+  { chave: "aovivo", label: "Ao vivo", icone: Radio },
   { chave: "agentes", label: "Agentes", icone: Users },
   { chave: "equipes", label: "Equipes", icone: UsersRound },
   { chave: "etiquetas", label: "Etiquetas", icone: Tag },
   { chave: "caixas", label: "Caixas de entrada", icone: InboxIcon },
   { chave: "sla", label: "SLA", icone: Timer },
+  { chave: "bots", label: "Bots", icone: Bot },
   { chave: "tempo", label: "Conversas no tempo", icone: CalendarClock },
 ];
 
@@ -363,6 +382,9 @@ export function RelatoriosPanel({
   etiquetas,
   caixas,
   politicasSla,
+  bots,
+  mensagensBot,
+  entregasBot,
   janelaDias,
 }: {
   conversas: RelConversa[];
@@ -374,6 +396,9 @@ export function RelatoriosPanel({
   etiquetas: RelEtiqueta[];
   caixas: RelCaixa[];
   politicasSla: RelPoliticaSla[];
+  bots: RelBot[];
+  mensagensBot: RelMensagemBot[];
+  entregasBot: RelEntregaBot[];
   janelaDias: number;
 }) {
   const [aba, setAba] = useState<Aba>("visao");
@@ -972,21 +997,33 @@ export function RelatoriosPanel({
     baixarCsv(`relatorio_conversas_no_tempo_${sufixo}.csv`, linhasTempo);
   }
 
+  // A aba "Ao vivo" não tem período nem CSV (é um instante, não um
+  // intervalo) e a aba "Bots" exporta pelo próprio botão dela, que tem
+  // acesso às agregações. Nos dois casos o botão do cabeçalho sai de cena.
+  const semPeriodo = ABAS_SEM_PERIODO.includes(aba);
+  const exportaNoCabecalho = aba !== "aovivo" && aba !== "bots";
+
   // =====================================================================
   return (
     <>
       <PageHeader
         titulo="Relatórios"
-        descricao={`Desempenho do atendimento — dados dos últimos ${janelaDias} dias.`}
+        descricao={
+          semPeriodo
+            ? "Operação em tempo real — atualiza sozinho conforme as conversas mudam."
+            : `Desempenho do atendimento — dados dos últimos ${janelaDias} dias.`
+        }
         acoes={
-          <Button type="button" variant="outline" size="sm" onClick={exportar} disabled={vazio}>
-            <Download size={15} /> Exportar CSV
-          </Button>
+          exportaNoCabecalho ? (
+            <Button type="button" variant="outline" size="sm" onClick={exportar} disabled={vazio}>
+              <Download size={15} /> Exportar CSV
+            </Button>
+          ) : undefined
         }
       />
 
       {/* Período */}
-      <Card className="p-3 flex flex-wrap items-center gap-2">
+      <Card className={`p-3 flex-wrap items-center gap-2 ${semPeriodo ? "hidden" : "flex"}`}>
         <div className="flex flex-wrap gap-1">
           {PERIODOS.map((p) => (
             <button
@@ -1037,7 +1074,12 @@ export function RelatoriosPanel({
         })}
       </div>
 
-      {vazio ? (
+      {/* "Ao vivo" fica FORA do guarda de período vazio: ela não olha o
+          recorte histórico nenhum, então "sem conversa nos últimos 30 dias"
+          não pode esconder a fila de agora. */}
+      {aba === "aovivo" && <AoVivoPanel />}
+
+      {aba !== "aovivo" && vazio ? (
         <Card>
           <EmptyState
             titulo="Nenhuma conversa no período"
@@ -1077,6 +1119,21 @@ export function RelatoriosPanel({
           )}
           {aba === "caixas" && <AbaCaixas linhas={linhasCaixa} />}
           {aba === "sla" && <AbaSla dados={sla} />}
+          {aba === "bots" && (
+            <BotsPanel
+              bots={bots}
+              conversas={conversasPeriodo}
+              // A janela inteira entra só para o comparativo de CSAT: uma
+              // avaliação respondida hoje pode ser de conversa aberta antes
+              // do período, e ainda assim precisamos saber se passou por bot.
+              todasConversas={conversas}
+              csat={csatPeriodo}
+              mensagensBot={mensagensBot}
+              entregas={entregasBot}
+              inicio={inicio}
+              fim={fim}
+            />
+          )}
           {aba === "tempo" && <AbaTempo dados={tempo} />}
         </>
       )}

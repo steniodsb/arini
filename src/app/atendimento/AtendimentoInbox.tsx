@@ -19,6 +19,7 @@ import { Composer } from "./inbox/Composer";
 import { SnoozeMenu } from "./inbox/SnoozeMenu";
 import { ParticipantsMenu } from "./inbox/ParticipantsMenu";
 import { CopilotPanel } from "./inbox/CopilotPanel";
+import { BotBadge } from "./inbox/BotBadge";
 import { useNotificacoes } from "./inbox/useNotificacoes";
 import { Modal } from "@/components/atendimento/ui";
 import {
@@ -49,6 +50,7 @@ export function AtendimentoInbox({
   teams,
   labels,
   macros,
+  provedorPorCanal,
   currentUser,
 }: {
   initialConversations: Conversation[];
@@ -57,6 +59,8 @@ export function AtendimentoInbox({
   teams: AtendimentoTeam[];
   labels: AtendimentoLabel[];
   macros: AtendimentoMacro[];
+  /** channel_id -> provedor, para o composer avisar sobre formato de áudio. */
+  provedorPorCanal?: Record<string, string>;
   currentUser: Pick<Profile, "id" | "nome" | "assinatura">;
 }) {
   const params = useSearchParams();
@@ -968,6 +972,14 @@ export function AtendimentoInbox({
               </div>
             </header>
 
+            {/* Estado do agent bot — só aparece quando a caixa tem bot. */}
+            <BotBadge
+              conversation={selected}
+              onAssumida={(id) =>
+                patchLocal(id, { bot_status: "transferida", bot_transferida_em: new Date().toISOString() })
+              }
+            />
+
             {/* Etiquetas */}
             <div className="px-3 py-1.5 border-b bg-card/60 flex items-center gap-1.5 flex-wrap shrink-0">
               {selected.tags.map((t) => {
@@ -1067,6 +1079,9 @@ export function AtendimentoInbox({
               enviando={sending}
               onEnviar={enviar}
               onAplicarMacro={(id) => void aplicarMacro(id)}
+              provedorCanal={
+                selected.channel_id ? (provedorPorCanal?.[selected.channel_id] ?? null) : null
+              }
               injetarTexto={textoSugerido}
               onTextoInjetado={() => setTextoSugerido(null)}
             />

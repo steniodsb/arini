@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import {
   emitirContatoCriado,
   emitirConversaCriada,
@@ -369,6 +370,13 @@ export async function registrarMensagemEntrada(
       contato_telefone: telefone,
       lead_id: leadId,
     });
+
+    // Agent bot: se a caixa desta conversa tem bot, a conversa nasce sendo
+    // conduzida por ele. Precisa ser AWAITADO (ao contrário dos `emitir*`,
+    // que são fire-and-forget): é este passo que grava `bot_status='ativo'`,
+    // e sem ele a entrega logo abaixo veria a conversa ainda em 'sem_bot' e
+    // não mandaria nada. São dois updates locais, não chamada de rede.
+    await ativarBotNaConversa(admin, conversationId);
   }
 
   // ---- 3) Grava a mensagem -------------------------------------------
@@ -463,6 +471,23 @@ export async function registrarMensagemEntrada(
     conteudo: texto,
     direcao: "in",
     interna: false,
+  });
+
+  // ---- 6) Agent bot ---------------------------------------------------
+  // DEPOIS das automações de propósito: elas podem etiquetar ou rotear a
+  // conversa, e o payload que o bot recebe já sai com esse estado.
+  // `entregarAoBot` nunca lança e sai na primeira linha quando a caixa não
+  // tem bot ou quando um humano já assumiu (`bot_status='transferida'`).
+  await entregarAoBot(admin, conversationId, {
+    id: (msgCriada?.id as string) ?? null,
+    direcao: "in",
+    remetente: "cliente",
+    tipo,
+    texto,
+    mediaUrl: entrada.mediaUrl ?? null,
+    mediaNome: entrada.mediaNome ?? null,
+    mediaMime: entrada.mediaMime ?? null,
+    criadaEm: (msgCriada?.created_at as string) ?? null,
   });
 
   return {

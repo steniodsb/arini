@@ -4,13 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Users, UsersRound, Tag, Zap, Radio, Inbox, Clock, Timer, Star,
-  SlidersHorizontal, Workflow, Webhook, KeyRound, ScrollText, MessageCircle, Filter, Building2, FileText, Code2,
+  SlidersHorizontal, Workflow, Webhook, KeyRound, ScrollText, MessageCircle, Filter, Building2, FileText, Code2, Bot, Rocket,
 } from "lucide-react";
 
 const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: typeof Users }[] }[] = [
   {
     titulo: "Geral",
     itens: [
+      { href: "/atendimento/comecar", label: "Primeiros passos", icon: Rocket },
       { href: "/atendimento/configuracoes/conta", label: "Conta e plataforma", icon: Building2 },
     ],
   },
@@ -48,6 +49,7 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: type
     itens: [
       { href: "/atendimento/macros", label: "Macros", icon: Workflow },
       { href: "/atendimento/configuracoes/automacoes", label: "Regras de automação", icon: Zap },
+      { href: "/atendimento/configuracoes/bots", label: "Agent Bots", icon: Bot },
     ],
   },
   {

@@ -342,7 +342,7 @@ export type ConversationChannel =
 export type ConversationStatus = "aberta" | "pendente" | "resolvida" | "adiada";
 export type ConversationPriority = "baixa" | "media" | "alta" | "urgente";
 export type MessageDirecao = "in" | "out";
-export type MessageRemetente = "cliente" | "atendente" | "sistema" | "ia";
+export type MessageRemetente = "cliente" | "atendente" | "sistema" | "ia" | "bot";
 export type MessageTipo =
   | "texto" | "imagem" | "audio" | "documento" | "video" | "template" | "sistema";
 export type MessageStatus = "recebida" | "enviada" | "entregue" | "lida" | "falha";
@@ -367,6 +367,8 @@ export interface Conversation {
   created_at: string;
   /** Equipe responsável (além do agente) — migration 0030. */
   team_id: string | null;
+  /** Canal físico por onde a conversa entrou — migration 0027. */
+  channel_id: string | null;
   /** Prioridade; nula = sem prioridade definida (padrão do Chatwoot). */
   prioridade: ConversationPriority | null;
   /** Quando a conversa adiada volta sozinha para "aberta". */
@@ -383,7 +385,19 @@ export interface Conversation {
   /** Intenção e resumo detectados pela IA (0034). */
   ia_intencao: string | null;
   ia_resumo: string | null;
+  /** Estado do agent bot NESTA conversa (0037). */
+  bot_status: BotStatus;
+  bot_id: string | null;
+  bot_transferida_em: string | null;
 }
+
+export type BotStatus = "sem_bot" | "ativo" | "transferida";
+
+export const BOT_STATUS_LABELS: Record<BotStatus, string> = {
+  sem_bot: "Sem bot",
+  ativo: "Bot conduzindo",
+  transferida: "Transferida para humano",
+};
 
 export interface Message {
   id: string;
@@ -1074,3 +1088,48 @@ export interface ArticleVote {
   visitante_token: string | null;
   created_at: string;
 }
+
+
+// =====================================================================
+// Agent Bots e onboarding (migration 0037)
+// =====================================================================
+
+export interface AgentBot {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  /** Para onde cada mensagem recebida na caixa do bot é POSTada. */
+  outgoing_url: string;
+  prefixo: string;
+  secret: string;
+  ativo: boolean;
+  ultimo_status: number | null;
+  ultimo_erro: string | null;
+  ultimo_envio_em: string | null;
+  falhas_seguidas: number;
+  criado_por: string | null;
+  created_at: string;
+}
+
+export interface BotDelivery {
+  id: string;
+  bot_id: string;
+  conversation_id: string | null;
+  payload: Record<string, unknown> | null;
+  status: number | null;
+  erro: string | null;
+  duracao_ms: number | null;
+  created_at: string;
+}
+
+/** Passos do assistente de primeiros passos. A ordem é a da tela. */
+export const ONBOARDING_PASSOS = [
+  { id: "conta", titulo: "Nome e fuso da operação" },
+  { id: "agentes", titulo: "Liberar acesso da equipe" },
+  { id: "canal", titulo: "Conectar um canal" },
+  { id: "horario", titulo: "Horário comercial" },
+  { id: "respostas", titulo: "Respostas rápidas" },
+  { id: "etiquetas", titulo: "Etiquetas" },
+] as const;
+
+export type OnboardingPassoId = (typeof ONBOARDING_PASSOS)[number]["id"];

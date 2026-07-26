@@ -13,6 +13,7 @@ import {
   type RelPessoa,
   type RelPoliticaSla,
 } from "./RelatoriosPanel";
+import type { RelBot, RelEntregaBot, RelMensagemBot } from "./BotsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,9 @@ export default async function RelatoriosPage() {
     { data: etiquetas },
     { data: caixas },
     { data: politicasSla },
+    { data: bots },
+    { data: mensagensBot },
+    { data: entregasBot },
   ] = await Promise.all([
     admin
       .from("conversations")
@@ -47,7 +51,10 @@ export default async function RelatoriosPage() {
         // de SLA recalcula a violação no cliente: o flag `sla_violado` é
         // carimbado por cron e só pega quem AINDA estava vencido na hora em
         // que o job rodou — quem respondeu atrasado escapa dele.
-        "id, canal, status, prioridade, responsavel_id, team_id, tags, inbox_id, created_at, resolvida_em, resolvida_por, primeira_resposta_em, sla_violado, sla_policy_id, sla_first_response_due, sla_resolution_due",
+        // As colunas de bot (0037) alimentam a aba "Bots": `bot_status` é o
+        // estado terminal do handoff (uma vez 'transferida', fica), então ele
+        // serve de histórico sem precisar de tabela de eventos.
+        "id, canal, status, prioridade, responsavel_id, team_id, tags, inbox_id, created_at, resolvida_em, resolvida_por, primeira_resposta_em, sla_violado, sla_policy_id, sla_first_response_due, sla_resolution_due, bot_status, bot_id, bot_transferida_em",
       )
       .gte("created_at", desde)
       .order("created_at", { ascending: true })
@@ -76,6 +83,26 @@ export default async function RelatoriosPage() {
       .from("atendimento_sla_policies")
       .select("id, nome, primeira_resposta_min, resolucao_min")
       .order("nome"),
+    // Bots cadastrados. Só nome e estado: token, segredo e URL são dados
+    // sensíveis que não têm nada que fazer num relatório.
+    admin.from("atendimento_agent_bots").select("id, nome, ativo").order("nome"),
+    // Mensagens ESCRITAS PELO BOT. Consulta separada da de produtividade
+    // dos agentes de propósito: aquela filtra `interna=false` + `direcao=out`
+    // para medir resposta humana ao cliente; aqui o recorte é o remetente.
+    admin
+      .from("messages")
+      .select("conversation_id, bot_id, created_at")
+      .eq("remetente", "bot")
+      .gte("created_at", desde)
+      .limit(60_000),
+    // Log das chamadas HTTP feitas para a URL do bot — é o que revela um
+    // bot fora do ar (status >= 400 ou `erro` preenchido).
+    admin
+      .from("atendimento_bot_deliveries")
+      .select("id, bot_id, conversation_id, status, erro, duracao_ms, created_at")
+      .gte("created_at", desde)
+      .order("created_at", { ascending: false })
+      .limit(20_000),
   ]);
 
   return (
@@ -90,6 +117,9 @@ export default async function RelatoriosPage() {
         etiquetas={(etiquetas ?? []) as RelEtiqueta[]}
         caixas={(caixas ?? []) as RelCaixa[]}
         politicasSla={(politicasSla ?? []) as RelPoliticaSla[]}
+        bots={(bots ?? []) as RelBot[]}
+        mensagensBot={(mensagensBot ?? []) as RelMensagemBot[]}
+        entregasBot={(entregasBot ?? []) as RelEntregaBot[]}
         janelaDias={JANELA_DIAS}
       />
     </PageShell>

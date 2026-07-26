@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import { autoResposta, triagemAutomatica } from "@/lib/atendimento/ia-triagem";
 import { emitirMensagemCriada } from "@/lib/atendimento/webhook-eventos";
 import {
@@ -231,6 +232,25 @@ export async function POST(req: Request, { params }: { params: { token: string }
     conteudo: texto,
     direcao: "in",
     interna: false,
+  });
+
+  // Agent bot. A conversa do widget NASCE em /session (não aqui), então a
+  // ativação acontece na primeira mensagem do visitante — é o momento
+  // equivalente ao "conversa criada" dos outros canais, e `ativarBotNaConversa`
+  // só sai de 'sem_bot', nunca desfaz um handoff já feito.
+  if (primeiraDoCliente) {
+    await ativarBotNaConversa(admin, conversationId);
+  }
+  // Depois das automações (o payload já sai com etiqueta/roteamento) e antes
+  // da IA: quando a caixa tem bot, quem conduz é ele. Nunca lança e sai na
+  // primeira linha se a caixa não tem bot ou se um humano já assumiu.
+  await entregarAoBot(admin, conversationId, {
+    id: mensagem.id,
+    direcao: "in",
+    remetente: "cliente",
+    tipo: "texto",
+    texto,
+    criadaEm: mensagem.criadaEm,
   });
 
   // IA — mesma ordem do webhook do Telegram: triagem antes, auto-resposta
