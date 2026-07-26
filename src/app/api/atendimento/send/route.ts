@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "não autenticado" }, { status: 401 });
 
-  let body: { conversationId?: string; texto?: string };
+  let body: { conversationId?: string; texto?: string; interna?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -24,6 +24,7 @@ export async function POST(req: Request) {
 
   const conversationId = body.conversationId?.trim();
   const texto = body.texto?.trim();
+  const interna = body.interna === true;
   if (!conversationId || !texto) {
     return NextResponse.json({ error: "conversationId e texto são obrigatórios" }, { status: 400 });
   }
@@ -31,11 +32,31 @@ export async function POST(req: Request) {
   // RLS garante que o usuário só acessa conversas permitidas.
   const { data: conv, error: convErr } = await supabase
     .from("conversations")
-    .select("id, canal, external_id, contato_telefone")
+    .select("id, canal, external_id, contato_telefone, primeira_resposta_em")
     .eq("id", conversationId)
     .maybeSingle();
   if (convErr) return NextResponse.json({ error: convErr.message }, { status: 400 });
   if (!conv) return NextResponse.json({ error: "conversa não encontrada" }, { status: 404 });
+
+  // Nota interna: só registra, nunca envia ao cliente.
+  if (interna) {
+    const { data: nota, error: notaErr } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversationId,
+        direcao: "out",
+        remetente: "atendente",
+        autor_id: user.id,
+        tipo: "texto",
+        conteudo: texto,
+        interna: true,
+        status: "enviada",
+      })
+      .select("*")
+      .single();
+    if (notaErr) return NextResponse.json({ error: notaErr.message }, { status: 400 });
+    return NextResponse.json({ ok: true, message: nota, delivered: null, interna: true });
+  }
 
   const canal = conv.canal as ConversationChannel;
   const destino = conv.contato_telefone ?? conv.external_id;
@@ -61,6 +82,14 @@ export async function POST(req: Request) {
     .select("*")
     .single();
   if (msgErr) return NextResponse.json({ error: msgErr.message }, { status: 400 });
+
+  // Marca a 1ª resposta do atendente (métrica de tempo de resposta).
+  if (!conv.primeira_resposta_em) {
+    await supabase
+      .from("conversations")
+      .update({ primeira_resposta_em: new Date().toISOString() })
+      .eq("id", conversationId);
+  }
 
   return NextResponse.json({
     ok: true,

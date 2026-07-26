@@ -330,9 +330,13 @@ export interface Conversation {
   setor_responsavel: Sector | null;
   responsavel_id: string | null;
   status: ConversationStatus;
+  tags: string[];
   last_message_at: string;
   last_message_preview: string | null;
   unread_count: number;
+  resolvida_em: string | null;
+  resolvida_por: string | null;
+  primeira_resposta_em: string | null;
   created_at: string;
 }
 
@@ -348,7 +352,23 @@ export interface Message {
   external_id: string | null;
   raw_payload: Record<string, unknown> | null;
   status: MessageStatus;
+  interna: boolean;
   created_at: string;
+}
+
+export interface CannedResponse {
+  id: string;
+  atalho: string;
+  titulo: string;
+  conteudo: string;
+  criado_por: string | null;
+  created_at: string;
+}
+
+/** Item leve para o seletor de responsável (atendentes). */
+export interface AgentOption {
+  id: string;
+  nome: string;
 }
 
 export const CHANNEL_LABELS: Record<ConversationChannel, string> = {
