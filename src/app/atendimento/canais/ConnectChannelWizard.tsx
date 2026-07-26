@@ -151,7 +151,7 @@ export function ConnectChannelWizard({ webhookBase }: { webhookBase: string }) {
           provedor: provider,
           nome: fd.get("nome"),
           config: Object.fromEntries(
-            [...fd.entries()].filter(([k]) => k !== "nome").map(([k, v]) => [k, String(v).trim()]),
+            Array.from(fd.entries()).filter(([k]) => k !== "nome").map(([k, v]) => [k, String(v).trim()]),
           ),
         }),
       });
