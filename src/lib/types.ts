@@ -452,6 +452,8 @@ export interface AtendimentoInbox {
   bloquear_conversa_encerrada: boolean;
   widget_cor: string | null;
   widget_token: string | null;
+  /** Política de SLA da caixa — o trigger usa para calcular os prazos (0033). */
+  sla_policy_id: string | null;
   ativo: boolean;
   created_at: string;
 }

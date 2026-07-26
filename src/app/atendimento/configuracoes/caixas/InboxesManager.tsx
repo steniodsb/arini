@@ -48,11 +48,12 @@ const ABAS: { id: Aba; label: string; icon: typeof Settings2 }[] = [
 ];
 
 export function InboxesManager({
-  initialInboxes, initialMembers, agents,
+  initialInboxes, initialMembers, agents, slaPolicies = [],
 }: {
   initialInboxes: AtendimentoInbox[];
   initialMembers: Membro[];
   agents: AgentOption[];
+  slaPolicies?: { id: string; nome: string }[];
 }) {
   const [inboxes, setInboxes] = useState(initialInboxes);
   const [membros, setMembros] = useState<Membro[]>(initialMembers);
@@ -133,6 +134,7 @@ export function InboxesManager({
         pre_chat_campos: rascunho.pre_chat_campos,
         csat_ativo: rascunho.csat_ativo,
         csat_mensagem: rascunho.csat_mensagem,
+        sla_policy_id: rascunho.sla_policy_id ?? null,
       })
       .eq("id", rascunho.id);
     setSalvando(false);
@@ -346,6 +348,17 @@ export function InboxesManager({
               <SelectInput value={rascunho.canal} onChange={(e) => set("canal", e.target.value as InboxChannel)}>
                 {CANAIS.map((c) => (
                   <option key={c} value={c}>{CANAL_LABELS[c]}</option>
+                ))}
+              </SelectInput>
+            </Field>
+            <Field label="Política de SLA" dica="Define os prazos de 1ª resposta e resolução das conversas desta caixa. Os prazos são calculados quando a conversa nasce.">
+              <SelectInput
+                value={rascunho.sla_policy_id ?? ""}
+                onChange={(e) => set("sla_policy_id", e.target.value || null)}
+              >
+                <option value="">Sem SLA</option>
+                {slaPolicies.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
                 ))}
               </SelectInput>
             </Field>

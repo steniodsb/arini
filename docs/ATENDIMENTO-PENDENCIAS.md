@@ -24,6 +24,7 @@ As migrações `0031` e `0032` **já foram aplicadas** no Supabase de produção
 | Etiquetas / respostas rápidas / macros | 5 / 4 / 1 |
 | Atributos personalizados | 3 |
 | Central de Ajuda | 1 portal, 3 categorias |
+| Migração `0033` (SLA ligado à caixa + trigger) | aplicada |
 
 ## 1. Liberar o acesso dos atendentes ⚠️ BLOQUEANTE (2 min)
 
@@ -57,6 +58,23 @@ from public.profiles where ativo order by nome;
       `NEXT_PUBLIC_STORAGE_DRIVER=r2`). É por onde sobem os **anexos** da
       conversa. Sem R2 ele cai no Supabase Storage — funciona, mas o bucket
       precisa aceitar os MIMEs de áudio/vídeo/PDF.
+
+### 2.1 Ligar o cron dos jobs (5 min) — destrava 3 coisas de uma vez
+
+Existe um endpoint que roda as tarefas de fundo: **despertar conversa adiada**,
+**marcar violação de SLA** e **enviar as campanhas**. Ele não roda sozinho —
+precisa de alguém chamando de minuto em minuto.
+
+- [ ] Defina `ATENDIMENTO_JOBS_SECRET` no ambiente de produção (qualquer
+      string longa e aleatória). **Sem ela o endpoint responde 503** — é
+      proposital, para não ficar aberto na internet.
+- [ ] Agende a chamada (cron do VPS, Dokploy, ou Vercel Cron):
+
+```bash
+curl -X POST https://atendimento.arininegociosimobiliarios.com.br/api/atendimento/jobs -H "x-jobs-secret: SEU_SEGREDO"
+```
+
+De minuto em minuto é seguro: os três jobs são idempotentes.
 
 ## 3. WhatsApp — decidir o caminho 🔑 DECISÃO SUA
 
@@ -142,9 +160,9 @@ para a cara da Arini:
 | Prioridade, snooze, ações em massa, menções | ✅ pronto |
 | Macros, automações, SLA, CSAT, horário — **cadastro** | ✅ pronto |
 | Automação **disparar sozinha** | ✅ ligada nos webhooks (`lib/atendimento/triggers.ts`) — sem teste com tráfego real |
-| Campanha **enviar de fato** | ❌ falta o worker/cron + template aprovado na Meta |
-| SLA **marcar violação** | ❌ falta o job periódico |
-| Snooze despertar sem ninguém abrir a tela | 🟡 desperta ao carregar a caixa; falta cron |
+| Campanha **enviar de fato** | 🟡 worker pronto (`/api/atendimento/jobs`) — falta ligar o cron (seção 2) e, na Meta, template aprovado |
+| SLA **marcar violação** | 🟡 job pronto — falta ligar o cron (seção 2) |
+| Snooze despertar sem ninguém abrir a tela | 🟡 job pronto — falta ligar o cron (seção 2) |
 | Widget de chat no site | ❌ não existe |
 | Telegram, e-mail, SMS | ❌ só o cadastro da caixa aceita; sem integração |
 | Copiloto / bot de IA | ❌ Onda F |

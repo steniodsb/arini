@@ -9,9 +9,10 @@ Legenda: ✅ pronto · 🟡 parcial · 🧩 scaffold (tela existe, lógica míni
 
 Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot/chatwoot.
 
-> **Estado geral (Ondas A–E entregues):** 45 rotas compilando, `npm run build` verde.
-> O que falta é quase todo **infra/credencial** (🔑) ou o motor de execução em
-> background (automações, disparo de campanha, IA).
+> **Estado geral (Ondas A–E entregues):** 46 rotas compilando, `npm run build` verde,
+> migrações 0031–0033 já aplicadas em produção. O que falta é quase todo
+> **infra/credencial** (🔑): conectar um WhatsApp, ligar o cron dos jobs e
+> liberar o acesso dos atendentes. Ver `ATENDIMENTO-PENDENCIAS.md`.
 
 ---
 
@@ -59,7 +60,7 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
       `conversa_criada` e `mensagem_criada`, com horário comercial calculado
 - ✅ **Atributos personalizados** (conversa e contato) + render no painel
 - ✅ **Horário comercial** por caixa + mensagem fora do horário
-- ✅ **SLA** — políticas (1ª resposta, próxima, resolução); 🔲 falta o job que marca violação
+- ✅ **SLA** — políticas + vínculo com a caixa (migração 0033) + job que marca violação
 - ✅ **CSAT** — ativação por caixa + painel de resultado (média, distribuição, taxa)
 - 🔲 Segmentos/filtros salvos (tabela `atendimento_segments` pronta, falta UI)
 
@@ -74,8 +75,8 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
       (a caixa de entrada já aceita esses canais no cadastro)
 
 ## P4 — Avançado / plataforma
-- ✅ **Campanhas**: cadastro de disparo e ao vivo, seletor de público com
-      cálculo real; 🔲 falta o worker que envia
+- ✅ **Campanhas**: cadastro, seletor de público com cálculo real e **worker de
+      envio** em `/api/atendimento/jobs` — 🔑 falta ligar o cron
 - ✅ **Central de Ajuda**: portais, categorias, artigos, editor markdown com
       pré-visualização, publicar/despublicar/arquivar
 - 🧩 Webhooks · Tokens de API · Registro de auditoria (telas honestas de "falta")
@@ -100,5 +101,6 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
    horário comercial, SLA, CSAT
 5. **Onda E (feito)**: webhook + envio Evolution, campanhas, central de ajuda,
    tema claro/escuro
-6. **Onda F (próxima)**: worker de campanha, job de SLA, widget de site, IA
-   (o gancho das automações no webhook já entrou nesta onda)
+6. **Onda F (próxima)**: widget de site, Telegram/e-mail/SMS, IA, webhooks de
+   saída e tokens de API. (Gancho das automações, job de SLA, worker de
+   campanha e cron de snooze já entraram nesta onda — ver `/api/atendimento/jobs`.)
