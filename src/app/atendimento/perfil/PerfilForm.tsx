@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bell, Check, Image as ImageIcon, KeyRound, Loader2, Monitor, Moon, PenLine, Sun, User,
+  Bell, Check, Image as ImageIcon, KeyRound, Loader2, Monitor, Moon, PenLine, Sun,
+  Trash2, Upload, User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Alerta, Card, Field, Modal, SelectInput, Switch, TextArea, TextInput,
 } from "@/components/atendimento/ui";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
+import { MAX_AVATAR_MB, removeAvatar, uploadAvatar } from "@/lib/upload";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   AVAILABILITY_DOT, AVAILABILITY_LABELS,
@@ -97,6 +99,7 @@ export function PerfilForm({
   email,
   telefone: telefoneInicial,
   avatarUrl: avatarInicial,
+  avatarPath: avatarPathInicial,
   assinatura: assinaturaInicial,
   temaInicial,
   disponibilidadeInicial,
@@ -107,6 +110,8 @@ export function PerfilForm({
   email: string;
   telefone: string | null;
   avatarUrl: string | null;
+  /** Caminho do arquivo no storage (profiles.avatar_path) — usado para apagar o anterior. */
+  avatarPath: string | null;
   assinatura: string | null;
   temaInicial: ThemePreference;
   disponibilidadeInicial: AgentAvailability;
@@ -120,6 +125,10 @@ export function PerfilForm({
   const [nome, setNome] = useState(nomeInicial);
   const [telefone, setTelefone] = useState(telefoneInicial ?? "");
   const [avatar, setAvatar] = useState(avatarInicial ?? "");
+  const [avatarPath, setAvatarPath] = useState(avatarPathInicial);
+  // null = nenhum upload em andamento; 0–100 = porcentagem enviada.
+  const [progresso, setProgresso] = useState<number | null>(null);
+  const inputArquivo = useRef<HTMLInputElement>(null);
   const [assinatura, setAssinatura] = useState(assinaturaInicial ?? "");
   const [disponibilidade, setDisponibilidade] = useState<AgentAvailability>(disponibilidadeInicial);
   const [notificacoes, setNotificacoes] = useState<Record<string, boolean>>(() => {
@@ -150,6 +159,52 @@ export function PerfilForm({
   );
 
   const inicial = useMemo(() => (nome.trim() || "?").charAt(0).toUpperCase(), [nome]);
+
+  /**
+   * Sobe a foto escolhida. O uploadAvatar já valida tipo/tamanho, grava
+   * avatar_url + avatar_path e apaga o arquivo anterior — aqui só cuidamos
+   * do feedback (progresso, erro) e de manter a tela em dia.
+   */
+  function enviarAvatar(file: File) {
+    void secaoAvatar.executar(async () => {
+      setProgresso(0);
+      try {
+        const supabase = createSupabaseBrowser();
+        const { url, key } = await uploadAvatar(supabase, id, file, {
+          previousPath: avatarPath,
+          onByteProgress: (loaded, total) =>
+            setProgresso(total > 0 ? Math.round((loaded / total) * 100) : 0),
+        });
+        setAvatar(url);
+        setAvatarPath(key);
+        // A foto aparece na sidebar, renderizada no servidor.
+        router.refresh();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "não foi possível enviar a imagem";
+      } finally {
+        setProgresso(null);
+        // Permite reescolher o MESMO arquivo depois de um erro.
+        if (inputArquivo.current) inputArquivo.current.value = "";
+      }
+    });
+  }
+
+  function removerAvatar() {
+    if (!confirm("Remover sua foto de perfil? Voltamos a usar a inicial do seu nome.")) return;
+    void secaoAvatar.executar(async () => {
+      try {
+        const supabase = createSupabaseBrowser();
+        await removeAvatar(supabase, id, avatarPath);
+        setAvatar("");
+        setAvatarPath(null);
+        router.refresh();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "não foi possível remover a imagem";
+      }
+    });
+  }
 
   async function trocarSenha() {
     if (senha.length < 8) {
@@ -219,52 +274,89 @@ export function PerfilForm({
         </Card>
 
         {/* ---------- Avatar ---------- */}
-        <Card titulo="Avatar" descricao="Imagem exibida ao lado do seu nome.">
+        <Card titulo="Foto de perfil" descricao="Imagem exibida ao lado do seu nome.">
           <div className="p-4 space-y-4">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               {avatar.trim() ? (
-                // eslint-disable-next-line @next/next/no-img-element -- URL externa arbitrária; next/image exigiria allowlist de domínios
+                // eslint-disable-next-line @next/next/no-img-element -- URL de storage externo; next/image exigiria allowlist de domínios
                 <img
                   src={avatar}
-                  alt="Avatar"
-                  className="h-14 w-14 rounded-full object-cover border"
+                  alt="Sua foto de perfil"
+                  className="h-16 w-16 rounded-full object-cover border"
                 />
               ) : (
-                <span className="h-14 w-14 rounded-full bg-arini text-white dark:bg-gold dark:text-arini flex items-center justify-center text-lg font-semibold">
+                <span className="h-16 w-16 rounded-full bg-arini text-white dark:bg-gold dark:text-arini flex items-center justify-center text-xl font-semibold">
                   {inicial}
                 </span>
               )}
-              <div className="text-xs text-muted-foreground">
+
+              <div className="min-w-0 space-y-2">
                 <div className="flex items-center gap-1.5 text-foreground text-sm font-medium">
                   <ImageIcon size={14} /> {nome.trim() || "Sem nome"}
                 </div>
-                Sem imagem, usamos a inicial do seu nome.
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => inputArquivo.current?.click()}
+                    disabled={secaoAvatar.estado.salvando}
+                  >
+                    {secaoAvatar.estado.salvando ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Upload size={14} />
+                    )}
+                    {avatar.trim() ? "Trocar foto" : "Enviar foto"}
+                  </Button>
+                  {avatar.trim() && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={removerAvatar}
+                      disabled={secaoAvatar.estado.salvando}
+                    >
+                      <Trash2 size={14} /> Remover foto
+                    </Button>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  JPG, PNG ou WEBP, até {MAX_AVATAR_MB} MB. Sem imagem, usamos a inicial do seu nome.
+                </p>
               </div>
             </div>
 
-            <Alerta tipo="atencao">
-              O upload de imagem ainda não existe nesta tela. Por enquanto, cole o endereço (URL) de uma
-              imagem já hospedada na internet.
-            </Alerta>
-
-            <Field label="URL da imagem" dica="Deixe em branco para voltar a usar a inicial.">
-              <TextInput
-                value={avatar}
-                onChange={(e) => setAvatar(e.target.value)}
-                placeholder="https://…/foto.jpg"
-                inputMode="url"
-              />
-            </Field>
-            <AcoesSecao
-              estado={secaoAvatar.estado}
-              onSalvar={() =>
-                void secaoAvatar.executar(async () => {
-                  const erro = await salvar({ avatar_url: avatar.trim() || null });
-                  if (!erro) router.refresh();
-                  return erro;
-                })
-              }
+            {/* Input escondido: o botão acima é quem dá o visual do kit. */}
+            <input
+              ref={inputArquivo}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) enviarAvatar(file);
+              }}
             />
+
+            {progresso !== null && (
+              <div className="space-y-1">
+                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-arini dark:bg-gold transition-all"
+                    style={{ width: `${progresso}%` }}
+                  />
+                </div>
+                <div className="text-[11px] text-muted-foreground">Enviando… {progresso}%</div>
+              </div>
+            )}
+
+            {secaoAvatar.estado.ok && (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                <Check size={14} /> Foto atualizada
+              </span>
+            )}
+            {secaoAvatar.estado.erro && <Alerta tipo="erro">{secaoAvatar.estado.erro}</Alerta>}
           </div>
         </Card>
 

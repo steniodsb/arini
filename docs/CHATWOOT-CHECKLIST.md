@@ -9,10 +9,10 @@ Legenda: ✅ pronto · 🟡 parcial · 🧩 scaffold (tela existe, lógica míni
 
 Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot/chatwoot.
 
-> **Estado geral (Ondas A–E entregues):** 46 rotas compilando, `npm run build` verde,
-> migrações 0031–0033 já aplicadas em produção. O que falta é quase todo
-> **infra/credencial** (🔑): conectar um WhatsApp, ligar o cron dos jobs e
-> liberar o acesso dos atendentes. Ver `ATENDIMENTO-PENDENCIAS.md`.
+> **Estado geral (Ondas A–G entregues):** **113 rotas** compilando, `npm run build`
+> verde, migrações **0031–0036 aplicadas** em produção. O que falta é quase todo
+> **infra/credencial** (🔑): conectar um canal, ligar o cron dos jobs e liberar o
+> acesso dos atendentes. Ver `ATENDIMENTO-PENDENCIAS.md`.
 
 ---
 
@@ -62,7 +62,7 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
 - ✅ **Horário comercial** por caixa + mensagem fora do horário
 - ✅ **SLA** — políticas + vínculo com a caixa (migração 0033) + job que marca violação
 - ✅ **CSAT** — ativação por caixa + painel de resultado (média, distribuição, taxa)
-- 🔲 Segmentos/filtros salvos (tabela `atendimento_segments` pronta, falta UI)
+- ✅ **Segmentos/filtros salvos** — construtor de condições + contagem real
 
 ## P3 — Multichannel completo
 - ✅ **Webhook da Evolution** (`/api/webhooks/evolution`) — recebe mensagem, mídia,
@@ -70,24 +70,34 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
 - ✅ **Envio unificado** (`src/lib/atendimento/outbound.ts`) — texto e mídia por
       Evolution **ou** Cloud API, escolhendo o canal da conversa
 - ✅ Webhook da Meta (WhatsApp/Instagram/Facebook/Messenger) — já existia
-- 🔲 Widget de site (live-chat) + pré-chat renderizado no site
-- 🔲 Telegram · E-mail (IMAP/SMTP) · SMS · API channel
-      (a caixa de entrada já aceita esses canais no cadastro)
+- ✅ **Widget de site** (live-chat) — script embutível com Shadow DOM, API
+      pública com CORS, pré-chat, aviso fora do horário
+- ✅ **Telegram** (Bot API) — envio e recebimento, mídia copiada para o storage
+- ✅ **E-mail** (Resend, com threading por `Message-ID`) · **SMS** (adaptador
+      genérico) · **canal via API** — 🔑 todos sem credencial cadastrada
 
 ## P4 — Avançado / plataforma
 - ✅ **Campanhas**: cadastro, seletor de público com cálculo real e **worker de
       envio** em `/api/atendimento/jobs` — 🔑 falta ligar o cron
 - ✅ **Central de Ajuda**: portais, categorias, artigos, editor markdown com
       pré-visualização, publicar/despublicar/arquivar
-- 🧩 Webhooks · Tokens de API · Registro de auditoria (telas honestas de "falta")
-- 🔲 Integrações (Slack, Dialogflow) + Aplicativos do painel
-- 🔲 Papéis personalizados (permissões granulares) + billing
+- ✅ **Webhooks de saída** (HMAC, auto-desativação após 10 falhas) — 🟡 nenhum
+      evento os dispara ainda
+- ✅ **Tokens de API** (só hash no banco) — 🟡 sem API pública que os valide
+- ✅ **Registro de auditoria** — 🟡 instrumentado em 3 ações apenas
+- ✅ **Templates de WhatsApp** — cadastro, sincronizar e enviar à Meta
+- ✅ **Integrações** (Slack, Dialogflow, Tradutor) + **apps do painel** — 🟡
+      credenciais guardadas, nada é chamado em evento ainda
+- ✅ **Papéis personalizados** com catálogo de permissões — 🟡 quem controla
+      acesso de fato ainda é a RLS, não o papel
+- ✅ **Conta**: nome, idioma, fuso, auto-resolver, ocultar nome do agente
 
 ## P5 — IA (Capitão / Agentes IA)
-- 🧩 Tela de Agentes IA com os 3 recursos planejados e o que falta para ligar
-- 🔲 Copiloto (sugestões ao atendente) — 🔑 exige `ANTHROPIC_API_KEY`
-- 🔲 Bot de triagem por intenção · auto-resolução
-- 🔲 Base de conhecimento p/ IA (usa os artigos da Central de Ajuda)
+- ✅ **Copiloto** dentro da conversa: sugerir resposta, resumir, classificar
+      intenção — com cache e regras antialucinação — 🔑 exige `ANTHROPIC_API_KEY`
+- ✅ Tela de IA com config por caixa, playground e histórico de uso
+- ✅ **Base de conhecimento** alimentada pelos artigos publicados
+- 🔲 Triagem e auto-resposta rodando sozinhas (falta o gancho no webhook)
 
 ---
 
@@ -101,6 +111,12 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
    horário comercial, SLA, CSAT
 5. **Onda E (feito)**: webhook + envio Evolution, campanhas, central de ajuda,
    tema claro/escuro
-6. **Onda F (próxima)**: widget de site, Telegram/e-mail/SMS, IA, webhooks de
-   saída e tokens de API. (Gancho das automações, job de SLA, worker de
-   campanha e cron de snooze já entraram nesta onda — ver `/api/atendimento/jobs`.)
+6. **Onda F (feito)**: gancho das automações, jobs de fundo (snooze/SLA/campanha),
+   webhooks de saída, tokens de API, auditoria, widget de site, IA
+7. **Onda G (feito)**: participantes, marcar não lida, busca na thread, apagar
+   mensagem, som e notificação, Telegram, e-mail/SMS/API, templates de WhatsApp,
+   segmentos salvos, avatar, portal público da Central de Ajuda, papéis,
+   integrações e configurações da conta
+8. **Onda H (próxima)**: instrumentar auditoria e webhooks em todos os eventos,
+   fazer os papéis mandarem de verdade (reescrever a RLS), triagem por IA
+   automática, anexo MIME no e-mail, domínio próprio do portal de ajuda

@@ -26,6 +26,8 @@ export function Composer({
   onAplicarMacro,
   bloqueado,
   avisoBloqueio,
+  injetarTexto,
+  onTextoInjetado,
 }: {
   cannedResponses: CannedResponse[];
   macros: AtendimentoMacro[];
@@ -44,6 +46,9 @@ export function Composer({
   onAplicarMacro: (macroId: string) => void;
   bloqueado?: boolean;
   avisoBloqueio?: string;
+  /** Texto vindo de fora (sugestão do copiloto) para cair no campo. */
+  injetarTexto?: string | null;
+  onTextoInjetado?: () => void;
 }) {
   const [texto, setTexto] = useState("");
   const [modo, setModo] = useState<"resposta" | "nota">("resposta");
@@ -58,6 +63,16 @@ export function Composer({
   useEffect(() => {
     return () => { arquivos.forEach((a) => a.preview && URL.revokeObjectURL(a.preview)); };
   }, [arquivos]);
+
+  // Sugestão do copiloto entra como resposta ao cliente, no fim do que já
+  // estiver escrito — nunca sobrescreve o que o atendente digitou.
+  useEffect(() => {
+    if (!injetarTexto) return;
+    setModo("resposta");
+    setTexto((t) => (t.trim() ? `${t.trimEnd()}\n\n${injetarTexto}` : injetarTexto));
+    requestAnimationFrame(() => taRef.current?.focus());
+    onTextoInjetado?.();
+  }, [injetarTexto, onTextoInjetado]);
 
   // Atalhos do composer: Alt+N alterna nota interna.
   useEffect(() => {

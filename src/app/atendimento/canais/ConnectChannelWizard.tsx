@@ -16,12 +16,15 @@ import {
   Check,
   AlertTriangle,
   ArrowLeft,
+  Send,
 } from "lucide-react";
 
-// As três formas de conectar um WhatsApp, com os trade-offs explícitos.
+// As formas de conectar um canal, com os trade-offs explícitos.
 // A escolha é de negócio, não técnica — por isso a tela mostra o que cada
 // caminho custa (risco de bloqueio, perder o app, burocracia na Meta) em
 // vez de só listar campos de formulário.
+// Três caminhos são de WhatsApp; o quarto é o Telegram, que não concorre
+// com eles (é outra rede) e por isso aparece na mesma lista.
 const OPTIONS: {
   provider: ChannelProvider;
   titulo: string;
@@ -76,6 +79,23 @@ const OPTIONS: {
     contras: [
       "Exige aprovação como Tech Provider na Meta (leva semanas)",
       "Não sincroniza conversas em grupo nem chamadas",
+    ],
+  },
+  {
+    provider: "telegram_bot",
+    titulo: "Telegram",
+    subtitulo: "Bot criado no @BotFather",
+    icon: Send,
+    destaque: "Oficial e gratuito",
+    pros: [
+      "API oficial, gratuita e sem risco de bloqueio",
+      "Conecta em minutos: basta o token do bot",
+      "Aceita foto, vídeo, áudio e documento",
+    ],
+    contras: [
+      "É outra rede — não atende quem só usa WhatsApp",
+      "O cliente precisa iniciar a conversa com o bot",
+      "O Telegram não informa o telefone do contato",
     ],
   },
 ];
@@ -176,7 +196,7 @@ export function ConnectChannelWizard({ webhookBase }: { webhookBase: string }) {
   return (
     <>
       <Button variant="gold" onClick={() => setOpen(true)}>
-        <Plus size={16} /> Conectar WhatsApp
+        <Plus size={16} /> Conectar canal
       </Button>
 
       {open && (
@@ -201,7 +221,7 @@ export function ConnectChannelWizard({ webhookBase }: { webhookBase: string }) {
                   </button>
                 )}
                 <h2 className="font-display text-xl text-arini dark:text-gold truncate">
-                  {chosen ? chosen.titulo : "Como você quer conectar o WhatsApp?"}
+                  {chosen ? chosen.titulo : "Qual canal você quer conectar?"}
                 </h2>
               </div>
               <button onClick={close} className="text-muted-foreground hover:text-arini">
@@ -213,8 +233,8 @@ export function ConnectChannelWizard({ webhookBase }: { webhookBase: string }) {
               {!chosen ? (
                 <>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Três caminhos, com trocas diferentes. Dá para ter mais de um número conectado,
-                    cada um do seu jeito.
+                    Três caminhos para o WhatsApp, com trocas diferentes, mais o Telegram. Dá para
+                    ter vários canais conectados ao mesmo tempo, cada um do seu jeito.
                   </p>
                   <div className="grid md:grid-cols-3 gap-3">
                     {OPTIONS.map((o) => (
@@ -237,6 +257,7 @@ export function ConnectChannelWizard({ webhookBase }: { webhookBase: string }) {
                   {provider === "cloud_api_coexistence" && (
                     <CoexistenceFields webhookBase={webhookBase} />
                   )}
+                  {provider === "telegram_bot" && <TelegramFields />}
 
                   {erro && (
                     <div className="text-sm bg-red-50 text-red-800 border border-red-200 rounded-md px-3 py-2">
@@ -301,6 +322,46 @@ function EvolutionFields({ webhookBase }: { webhookBase: string }) {
         </p>
       </div>
       <WebhookHint url={`${webhookBase}/api/webhooks/evolution`} />
+    </>
+  );
+}
+
+// Telegram: só o token do BotFather. O resto (nome do bot, @usuário e o
+// webhook) o sistema descobre e configura sozinho ao clicar em conectar —
+// por isso aqui não há WebhookHint: a URL só existe depois de o canal ter
+// um id, já que ela carrega ?canal=<id>.
+function TelegramFields() {
+  return (
+    <>
+      <div className="rounded-md bg-muted p-3 text-xs space-y-1.5">
+        <div className="font-medium text-arini dark:text-gold">Como criar o bot</div>
+        <ol className="list-decimal ml-4 space-y-1 text-muted-foreground">
+          <li>
+            No Telegram, abra a conversa com <strong>@BotFather</strong>.
+          </li>
+          <li>
+            Envie <code>/newbot</code> e escolha um nome e um @usuário para o bot.
+          </li>
+          <li>Copie o token que ele devolve e cole abaixo.</li>
+        </ol>
+        <p className="text-muted-foreground">
+          Depois de conectar, o webhook é registrado automaticamente — não é preciso configurar nada
+          no Telegram.
+        </p>
+      </div>
+      <div>
+        <Label>Token do bot*</Label>
+        <Input
+          name="bot_token"
+          required
+          type="password"
+          placeholder="123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          O token dá controle total do bot — trate como senha. Quem fala com o bot precisa iniciar a
+          conversa: o Telegram não deixa o bot escrever primeiro.
+        </p>
+      </div>
     </>
   );
 }

@@ -38,7 +38,8 @@ const STATUS_CLS: Record<CampanhaStatus, string> = {
 const ORIGEM_LABEL: Record<LeadOrigin, string> = {
   instagram: "Instagram", facebook: "Facebook", site: "Site", whatsapp: "WhatsApp",
   ligacao: "Ligação", indicacao: "Indicação", trafego_pago: "Tráfego pago",
-  placa: "Placa", portal: "Portal", tiktok: "TikTok", messenger: "Messenger", outros: "Outros",
+  placa: "Placa", portal: "Portal", tiktok: "TikTok", messenger: "Messenger",
+  telegram: "Telegram", email: "E-mail", outros: "Outros",
 };
 
 function BadgeStatus({ status }: { status: CampanhaStatus }) {

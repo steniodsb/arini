@@ -259,6 +259,77 @@ export async function uploadPropertyCover(
   return { url, path: key };
 }
 
+/** Limite do avatar (2 MB). Foto de perfil não precisa de mais que isso. */
+export const MAX_AVATAR_MB = 2;
+const MAX_AVATAR_BYTES = MAX_AVATAR_MB * 1024 * 1024;
+
+/**
+ * Sobe (ou troca) a FOTO DO AGENTE.
+ *
+ * Mesmo desenho do uploadPropertyCover: comprime, grava o arquivo novo,
+ * atualiza as colunas do perfil e só então apaga o anterior — se a ordem
+ * fosse invertida, uma falha no upload deixaria o agente sem foto nenhuma.
+ * Sem essa limpeza, cada troca de foto deixaria lixo no bucket para sempre.
+ *
+ * `previousPath` vem de profiles.avatar_path (migration 0034).
+ */
+export async function uploadAvatar(
+  supabase: SupabaseClient,
+  userId: string,
+  file: File,
+  opts: {
+    previousPath?: string | null;
+    onByteProgress?: (loaded: number, total: number) => void;
+  } = {},
+): Promise<{ url: string; key: string }> {
+  const { previousPath = null, onByteProgress } = opts;
+
+  if (!file.type.startsWith("image/")) {
+    throw new Error("selecione um arquivo de imagem (JPG, PNG ou WEBP)");
+  }
+  // Valida ANTES de comprimir: o usuário precisa saber que o arquivo dele
+  // é grande demais, não receber um "deu certo" em cima de outra imagem.
+  if (file.size > MAX_AVATAR_BYTES) {
+    throw new Error(`a imagem tem mais de ${MAX_AVATAR_MB} MB — escolha uma menor`);
+  }
+
+  const comprimida = await compressImageFile(file);
+
+  const { url, key } = await storeMedia(
+    supabase,
+    "property-media",
+    `atendimento/avatares/${userId}`,
+    comprimida,
+    0,
+    (loaded, total) => onByteProgress?.(loaded, total),
+  );
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ avatar_url: url, avatar_path: key })
+    .eq("id", userId);
+  if (error) throw new Error(error.message);
+
+  if (previousPath && previousPath !== key) {
+    await removeStoredFile(supabase, "property-media", previousPath).catch(() => {});
+  }
+  return { url, key };
+}
+
+/** Remove a foto do agente: apaga o arquivo e zera as colunas do perfil. */
+export async function removeAvatar(
+  supabase: SupabaseClient,
+  userId: string,
+  path: string | null,
+): Promise<void> {
+  if (path) await removeStoredFile(supabase, "property-media", path).catch(() => {});
+  const { error } = await supabase
+    .from("profiles")
+    .update({ avatar_url: null, avatar_path: null })
+    .eq("id", userId);
+  if (error) throw new Error(error.message);
+}
+
 /**
  * Remove a foto principal: apaga o arquivo do storage e zera as colunas.
  */

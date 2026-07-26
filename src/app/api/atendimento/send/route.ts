@@ -129,6 +129,9 @@ export async function POST(req: Request) {
     canal,
     channelId: (conv.channel_id as string | null) ?? null,
     destino,
+    // O canal de e-mail precisa do id da conversa para montar o assunto
+    // ("Re: ...") e o Message-ID que mantém a thread do cliente.
+    conversationId,
     texto: textoFinal,
     media: mediaUrl
       ? { url: mediaUrl, tipo, nome: body.mediaNome ?? null, mime: body.mediaMime ?? null }

@@ -25,26 +25,49 @@ type Admin = ReturnType<typeof createSupabaseAdmin>;
 /** Quantos envios por chamada — evita estourar o tempo da requisição. */
 const LOTE_CAMPANHA = 25;
 
-export async function POST(req: Request) {
-  const segredo = process.env.ATENDIMENTO_JOBS_SECRET;
-  if (!segredo) {
-    return NextResponse.json(
-      { error: "ATENDIMENTO_JOBS_SECRET não configurado no servidor" },
-      { status: 503 },
-    );
+/**
+ * Confere o segredo. Aceita dois formatos, porque são dois agendadores
+ * possíveis e não dá para saber onde o projeto vai rodar:
+ *   · cron próprio (VPS/Dokploy) → header `x-jobs-secret`
+ *   · Vercel Cron                → `Authorization: Bearer <CRON_SECRET>`
+ * Devolve o status HTTP a responder, ou null quando está tudo certo.
+ */
+function autorizar(req: Request): { status: number; erro: string } | null {
+  const jobs = process.env.ATENDIMENTO_JOBS_SECRET;
+  const vercel = process.env.CRON_SECRET;
+  if (!jobs && !vercel) {
+    return {
+      status: 503,
+      erro: "ATENDIMENTO_JOBS_SECRET (ou CRON_SECRET, na Vercel) não configurado no servidor",
+    };
   }
-  if (req.headers.get("x-jobs-secret") !== segredo) {
-    return NextResponse.json({ error: "não autorizado" }, { status: 401 });
-  }
+  const header = req.headers.get("x-jobs-secret");
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const ok = (jobs && (header === jobs || bearer === jobs)) || (vercel && bearer === vercel);
+  return ok ? null : { status: 401, erro: "não autorizado" };
+}
 
+async function executar() {
   const admin = createSupabaseAdmin();
   const [despertadas, sla, campanhas] = await Promise.all([
     despertarAdiadas(admin),
     marcarViolacoesSla(admin),
     processarCampanhas(admin),
   ]);
-
   return NextResponse.json({ ok: true, despertadas, sla, campanhas });
+}
+
+export async function POST(req: Request) {
+  const negado = autorizar(req);
+  if (negado) return NextResponse.json({ error: negado.erro }, { status: negado.status });
+  return executar();
+}
+
+/** O Vercel Cron só faz GET — mesma proteção, mesmo trabalho. */
+export async function GET(req: Request) {
+  const negado = autorizar(req);
+  if (negado) return NextResponse.json({ error: negado.erro }, { status: negado.status });
+  return executar();
 }
 
 // ---------------------------------------------------------------------

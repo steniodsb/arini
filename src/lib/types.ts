@@ -35,7 +35,8 @@ export type LeadStage =
 
 export type LeadOrigin =
   | "instagram" | "facebook" | "site" | "whatsapp" | "ligacao"
-  | "indicacao" | "trafego_pago" | "placa" | "portal" | "tiktok" | "messenger" | "outros";
+  | "indicacao" | "trafego_pago" | "placa" | "portal" | "tiktok" | "messenger"
+  | "telegram" | "email" | "outros";
 
 export type ClientType =
   | "comprador" | "vendedor" | "locatario" | "locador" | "proprietario"
@@ -335,7 +336,9 @@ export const LEAD_STAGES: { key: LeadStage; label: string; color: string }[] = [
 // =====================================================================
 // Atendimento omnichannel (conversas + mensagens) — migration 0025
 // =====================================================================
-export type ConversationChannel = "whatsapp" | "instagram" | "facebook" | "messenger";
+export type ConversationChannel =
+  | "whatsapp" | "instagram" | "facebook" | "messenger"
+  | "telegram" | "email" | "sms" | "site" | "api";
 export type ConversationStatus = "aberta" | "pendente" | "resolvida" | "adiada";
 export type ConversationPriority = "baixa" | "media" | "alta" | "urgente";
 export type MessageDirecao = "in" | "out";
@@ -375,6 +378,11 @@ export interface Conversation {
   sla_first_response_due: string | null;
   sla_resolution_due: string | null;
   sla_violado: boolean;
+  /** O agente marcou de volta como não lida — o contador não serve p/ isso. */
+  marcada_nao_lida: boolean;
+  /** Intenção e resumo detectados pela IA (0034). */
+  ia_intencao: string | null;
+  ia_resumo: string | null;
 }
 
 export interface Message {
@@ -396,6 +404,9 @@ export interface Message {
   media_tamanho: number | null;
   reply_to_id: string | null;
   mentions: string[];
+  /** Apagar é soft delete: o rastro fica, o conteúdo some (ver 0035). */
+  apagada_em: string | null;
+  apagada_por: string | null;
 }
 
 export interface CannedResponse {
@@ -653,11 +664,118 @@ export const CHANNEL_LABELS: Record<ConversationChannel, string> = {
   instagram: "Instagram",
   facebook: "Facebook",
   messenger: "Messenger",
+  telegram: "Telegram",
+  email: "E-mail",
+  sms: "SMS",
+  site: "Chat do site",
+  api: "API",
 };
+
+// ===== Onda F — plataforma (migration 0034) ==========================
+
+export type WebhookEvent =
+  | "conversa_criada" | "conversa_atualizada" | "conversa_resolvida"
+  | "mensagem_criada" | "contato_criado";
+
+export const WEBHOOK_EVENT_LABELS: Record<WebhookEvent, string> = {
+  conversa_criada: "Conversa criada",
+  conversa_atualizada: "Conversa atualizada",
+  conversa_resolvida: "Conversa resolvida",
+  mensagem_criada: "Mensagem criada",
+  contato_criado: "Contato criado",
+};
+
+export interface AtendimentoWebhook {
+  id: string;
+  nome: string;
+  url: string;
+  secret: string;
+  eventos: WebhookEvent[];
+  ativo: boolean;
+  ultimo_status: number | null;
+  ultimo_erro: string | null;
+  ultimo_envio_em: string | null;
+  falhas_seguidas: number;
+  criado_por: string | null;
+  created_at: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  webhook_id: string;
+  evento: string;
+  payload: Record<string, unknown> | null;
+  status: number | null;
+  erro: string | null;
+  duracao_ms: number | null;
+  created_at: string;
+}
+
+export type ApiScope = "leitura" | "escrita" | "admin";
+
+export const API_SCOPE_LABELS: Record<ApiScope, string> = {
+  leitura: "Leitura (listar conversas, contatos, relatórios)",
+  escrita: "Escrita (enviar mensagem, criar contato, mudar status)",
+  admin: "Administração (canais, agentes, configurações)",
+};
+
+export interface ApiToken {
+  id: string;
+  nome: string;
+  prefixo: string;
+  escopos: ApiScope[];
+  ultimo_uso_em: string | null;
+  expira_em: string | null;
+  revogado: boolean;
+  criado_por: string | null;
+  created_at: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  ator_id: string | null;
+  ator_nome: string | null;
+  acao: string;
+  entidade: string;
+  entidade_id: string | null;
+  detalhes: Record<string, unknown> | null;
+  ip: string | null;
+  created_at: string;
+}
+
+export interface WidgetSession {
+  id: string;
+  inbox_id: string;
+  contact_token: string;
+  conversation_id: string | null;
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+  pre_chat: Record<string, string>;
+  user_agent: string | null;
+  referrer: string | null;
+  ultima_atividade: string;
+  created_at: string;
+}
+
+export type IaSuggestionType = "resposta" | "resumo" | "intencao";
+
+export interface IaSugestao {
+  id: string;
+  conversation_id: string;
+  baseada_em: string | null;
+  tipo: IaSuggestionType;
+  conteudo: string;
+  modelo: string | null;
+  usada: boolean;
+  created_at: string;
+}
 
 // ===== Canais do Atendimento (como o WhatsApp é conectado) ===========
 // Três modos, com trade-offs bem diferentes — ver 0027_atendimento_canais.sql.
-export type ChannelProvider = "evolution" | "cloud_api" | "cloud_api_coexistence";
+export type ChannelProvider =
+  | "evolution" | "cloud_api" | "cloud_api_coexistence"
+  | "telegram_bot" | "email_smtp" | "sms_generico" | "widget" | "api_generica";
 
 export type ChannelStatus =
   | "desconectado"
@@ -684,6 +802,11 @@ export const CHANNEL_PROVIDER_LABELS: Record<ChannelProvider, string> = {
   evolution: "Evolution API (QR Code)",
   cloud_api: "API Oficial da Meta",
   cloud_api_coexistence: "API Oficial — mantendo o número no celular",
+  telegram_bot: "Telegram (Bot API)",
+  email_smtp: "E-mail (SMTP + IMAP)",
+  sms_generico: "SMS (provedor genérico)",
+  widget: "Chat do site (widget)",
+  api_generica: "Canal via API",
 };
 
 export const CHANNEL_STATUS_LABELS: Record<ChannelStatus, string> = {
@@ -703,7 +826,8 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
 
 export const LEAD_ORIGINS: LeadOrigin[] = [
   "instagram","facebook","site","whatsapp","ligacao",
-  "indicacao","trafego_pago","placa","portal","tiktok","messenger","outros"
+  "indicacao","trafego_pago","placa","portal","tiktok","messenger",
+  "telegram","email","outros"
 ];
 
 export const CLIENT_TYPES: ClientType[] = [
@@ -824,5 +948,129 @@ export interface MarketingMedia {
   url: string;
   storage_path: string | null;
   ordem: number;
+  created_at: string;
+}
+
+
+// =====================================================================
+// Onda G — participantes, templates, papéis, integrações (migration 0035)
+// =====================================================================
+
+export interface ConversationParticipant {
+  conversation_id: string;
+  profile_id: string;
+  created_at: string;
+}
+
+export type TemplateCategory = "MARKETING" | "UTILITY" | "AUTHENTICATION";
+export type TemplateStatus =
+  | "local" | "PENDING" | "APPROVED" | "REJECTED" | "PAUSED" | "DISABLED";
+
+export const TEMPLATE_CATEGORY_LABELS: Record<TemplateCategory, string> = {
+  MARKETING: "Marketing (promoção, novidade)",
+  UTILITY: "Utilidade (confirmação, atualização de pedido)",
+  AUTHENTICATION: "Autenticação (código de verificação)",
+};
+
+export const TEMPLATE_STATUS_LABELS: Record<TemplateStatus, string> = {
+  local: "Só aqui (não enviado à Meta)",
+  PENDING: "Em análise na Meta",
+  APPROVED: "Aprovado",
+  REJECTED: "Rejeitado",
+  PAUSED: "Pausado pela Meta",
+  DISABLED: "Desativado",
+};
+
+export interface WhatsappTemplate {
+  id: string;
+  channel_id: string | null;
+  nome: string;
+  idioma: string;
+  categoria: TemplateCategory;
+  status: TemplateStatus;
+  componentes: Record<string, unknown>[];
+  corpo: string | null;
+  variaveis: number;
+  meta_id: string | null;
+  motivo_rejeicao: string | null;
+  sincronizado_em: string | null;
+  criado_por: string | null;
+  created_at: string;
+}
+
+/** Catálogo de permissões oferecido na tela de papéis. */
+export const PERMISSOES: { chave: string; label: string; grupo: string }[] = [
+  { chave: "conversa:ver_todas", label: "Ver todas as conversas", grupo: "Conversas" },
+  { chave: "conversa:ver_proprias", label: "Ver apenas as próprias e as não atribuídas", grupo: "Conversas" },
+  { chave: "conversa:atribuir", label: "Atribuir conversa a outro agente", grupo: "Conversas" },
+  { chave: "conversa:excluir", label: "Excluir conversa", grupo: "Conversas" },
+  { chave: "contato:ver", label: "Ver contatos", grupo: "Contatos" },
+  { chave: "contato:editar", label: "Criar e editar contatos", grupo: "Contatos" },
+  { chave: "contato:excluir", label: "Excluir contatos", grupo: "Contatos" },
+  { chave: "relatorio:ver", label: "Ver relatórios", grupo: "Relatórios" },
+  { chave: "relatorio:exportar", label: "Exportar relatórios", grupo: "Relatórios" },
+  { chave: "config:ver", label: "Ver configurações", grupo: "Configurações" },
+  { chave: "config:editar", label: "Editar configurações", grupo: "Configurações" },
+  { chave: "canal:gerenciar", label: "Conectar e desconectar canais", grupo: "Configurações" },
+  { chave: "agente:gerenciar", label: "Gerenciar agentes e equipes", grupo: "Configurações" },
+];
+
+export interface AtendimentoRole {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  permissoes: string[];
+  sistema: boolean;
+  created_at: string;
+}
+
+export type IntegrationType =
+  | "slack" | "dialogflow" | "webhook_app" | "dashboard_app" | "google_translate";
+
+export const INTEGRATION_LABELS: Record<IntegrationType, string> = {
+  slack: "Slack — espelha as conversas num canal",
+  dialogflow: "Dialogflow — bot de triagem",
+  webhook_app: "Aplicativo via webhook",
+  dashboard_app: "Aplicativo do painel (iframe)",
+  google_translate: "Google Tradutor",
+};
+
+export interface AtendimentoIntegration {
+  id: string;
+  tipo: IntegrationType;
+  nome: string;
+  config: Record<string, string>;
+  ativo: boolean;
+  ultimo_erro: string | null;
+  created_at: string;
+}
+
+export interface DashboardApp {
+  id: string;
+  nome: string;
+  url: string;
+  ativo: boolean;
+  ordem: number;
+  created_at: string;
+}
+
+export interface AtendimentoSettings {
+  id: boolean;
+  nome_conta: string;
+  idioma: string;
+  fuso: string;
+  auto_resolver_dias: number;
+  ocultar_nome_agente: boolean;
+  notificacao_som: boolean;
+  logo_url: string | null;
+  updated_at: string;
+}
+
+export interface ArticleVote {
+  id: string;
+  article_id: string;
+  util: boolean;
+  comentario: string | null;
+  visitante_token: string | null;
   created_at: string;
 }

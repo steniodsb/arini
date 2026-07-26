@@ -27,6 +27,10 @@ export function ChannelConnection({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isEvolution = canal.provedor === "evolution";
+  // O Telegram não usa QR nem a Graph API da Meta: conectar é validar o
+  // token do bot e registrar o webhook. Sem esta distinção a tela prometia
+  // "validar a conexão com a Meta" para um canal que nada tem com a Meta.
+  const isTelegram = canal.provedor === "telegram_bot";
 
   const chamar = useCallback(
     async (acao: "conectar" | "status" | "desconectar") => {
@@ -125,12 +129,18 @@ export function ChannelConnection({
         )}
         <div className="min-w-0">
           <h2 className="font-medium text-arini dark:text-gold">
-            {isEvolution ? "Conectar lendo o QR Code" : "Validar a conexão com a Meta"}
+            {isEvolution
+              ? "Conectar lendo o QR Code"
+              : isTelegram
+                ? "Ativar o bot do Telegram"
+                : "Validar a conexão com a Meta"}
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             {isEvolution
               ? "Clique em conectar, abra o WhatsApp no celular em Aparelhos conectados e aponte a câmera para o código."
-              : "Vamos conferir se o token e o número informados respondem na API da Meta."}
+              : isTelegram
+                ? "Vamos conferir o token no Telegram e apontar o webhook do bot para cá — não é preciso configurar nada lá."
+                : "Vamos conferir se o token e o número informados respondem na API da Meta."}
           </p>
         </div>
       </div>
@@ -158,7 +168,7 @@ export function ChannelConnection({
         </div>
       )}
 
-      {!isEvolution && (
+      {!isEvolution && !isTelegram && (
         <div className="rounded-md bg-muted p-3 text-xs">
           <div className="font-medium text-arini dark:text-gold mb-1">Antes de validar</div>
           <p className="text-muted-foreground">
@@ -182,7 +192,7 @@ export function ChannelConnection({
               <RefreshCw size={15} className="animate-spin" /> Conectando…
             </>
           ) : (
-            <>{isEvolution ? "Gerar QR Code" : "Validar conexão"}</>
+            <>{isEvolution ? "Gerar QR Code" : isTelegram ? "Ativar bot" : "Validar conexão"}</>
           )}
         </Button>
         {status === "aguardando_qr" && (
