@@ -33,6 +33,12 @@ export default async function AtendimentoLayout({
             >
               Canais
             </Link>
+            <Link
+              href="/atendimento/relatorios"
+              className="px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors"
+            >
+              Relatórios
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm min-w-0">

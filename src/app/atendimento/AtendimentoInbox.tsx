@@ -116,13 +116,31 @@ export function AtendimentoInbox({
     });
   }, [selectedId, loadMessages]);
 
-  // Polling leve (~12s).
+  // Tempo real: assina inserts de mensagens e mudanças de conversas
+  // (a RLS filtra por atendente). Fallback lento por polling a cada 30s.
   useEffect(() => {
+    const supabase = createSupabaseBrowser();
+    const channel = supabase
+      .channel("atendimento-inbox")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        const m = payload.new as Message;
+        if (m.conversation_id === selectedId) {
+          setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+        }
+        void refreshConversations();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
+        void refreshConversations();
+      })
+      .subscribe();
     const t = setInterval(() => {
       void refreshConversations();
       if (selectedId) void loadMessages(selectedId);
-    }, 12000);
-    return () => clearInterval(t);
+    }, 30000);
+    return () => {
+      clearInterval(t);
+      void supabase.removeChannel(channel);
+    };
   }, [selectedId, loadMessages, refreshConversations]);
 
   useEffect(() => {
