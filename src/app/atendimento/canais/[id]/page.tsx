@@ -54,7 +54,7 @@ export default async function CanalPage({ params }: { params: { id: string } }) 
 
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="font-display text-2xl text-arini truncate">{canal.nome}</h1>
+            <h1 className="font-display text-2xl text-arini dark:text-gold truncate">{canal.nome}</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               {CHANNEL_PROVIDER_LABELS[canal.provedor]}
               {canal.telefone ? ` · ${canal.telefone}` : ""}
@@ -75,7 +75,7 @@ export default async function CanalPage({ params }: { params: { id: string } }) 
         <ChannelConnection canal={canal} webhookUrl={webhookUrl} />
 
         <div className="rounded-lg border p-4 text-sm space-y-2">
-          <h2 className="font-medium text-arini">Detalhes</h2>
+          <h2 className="font-medium text-arini dark:text-gold">Detalhes</h2>
           <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 text-xs">
             <dt className="text-muted-foreground">Criado em</dt>
             <dd>{formatDateTimeBR(canal.created_at)}</dd>

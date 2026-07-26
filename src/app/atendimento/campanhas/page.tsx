@@ -1,16 +1,28 @@
 import { requireAtendimentoUser } from "@/lib/atendimento-auth";
-import { Megaphone } from "lucide-react";
+import { createSupabaseServer } from "@/lib/supabase/server";
+import { CampaignsManager } from "./CampaignsManager";
+import type { Campanha, CampanhaAlvoResumo, CaixaOpcao } from "./tipos";
+
+export const dynamic = "force-dynamic";
 
 export default async function CampanhasPage() {
-  await requireAtendimentoUser();
+  const { profile } = await requireAtendimentoUser();
+  const supabase = createSupabaseServer();
+
+  const [campanhasRes, caixasRes, alvosRes] = await Promise.all([
+    supabase.from("atendimento_campaigns").select("*").order("created_at", { ascending: false }),
+    supabase.from("atendimento_inboxes").select("id, nome, canal").order("nome"),
+    // Só o par (campanha, status): usamos para contar o público sem
+    // trazer milhares de linhas de alvo para a tela.
+    supabase.from("atendimento_campaign_targets").select("campaign_id, status"),
+  ]);
+
   return (
-    <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-3">
-      <Megaphone size={40} className="text-muted-foreground/40" />
-      <h1 className="font-display text-xl text-arini">Campanhas</h1>
-      <p className="text-sm text-muted-foreground max-w-sm">
-        Disparo de mensagens em massa (WhatsApp) e campanhas ao vivo no site.
-        Em desenvolvimento (Onda E).
-      </p>
-    </div>
+    <CampaignsManager
+      initialCampanhas={(campanhasRes.data ?? []) as Campanha[]}
+      caixas={(caixasRes.data ?? []) as CaixaOpcao[]}
+      alvos={(alvosRes.data ?? []) as CampanhaAlvoResumo[]}
+      usuarioId={profile.id}
+    />
   );
 }

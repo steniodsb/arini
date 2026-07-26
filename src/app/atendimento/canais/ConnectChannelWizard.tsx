@@ -96,9 +96,9 @@ function OptionCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <Icon size={20} className="text-arini shrink-0" />
+          <Icon size={20} className="text-arini dark:text-gold shrink-0" />
           <div className="min-w-0">
-            <div className="font-semibold text-arini text-sm truncate">{opt.titulo}</div>
+            <div className="font-semibold text-arini dark:text-gold text-sm truncate">{opt.titulo}</div>
             <div className="text-[11px] text-muted-foreground truncate">{opt.subtitulo}</div>
           </div>
         </div>
@@ -185,7 +185,7 @@ export function ConnectChannelWizard({ webhookBase }: { webhookBase: string }) {
           onClick={close}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-3xl my-8"
+            className="bg-card text-card-foreground rounded-xl shadow-2xl w-full max-w-3xl my-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b">
@@ -200,7 +200,7 @@ export function ConnectChannelWizard({ webhookBase }: { webhookBase: string }) {
                     <ArrowLeft size={18} />
                   </button>
                 )}
-                <h2 className="font-display text-xl text-arini truncate">
+                <h2 className="font-display text-xl text-arini dark:text-gold truncate">
                   {chosen ? chosen.titulo : "Como você quer conectar o WhatsApp?"}
                 </h2>
               </div>
@@ -265,7 +265,7 @@ export function ConnectChannelWizard({ webhookBase }: { webhookBase: string }) {
 function WebhookHint({ url }: { url: string }) {
   return (
     <div className="rounded-md bg-muted p-3">
-      <div className="text-xs font-medium text-arini mb-1">URL do webhook</div>
+      <div className="text-xs font-medium text-arini dark:text-gold mb-1">URL do webhook</div>
       <code className="text-[11px] font-mono break-all">{url}</code>
       <p className="text-xs text-muted-foreground mt-1">
         Configure este endereço no provedor para as mensagens chegarem aqui.

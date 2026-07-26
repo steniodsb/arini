@@ -117,6 +117,40 @@ async function storeMedia(
 }
 
 /**
+ * Sobe UM anexo do atendimento (imagem, áudio, vídeo ou documento) e
+ * devolve a URL pública. Não grava em tabela nenhuma — quem registra a
+ * mensagem é a rota /api/atendimento/send, que precisa do envio externo
+ * acontecer junto. Imagens são comprimidas antes de subir.
+ */
+export async function uploadAtendimentoMedia(
+  supabase: SupabaseClient,
+  conversationId: string,
+  file: File,
+  onByteProgress?: (loaded: number, total: number) => void,
+): Promise<{ url: string; key: string; nome: string; mime: string; tamanho: number }> {
+  let f = file;
+  if (f.type.startsWith("image/")) f = await compressImageFile(f);
+  const { url, key } = await storeMedia(
+    supabase, "property-media", `atendimento/${conversationId}`, f, 0, onByteProgress,
+  );
+  return {
+    url,
+    key,
+    nome: file.name,
+    mime: f.type || "application/octet-stream",
+    tamanho: f.size,
+  };
+}
+
+/** Traduz o MIME do arquivo para o `tipo` da tabela messages. */
+export function tipoDaMensagemPeloMime(mime: string): "imagem" | "audio" | "video" | "documento" {
+  if (mime.startsWith("image/")) return "imagem";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("video/")) return "video";
+  return "documento";
+}
+
+/**
  * Faz upload de uma lista de arquivos para o bucket property-media e
  * registra cada um em property_media. Robusto: tenta cada arquivo, faz
  * 1 retry, e nunca aborta o lote por causa de um arquivo que falhou.

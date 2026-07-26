@@ -13,7 +13,7 @@ export default async function RespostasPage() {
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6 overflow-y-auto h-full">
       <div>
-        <h1 className="font-display text-2xl text-arini">Respostas rápidas</h1>
+        <h1 className="font-display text-2xl text-arini dark:text-gold">Respostas rápidas</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Mensagens prontas que os atendentes inserem na conversa com um clique.
         </p>

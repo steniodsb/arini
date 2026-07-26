@@ -12,7 +12,7 @@ export default async function EtiquetasPage() {
   return (
     <div className="p-6 space-y-4">
       <div>
-        <h1 className="font-display text-xl text-arini">Etiquetas</h1>
+        <h1 className="font-display text-xl text-arini dark:text-gold">Etiquetas</h1>
         <p className="text-sm text-muted-foreground mt-1">Catálogo de etiquetas para classificar conversas.</p>
       </div>
       <LabelsManager initial={(data ?? []) as AtendimentoLabel[]} />

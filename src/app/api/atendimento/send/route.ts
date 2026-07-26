@@ -1,21 +1,43 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
-import { sendOutboundText } from "@/lib/whatsapp";
-import type { ConversationChannel, MessageStatus } from "@/lib/types";
+import { enviarMensagem } from "@/lib/atendimento/outbound";
+import type { ConversationChannel, MessageStatus, MessageTipo } from "@/lib/types";
 
 /**
  * Envia uma resposta do atendente numa conversa.
  * - Autentica pela sessão e usa RLS (o usuário só responde conversas que
- *   ele pode ver — do seu setor, ou recepção/diretoria).
+ *   ele pode ver).
  * - Grava a mensagem de saída SEMPRE (mesmo se o envio externo falhar, o
- *   time vê o que foi digitado) e dispara pela Cloud API quando configurada.
+ *   time vê o que foi digitado) e despacha pelo canal conectado da
+ *   conversa — Evolution ou Cloud API, texto ou mídia.
+ *
+ * Body:
+ *   conversationId  obrigatório
+ *   texto           texto da mensagem (opcional se houver mídia)
+ *   interna         true = nota interna (não sai para o cliente)
+ *   mentions        uuid[] de agentes mencionados na nota
+ *   assinar         anexa profiles.assinatura ao final (só resposta)
+ *   replyToId       id da mensagem citada
+ *   mediaUrl/mediaNome/mediaMime/mediaTamanho/tipo  anexo já hospedado
  */
 export async function POST(req: Request) {
   const supabase = createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "não autenticado" }, { status: 401 });
 
-  let body: { conversationId?: string; texto?: string; interna?: boolean };
+  let body: {
+    conversationId?: string;
+    texto?: string;
+    interna?: boolean;
+    mentions?: string[];
+    assinar?: boolean;
+    replyToId?: string | null;
+    mediaUrl?: string;
+    mediaNome?: string;
+    mediaMime?: string;
+    mediaTamanho?: number;
+    tipo?: MessageTipo;
+  };
   try {
     body = await req.json();
   } catch {
@@ -23,22 +45,31 @@ export async function POST(req: Request) {
   }
 
   const conversationId = body.conversationId?.trim();
-  const texto = body.texto?.trim();
+  const texto = body.texto?.trim() || null;
   const interna = body.interna === true;
-  if (!conversationId || !texto) {
-    return NextResponse.json({ error: "conversationId e texto são obrigatórios" }, { status: 400 });
+  const mediaUrl = body.mediaUrl?.trim() || null;
+  const mentions = Array.isArray(body.mentions) ? body.mentions.filter(Boolean) : [];
+  const replyToId = body.replyToId ?? null;
+
+  if (!conversationId) {
+    return NextResponse.json({ error: "conversationId é obrigatório" }, { status: 400 });
+  }
+  if (!texto && !mediaUrl) {
+    return NextResponse.json({ error: "envie um texto ou um anexo" }, { status: 400 });
   }
 
   // RLS garante que o usuário só acessa conversas permitidas.
   const { data: conv, error: convErr } = await supabase
     .from("conversations")
-    .select("id, canal, external_id, contato_telefone, primeira_resposta_em")
+    .select("id, canal, external_id, contato_telefone, primeira_resposta_em, channel_id, status")
     .eq("id", conversationId)
     .maybeSingle();
   if (convErr) return NextResponse.json({ error: convErr.message }, { status: 400 });
   if (!conv) return NextResponse.json({ error: "conversa não encontrada" }, { status: 404 });
 
-  // Nota interna: só registra, nunca envia ao cliente.
+  const tipo: MessageTipo = mediaUrl ? (body.tipo ?? "documento") : "texto";
+
+  // ---------------- Nota interna: só registra ----------------
   if (interna) {
     const { data: nota, error: notaErr } = await supabase
       .from("messages")
@@ -47,23 +78,62 @@ export async function POST(req: Request) {
         direcao: "out",
         remetente: "atendente",
         autor_id: user.id,
-        tipo: "texto",
+        tipo,
         conteudo: texto,
+        media_url: mediaUrl,
+        media_nome: body.mediaNome ?? null,
+        media_mime: body.mediaMime ?? null,
+        media_tamanho: body.mediaTamanho ?? null,
+        reply_to_id: replyToId,
+        mentions,
         interna: true,
         status: "enviada",
       })
       .select("*")
       .single();
     if (notaErr) return NextResponse.json({ error: notaErr.message }, { status: 400 });
+
+    // Menção avisa o colega no sino do sistema (não depende de e-mail).
+    if (mentions.length > 0) {
+      const admin = createSupabaseAdmin();
+      await admin.from("notifications").insert(
+        mentions.map((id) => ({
+          user_id: id,
+          tipo: "atendimento",
+          titulo: "Você foi mencionado numa conversa",
+          mensagem: (texto ?? "").slice(0, 140),
+          link: `/atendimento?c=${conversationId}`,
+        })),
+      );
+    }
+
     return NextResponse.json({ ok: true, message: nota, delivered: null, interna: true });
+  }
+
+  // ---------------- Resposta ao cliente ----------------
+  // Assinatura do agente vai no texto enviado E no que fica gravado, para o
+  // histórico bater exatamente com o que o cliente recebeu.
+  let textoFinal = texto;
+  if (body.assinar && texto) {
+    const { data: perfil } = await supabase
+      .from("profiles").select("assinatura").eq("id", user.id).maybeSingle();
+    const assinatura = (perfil?.assinatura as string | null)?.trim();
+    if (assinatura) textoFinal = `${texto}\n\n${assinatura}`;
   }
 
   const canal = conv.canal as ConversationChannel;
   const destino = conv.contato_telefone ?? conv.external_id;
 
-  // Dispara pela plataforma (admin lê as credenciais em social_integrations).
   const admin = createSupabaseAdmin();
-  const send = await sendOutboundText(admin, canal, destino, texto);
+  const send = await enviarMensagem(admin, {
+    canal,
+    channelId: (conv.channel_id as string | null) ?? null,
+    destino,
+    texto: textoFinal,
+    media: mediaUrl
+      ? { url: mediaUrl, tipo, nome: body.mediaNome ?? null, mime: body.mediaMime ?? null }
+      : null,
+  });
 
   const status: MessageStatus = send.ok ? "enviada" : "falha";
 
@@ -74,8 +144,13 @@ export async function POST(req: Request) {
       direcao: "out",
       remetente: "atendente",
       autor_id: user.id,
-      tipo: "texto",
-      conteudo: texto,
+      tipo,
+      conteudo: textoFinal,
+      media_url: mediaUrl,
+      media_nome: body.mediaNome ?? null,
+      media_mime: body.mediaMime ?? null,
+      media_tamanho: body.mediaTamanho ?? null,
+      reply_to_id: replyToId,
       external_id: send.ok ? send.externalId : null,
       status,
     })
@@ -83,18 +158,23 @@ export async function POST(req: Request) {
     .single();
   if (msgErr) return NextResponse.json({ error: msgErr.message }, { status: 400 });
 
-  // Marca a 1ª resposta do atendente (métrica de tempo de resposta).
-  if (!conv.primeira_resposta_em) {
-    await supabase
-      .from("conversations")
-      .update({ primeira_resposta_em: new Date().toISOString() })
-      .eq("id", conversationId);
-  }
+  // Denormalização do inbox + marcação da 1ª resposta (métrica de SLA).
+  const agora = new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    last_message_at: agora,
+    last_message_preview: textoFinal?.slice(0, 140) ?? `[${tipo}]`,
+  };
+  if (!conv.primeira_resposta_em) patch.primeira_resposta_em = agora;
+  // Responder reabre a conversa adiada — senão ela sumiria da caixa logo
+  // depois de o atendente falar com o cliente.
+  if (conv.status === "adiada") { patch.status = "aberta"; patch.snoozed_until = null; }
+  await supabase.from("conversations").update(patch).eq("id", conversationId);
 
   return NextResponse.json({
     ok: true,
     message: msg,
     delivered: send.ok,
+    via: send.ok ? send.via : null,
     reason: send.ok ? null : send.reason,
   });
 }

@@ -16,7 +16,7 @@ export default async function AgentesPage() {
   return (
     <div className="p-6 max-w-2xl space-y-4">
       <div>
-        <h1 className="font-display text-xl text-arini">Agentes</h1>
+        <h1 className="font-display text-xl text-arini dark:text-gold">Agentes</h1>
         <p className="text-sm text-muted-foreground mt-1">Quem pode acessar o sistema de Atendimento.</p>
       </div>
       <AgentsManager initial={(data ?? []) as never[]} canManage={!!profile.is_admin_central} />

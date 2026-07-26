@@ -1,58 +1,76 @@
-# Atendimento — Checklist de configurações pendentes
+# Atendimento — o que depende de VOCÊ (Stenio)
 
-Tudo que precisa de ação **fora do código** para o sistema de atendimento
-funcionar de ponta a ponta. Marcado com o responsável provável.
+Tudo aqui é ação **fora do código**. O código da Onda A→E está entregue,
+compilando (`npm run build` verde, 45 rotas) e commitado.
+
+Ordem sugerida: 1 → 2 → 3. Sem os itens 1 e 2 o sistema abre mas não recebe
+mensagem nenhuma.
 
 ---
 
-## 1. Infraestrutura e deploy
+## 1. Banco de dados — aplicar as migrações (5 min) ⚠️ BLOQUEANTE
 
-- [ ] **Domínio `atendimento.arininegociosimobiliarios.com.br`** apontando para o
-      MESMO projeto de deploy do site/CRM (não criar projeto novo). O
-      roteamento por subdomínio já está no `middleware.ts`.
-- [ ] **Certificado SSL** emitido para o subdomínio (automático na Vercel após o DNS propagar).
-- [ ] **Variável `NEXT_PUBLIC_SITE_URL`** definida em produção com a URL do
-      atendimento. Sem ela, as URLs de webhook mostradas na tela de canais
-      saem erradas e a Meta/Evolution não conseguem entregar mensagem.
-- [ ] Confirmar que `SUPABASE_SERVICE_ROLE_KEY` está no ambiente de produção
-      (as rotas de canal e o webhook dependem dela).
+Rode no **SQL Editor do Supabase**, nesta ordem, o conteúdo de:
 
-## 2. Banco de dados
+```
+supabase/migrations/0031_atendimento_onda_b.sql
+supabase/migrations/0032_atendimento_helpcenter_campanhas.sql
+```
 
-- [ ] Aplicar a migração **`0027_atendimento_canais.sql`** no Supabase.
-- [ ] Conferir que as migrações `0025` e `0026` já foram aplicadas
-      (conversas/mensagens e a flag `atendimento_access`).
-- [ ] **Liberar acesso dos atendentes**: hoje só a diretoria entra sozinha. Os
-      demais precisam de `profiles.atendimento_access = true`.
-      ⚠️ **Não existe tela para isso ainda** — só via SQL no Supabase:
-      ```sql
-      update public.profiles set atendimento_access = true
-      where email = 'pessoa@arininegociosimobiliarios.com.br';
-      ```
+São idempotentes — pode rodar de novo sem medo. Confira antes que a `0027`,
+`0028`, `0029` e `0030` já foram aplicadas.
 
-## 3. WhatsApp — decidir o caminho
+**Sem isso, quase toda tela nova quebra**, porque as tabelas não existem.
 
-Escolher **uma** das três opções por número. Dá para ter mais de um número,
-cada um do seu jeito.
+Depois, libere o acesso de cada atendente (ainda não há tela para isso):
 
-### Opção A — Evolution API (mais rápido)
+```sql
+update public.profiles set atendimento_access = true
+where email = 'pessoa@arininegociosimobiliarios.com.br';
+```
+
+## 2. Deploy e domínio ⚠️ BLOQUEANTE
+
+- [ ] **`atendimento.arininegociosimobiliarios.com.br`** apontando para o MESMO
+      projeto do site/CRM (não crie projeto novo — o `middleware.ts` já roteia
+      por subdomínio).
+- [ ] SSL do subdomínio (automático na Vercel depois do DNS propagar).
+- [ ] **`NEXT_PUBLIC_SITE_URL`** em produção com a URL do atendimento.
+      Sem ela a URL de webhook mostrada na tela de Canais sai errada e a
+      Evolution/Meta não conseguem entregar mensagem.
+- [ ] Confirmar `SUPABASE_SERVICE_ROLE_KEY` no ambiente de produção.
+- [ ] Confirmar as variáveis do **Cloudflare R2** (`R2_*` +
+      `NEXT_PUBLIC_STORAGE_DRIVER=r2`). É por onde sobem os **anexos** da
+      conversa. Sem R2 ele cai no Supabase Storage — funciona, mas o bucket
+      precisa aceitar os MIMEs de áudio/vídeo/PDF.
+
+## 3. WhatsApp — decidir o caminho 🔑 DECISÃO SUA
+
+Escolha **uma** opção por número (dá para ter vários números, cada um do seu jeito).
+Nada disso eu consigo fazer por você: envolve conta, cartão e aprovação da Meta.
+
+### Opção A — Evolution API (mais rápido, o que eu recomendo para começar)
+
+O código está **pronto dos dois lados** (envio e recebimento, texto e mídia).
 
 - [ ] Subir um servidor da Evolution API (Docker + Postgres + Redis).
 - [ ] **Trocar a `AUTHENTICATION_API_KEY` padrão** — servidores com a chave de
       fábrica são varridos ativamente na internet.
 - [ ] Fixar a tag da imagem (`:v2.3.7`), nunca `:latest`.
 - [ ] HTTPS obrigatório no endereço da Evolution.
-- [ ] Cadastrar o canal no atendimento e ler o QR Code.
-- [ ] ⚠️ **Aceitar formalmente o risco**: é não-oficial, o WhatsApp pode
-      bloquear o número sem aviso e sem recurso. Recomendado ter número reserva.
+- [ ] Cadastrar o canal em **Atendimento › Canais** e ler o QR Code.
+- [ ] (Opcional, mas recomendado) Ligar o **S3/Minio na Evolution**. Sem isso a
+      mídia recebida vem com URL criptografada do WhatsApp e o navegador não
+      exibe — a mensagem chega, mas o anexo não abre.
+- [ ] ⚠️ **Aceitar o risco**: é não-oficial, o WhatsApp pode bloquear o número
+      sem aviso e sem recurso. Tenha um número reserva.
 
-### Opção B — API Oficial da Meta (número migra)
+### Opção B — API Oficial da Meta (o número migra)
 
-- [ ] App criado no Meta for Developers com o produto WhatsApp.
+- [ ] App no Meta for Developers com o produto WhatsApp.
 - [ ] **Business Verification** aprovada.
-- [ ] Token permanente de **System User** (não o token de teste, que expira em 24h).
-- [ ] Webhook apontado para `/api/webhooks/whatsapp` com o mesmo Verify Token
-      cadastrado no sistema.
+- [ ] Token permanente de **System User** (o de teste expira em 24 h).
+- [ ] Webhook em `/api/webhooks/whatsapp` com o mesmo Verify Token do sistema.
 - [ ] App Secret cadastrado (valida a assinatura dos webhooks).
 - [ ] ⚠️ **Avisar a equipe**: o número deixa de funcionar no app do celular.
 
@@ -60,68 +78,69 @@ cada um do seu jeito.
 
 Tudo da Opção B, **mais**:
 
-- [ ] Aprovação como **Tech Provider ou Solution Partner** na Meta — é o
-      pré-requisito que a Meta exige para liberar Coexistence. Leva semanas.
-- [ ] **App Review** com 2 vídeos de demonstração (enviar mensagem e criar template).
-- [ ] **Access Verification** (eleva o limite de onboarding de 10 → 200 clientes).
-- [ ] Implementar o **Embedded Signup** (Facebook Login for Business).
-      ⚠️ Nascer direto no **v4** — o v2 é descontinuado em **15/10/2026**.
-- [ ] Assinar os eventos de webhook `history`, `smb_app_state_sync` e
-      `smb_message_echoes` (são eles que trazem o histórico e o que for
-      respondido pelo celular).
+- [ ] Aprovação como **Tech Provider ou Solution Partner** na Meta. Leva semanas.
+- [ ] **App Review** com 2 vídeos de demonstração.
+- [ ] **Access Verification** (limite de onboarding 10 → 200 clientes).
+- [ ] **Embedded Signup** nascendo direto no **v4** (o v2 morre em 15/10/2026).
+- [ ] Assinar os webhooks `history`, `smb_app_state_sync` e `smb_message_echoes`.
 - [ ] App WhatsApp Business **2.24.17+** no celular.
-- [ ] ⚠️ Ciente das limitações: não sincroniza grupos nem chamadas, e desativa
-      etiquetas/respostas rápidas do app.
+- [ ] ⚠️ Não sincroniza grupos nem chamadas, e desativa etiquetas/respostas
+      rápidas do app.
 
-## 4. Custos a aprovar
+## 4. Custos a aprovar 🔑
 
-- [ ] **Meta (opções B e C)**: cobrança **por mensagem** de template. Mensagens
-      comuns dentro da janela de atendimento aberta são **grátis**.
-      Faturamento no Brasil em **BRL** desde jul/2026.
-- [ ] **Evolution (opção A)**: sem custo por mensagem, mas tem custo de servidor.
+- [ ] **Meta (B e C)**: cobrança **por mensagem de template**. Mensagem comum
+      dentro da janela de atendimento aberta é **grátis**. Faturamento no
+      Brasil em BRL desde jul/2026.
+- [ ] **Evolution (A)**: sem custo por mensagem, só o servidor.
+- [ ] **IA (Onda F)**: para ligar o Copiloto/triagem, precisa de
+      `ANTHROPIC_API_KEY` e aprovar o custo por token.
 
-## 5. Segurança — pendências conhecidas
+## 5. Segurança 🔑
 
-- [ ] **Trocar a senha da conta do Chatwoot** que foi compartilhada em conversa
+- [ ] **Trocar a senha da conta do Chatwoot** compartilhada em conversa
       (`cearini22@gmail.com`).
-- [ ] Definir quem é `admin_central` — hoje só esse perfil cadastra canais e
-      enxerga tokens.
-- [ ] O webhook da Evolution precisa validar o header `Authorization` com o
-      segredo gerado no canal (o segredo já é criado; **a validação no
-      endpoint ainda não foi escrita** — ver seção 6).
+- [ ] Definir quem é `admin_central` — só esse perfil cadastra canais e vê tokens.
 
-## 6. Código — o que ainda NÃO existe
+## 6. Configuração inicial dentro do sistema (10 min, depois do item 1)
 
-Estado real, sem otimismo:
+Nada disso é obrigatório, mas deixa o sistema com a sua cara:
+
+- [ ] **Configurações › Caixas de entrada** — renomear a caixa padrão, escolher
+      os agentes, ligar saudação e mensagem de ausência.
+- [ ] **Configurações › Horário comercial** — conferir seg–sex 8–18 e sáb 8–12.
+- [ ] **Configurações › SLA** — a política "Padrão" nasce com 15 min de primeira
+      resposta e 24 h de resolução. Ajuste se for irreal.
+- [ ] **Configurações › Etiquetas** — o catálogo veio com quente/morno/frio/
+      financiamento/rural.
+- [ ] **Respostas rápidas** e **Macros** — 4 respostas e 1 macro já semeadas.
+
+---
+
+## 7. O que o código ainda NÃO faz (honesto, sem otimismo)
 
 | Item | Situação |
 |---|---|
-| Conectar canal (3 opções) | ✅ construído |
-| Caixa de conversas | ✅ existe (básica) |
-| Enviar/receber texto | ✅ existe |
-| **Webhook da Evolution** (`/api/webhooks/evolution`) | ❌ **não existe** — sem ele a Evolution não entrega mensagem |
-| Envio via Evolution (o `send` só fala Cloud API) | ❌ não integrado |
-| Atribuir conversa a atendente | ❌ |
-| Abas Minhas / Não atribuídas / Todos | ❌ |
-| Filtros, busca, ordenação | ❌ |
-| Contatos como módulo | ❌ |
-| Times, etiquetas, respostas prontas, macros | ❌ |
-| Relatórios, campanhas, central de ajuda, automações | ❌ |
-| Tempo real (hoje é polling de 12s) | ❌ |
-| Anexos e mídia na conversa | ❌ |
-| Notas privadas | ❌ |
+| Receber mensagem pela Evolution | ✅ pronto (`/api/webhooks/evolution`) |
+| Enviar texto e mídia (Evolution e Cloud API) | ✅ pronto |
+| Anexos na conversa (enviar/ver) | ✅ pronto |
+| Prioridade, snooze, ações em massa, menções | ✅ pronto |
+| Macros, automações, SLA, CSAT, horário — **cadastro** | ✅ pronto |
+| Automação **disparar sozinha** | ❌ falta o gancho no webhook |
+| Campanha **enviar de fato** | ❌ falta o worker/cron + template aprovado na Meta |
+| SLA **marcar violação** | ❌ falta o job periódico |
+| Snooze despertar sem ninguém abrir a tela | 🟡 desperta ao carregar a caixa; falta cron |
+| Widget de chat no site | ❌ não existe |
+| Telegram, e-mail, SMS | ❌ só o cadastro da caixa aceita; sem integração |
+| Copiloto / bot de IA | ❌ Onda F |
+| Upload de avatar do agente | ❌ só URL por enquanto |
+| Webhooks de saída, tokens de API, auditoria | ❌ telas de "em construção" |
 
-## 7. ⚠️ Nenhum código foi compilado
+## 8. Verificação feita nesta entrega
 
-**Isto é importante.** Este ambiente não tem Node/npm instalado, então **nada
-do que foi escrito passou por typecheck, build ou execução**. O código foi
-escrito seguindo os tipos e padrões do projeto, mas há risco real de erro de
-compilação.
-
-Antes de subir para produção, rodar na sua máquina:
-
-```bash
-cd arini-app && npm run build
-```
-
-E corrigir o que aparecer.
+- `npx tsc --noEmit` — limpo.
+- `npm run build` — 45 rotas, sem erro.
+- `npx next lint` — só avisos pré-existentes de import não usado.
+- ❗ **Nada foi testado contra o banco real** (as migrações ainda não foram
+  aplicadas) nem contra um WhatsApp conectado. Espere ajustes finos na
+  primeira rodada com dados de verdade.

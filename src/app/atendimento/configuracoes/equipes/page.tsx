@@ -19,7 +19,7 @@ export default async function EquipesPage() {
   return (
     <div className="p-6 space-y-4">
       <div>
-        <h1 className="font-display text-xl text-arini">Equipes</h1>
+        <h1 className="font-display text-xl text-arini dark:text-gold">Equipes</h1>
         <p className="text-sm text-muted-foreground mt-1">Times de atendimento e seus membros.</p>
       </div>
       <TeamsManager

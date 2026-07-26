@@ -82,9 +82,32 @@ export interface Profile {
   avatar_url: string | null;
   /** Libera o sistema de Atendimento (atendimento.<dominio>), independente do setor. */
   atendimento_access: boolean;
+  /** Assinatura anexada às respostas do agente no atendimento. */
+  assinatura: string | null;
+  /** Tema preferido do atendimento (persistido no perfil). */
+  atendimento_tema: ThemePreference;
+  disponibilidade: AgentAvailability;
+  notificacoes: Record<string, boolean>;
   created_at: string;
   updated_at: string;
 }
+
+export type ThemePreference = "claro" | "escuro" | "sistema";
+export type AgentAvailability = "online" | "ocupado" | "ausente" | "offline";
+
+export const AVAILABILITY_LABELS: Record<AgentAvailability, string> = {
+  online: "Disponível",
+  ocupado: "Ocupado",
+  ausente: "Ausente",
+  offline: "Offline",
+};
+
+export const AVAILABILITY_DOT: Record<AgentAvailability, string> = {
+  online: "bg-emerald-500",
+  ocupado: "bg-red-500",
+  ausente: "bg-amber-500",
+  offline: "bg-gray-400",
+};
 
 export interface Property {
   id: string;
@@ -313,7 +336,8 @@ export const LEAD_STAGES: { key: LeadStage; label: string; color: string }[] = [
 // Atendimento omnichannel (conversas + mensagens) — migration 0025
 // =====================================================================
 export type ConversationChannel = "whatsapp" | "instagram" | "facebook" | "messenger";
-export type ConversationStatus = "aberta" | "pendente" | "resolvida";
+export type ConversationStatus = "aberta" | "pendente" | "resolvida" | "adiada";
+export type ConversationPriority = "baixa" | "media" | "alta" | "urgente";
 export type MessageDirecao = "in" | "out";
 export type MessageRemetente = "cliente" | "atendente" | "sistema" | "ia";
 export type MessageTipo =
@@ -338,6 +362,19 @@ export interface Conversation {
   resolvida_por: string | null;
   primeira_resposta_em: string | null;
   created_at: string;
+  /** Equipe responsável (além do agente) — migration 0030. */
+  team_id: string | null;
+  /** Prioridade; nula = sem prioridade definida (padrão do Chatwoot). */
+  prioridade: ConversationPriority | null;
+  /** Quando a conversa adiada volta sozinha para "aberta". */
+  snoozed_until: string | null;
+  inbox_id: string | null;
+  custom_attributes: Record<string, unknown>;
+  waiting_since: string | null;
+  sla_policy_id: string | null;
+  sla_first_response_due: string | null;
+  sla_resolution_due: string | null;
+  sla_violado: boolean;
 }
 
 export interface Message {
@@ -354,6 +391,11 @@ export interface Message {
   status: MessageStatus;
   interna: boolean;
   created_at: string;
+  media_nome: string | null;
+  media_mime: string | null;
+  media_tamanho: number | null;
+  reply_to_id: string | null;
+  mentions: string[];
 }
 
 export interface CannedResponse {
@@ -384,6 +426,225 @@ export interface AtendimentoTeam {
   descricao: string | null;
   created_at: string;
 }
+
+// ===== Caixas de entrada (inboxes) — migration 0031 ==================
+export type InboxChannel =
+  | "whatsapp" | "instagram" | "facebook" | "messenger"
+  | "telegram" | "email" | "sms" | "site" | "api";
+
+export interface AtendimentoInbox {
+  id: string;
+  nome: string;
+  canal: InboxChannel;
+  channel_id: string | null;
+  saudacao_ativa: boolean;
+  saudacao_texto: string | null;
+  mensagem_ausencia: string | null;
+  auto_atribuicao: boolean;
+  auto_atribuicao_limite: number;
+  csat_ativo: boolean;
+  csat_mensagem: string | null;
+  pre_chat_ativo: boolean;
+  pre_chat_campos: PreChatField[];
+  horario_comercial_ativo: boolean;
+  fuso: string;
+  permite_responder_apos_resolver: boolean;
+  bloquear_conversa_encerrada: boolean;
+  widget_cor: string | null;
+  widget_token: string | null;
+  ativo: boolean;
+  created_at: string;
+}
+
+export interface PreChatField {
+  chave: string;
+  rotulo: string;
+  tipo: "texto" | "email" | "telefone" | "lista";
+  obrigatorio: boolean;
+  opcoes?: string[];
+}
+
+export interface BusinessHour {
+  id: string;
+  inbox_id: string;
+  dia_semana: number; // 0 = domingo … 6 = sábado
+  aberto: boolean;
+  abre: string; // "08:00"
+  fecha: string; // "18:00"
+}
+
+export const WEEKDAY_LABELS = [
+  "Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado",
+] as const;
+
+export interface SlaPolicy {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  primeira_resposta_min: number | null;
+  proxima_resposta_min: number | null;
+  resolucao_min: number | null;
+  apenas_horario_comercial: boolean;
+  created_at: string;
+}
+
+export interface CsatResponse {
+  id: string;
+  conversation_id: string;
+  agente_id: string | null;
+  nota: number | null;
+  comentario: string | null;
+  enviado_em: string;
+  respondido_em: string | null;
+}
+
+// ===== Macros e automações ===========================================
+export type MacroActionType =
+  | "atribuir_agente" | "atribuir_equipe" | "mudar_status" | "mudar_prioridade"
+  | "adicionar_etiqueta" | "remover_etiqueta" | "enviar_mensagem" | "adicionar_nota";
+
+export interface MacroAction {
+  tipo: MacroActionType;
+  valor: string;
+}
+
+export const MACRO_ACTION_LABELS: Record<MacroActionType, string> = {
+  atribuir_agente: "Atribuir a um agente",
+  atribuir_equipe: "Atribuir a uma equipe",
+  mudar_status: "Mudar o status",
+  mudar_prioridade: "Mudar a prioridade",
+  adicionar_etiqueta: "Adicionar etiqueta",
+  remover_etiqueta: "Remover etiqueta",
+  enviar_mensagem: "Enviar mensagem ao cliente",
+  adicionar_nota: "Adicionar nota interna",
+};
+
+export interface AtendimentoMacro {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  visibilidade: "global" | "pessoal";
+  acoes: MacroAction[];
+  criado_por: string | null;
+  created_at: string;
+}
+
+export type AutomationEvent =
+  | "conversa_criada" | "conversa_atualizada" | "mensagem_criada" | "conversa_resolvida";
+
+export const AUTOMATION_EVENT_LABELS: Record<AutomationEvent, string> = {
+  conversa_criada: "Quando a conversa é criada",
+  conversa_atualizada: "Quando a conversa é atualizada",
+  mensagem_criada: "Quando uma mensagem chega",
+  conversa_resolvida: "Quando a conversa é resolvida",
+};
+
+export type ConditionOperator =
+  | "igual" | "diferente" | "contem" | "nao_contem" | "existe" | "nao_existe";
+
+export const CONDITION_OPERATOR_LABELS: Record<ConditionOperator, string> = {
+  igual: "é igual a",
+  diferente: "é diferente de",
+  contem: "contém",
+  nao_contem: "não contém",
+  existe: "está preenchido",
+  nao_existe: "está vazio",
+};
+
+export interface AutomationCondition {
+  campo: string;
+  operador: ConditionOperator;
+  valor: string;
+}
+
+export interface AtendimentoAutomation {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  evento: AutomationEvent;
+  condicoes: AutomationCondition[];
+  acoes: MacroAction[];
+  ativo: boolean;
+  criado_por: string | null;
+  created_at: string;
+}
+
+// ===== Atributos personalizados ======================================
+export type CustomAttributeType =
+  | "texto" | "numero" | "link" | "data" | "lista" | "booleano";
+
+export const CUSTOM_ATTRIBUTE_TYPE_LABELS: Record<CustomAttributeType, string> = {
+  texto: "Texto",
+  numero: "Número",
+  link: "Link",
+  data: "Data",
+  lista: "Lista de opções",
+  booleano: "Sim / Não",
+};
+
+export interface CustomAttributeDef {
+  id: string;
+  chave: string;
+  nome: string;
+  descricao: string | null;
+  tipo: CustomAttributeType;
+  opcoes: string[];
+  aplica_a: "conversa" | "contato";
+  created_at: string;
+}
+
+// ===== Empresas, notas de contato e segmentos ========================
+export interface AtendimentoCompany {
+  id: string;
+  nome: string;
+  dominio: string | null;
+  telefone: string | null;
+  email: string | null;
+  site: string | null;
+  cidade: string | null;
+  uf: string | null;
+  setor: string | null;
+  tamanho: string | null;
+  observacoes: string | null;
+  custom_attributes: Record<string, unknown>;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ContactNote {
+  id: string;
+  lead_id: string;
+  texto: string;
+  autor_id: string | null;
+  created_at: string;
+}
+
+export interface AtendimentoSegment {
+  id: string;
+  nome: string;
+  tipo: "conversa" | "contato";
+  filtros: AutomationCondition[];
+  visibilidade: "global" | "pessoal";
+  criado_por: string | null;
+  created_at: string;
+}
+
+export const PRIORITY_LABELS: Record<ConversationPriority, string> = {
+  urgente: "Urgente",
+  alta: "Alta",
+  media: "Média",
+  baixa: "Baixa",
+};
+
+/** Cor de cada prioridade (badge). Ordem de urgência decrescente. */
+export const PRIORITY_ORDER: ConversationPriority[] = ["urgente", "alta", "media", "baixa"];
+
+export const PRIORITY_CLASSES: Record<ConversationPriority, string> = {
+  urgente: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
+  alta: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+  media: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  baixa: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30",
+};
 
 export const CHANNEL_LABELS: Record<ConversationChannel, string> = {
   whatsapp: "WhatsApp",
@@ -435,6 +696,7 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
   aberta: "Aberta",
   pendente: "Pendente",
   resolvida: "Resolvida",
+  adiada: "Adiada",
 };
 
 export const LEAD_ORIGINS: LeadOrigin[] = [

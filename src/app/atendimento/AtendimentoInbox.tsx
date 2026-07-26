@@ -1,62 +1,97 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { uploadAtendimentoMedia, tipoDaMensagemPeloMime, uploadErrorMsg } from "@/lib/upload";
 import {
-  CHANNEL_LABELS,
-  type Conversation,
-  type Message,
-  type CannedResponse,
-  type AgentOption,
-  type ConversationStatus,
+  CHANNEL_LABELS, PRIORITY_LABELS, PRIORITY_ORDER, PRIORITY_CLASSES,
+  CONVERSATION_STATUS_LABELS,
+  type Conversation, type Message, type CannedResponse, type AgentOption,
+  type ConversationStatus, type ConversationPriority, type AtendimentoTeam,
+  type AtendimentoLabel, type AtendimentoMacro, type MacroAction, type Profile,
 } from "@/lib/types";
-import { formatDateTimeBR } from "@/lib/utils";
 import { ContactPanel } from "./ContactPanel";
-import { Send, RefreshCw, Inbox, Check, StickyNote, Zap, X, RotateCcw, Clock, Search } from "lucide-react";
-
-const CHANNEL_DOT: Record<string, string> = {
-  whatsapp: "bg-green-500",
-  instagram: "bg-pink-500",
-  facebook: "bg-blue-600",
-  messenger: "bg-sky-500",
-};
+import { ConversationList } from "./inbox/ConversationList";
+import { MessageThread } from "./inbox/MessageThread";
+import { Composer } from "./inbox/Composer";
+import { SnoozeMenu } from "./inbox/SnoozeMenu";
+import { Modal } from "@/components/atendimento/ui";
+import {
+  RefreshCw, Check, X, RotateCcw, Clock, Search, SlidersHorizontal, ArrowDownUp,
+  CheckSquare, Users2, Flag, Tag as TagIcon, PanelRightClose, PanelRightOpen,
+  AlarmClock, Trash2, MessageSquareDot,
+} from "lucide-react";
 
 type StatusFilter = "todas" | ConversationStatus;
 type AssignFilter = "todas" | "minhas" | "nao_atribuidas";
+type Ordenacao = "recentes" | "antigas" | "prioridade" | "criacao";
+
+const ORDENACAO_LABELS: Record<Ordenacao, string> = {
+  recentes: "Última atividade",
+  antigas: "Mais antigas primeiro",
+  prioridade: "Prioridade",
+  criacao: "Data de criação",
+};
 
 function contactName(c: Conversation) {
   return c.contato_nome || c.contato_telefone || "Contato";
-}
-function initials(name: string) {
-  return name.trim().charAt(0).toUpperCase() || "?";
 }
 
 export function AtendimentoInbox({
   initialConversations,
   cannedResponses,
   agents,
-  currentUserId,
+  teams,
+  labels,
+  macros,
+  currentUser,
 }: {
   initialConversations: Conversation[];
   cannedResponses: CannedResponse[];
   agents: AgentOption[];
-  currentUserId: string;
+  teams: AtendimentoTeam[];
+  labels: AtendimentoLabel[];
+  macros: AtendimentoMacro[];
+  currentUser: Pick<Profile, "id" | "nome" | "assinatura">;
 }) {
+  const params = useSearchParams();
+  const vista = params.get("vista"); // "mencoes" | "nao_atendidas" | null
+  const convParam = params.get("c");
+
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
-  const [selectedId, setSelectedId] = useState<string | null>(initialConversations[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    convParam ?? initialConversations[0]?.id ?? null,
+  );
   const [messages, setMessages] = useState<Message[]>([]);
+  const [minhasMencoes, setMinhasMencoes] = useState<Set<string>>(new Set());
   const [loadingMsgs, setLoadingMsgs] = useState(false);
-  const [texto, setTexto] = useState("");
-  const [mode, setMode] = useState<"resposta" | "nota">("resposta");
   const [sending, setSending] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tipo: "erro" | "info"; texto: string } | null>(null);
+  const [respondendoA, setRespondendoA] = useState<Message | null>(null);
+
+  // Filtros
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todas");
   const [assignFilter, setAssignFilter] = useState<AssignFilter>("todas");
   const [busca, setBusca] = useState("");
-  const [showCanned, setShowCanned] = useState(false);
+  const [canalFiltro, setCanalFiltro] = useState<string>("todos");
+  const [prioridadeFiltro, setPrioridadeFiltro] = useState<string>("todas");
+  const [equipeFiltro, setEquipeFiltro] = useState<string>("todas");
+  const [etiquetaFiltro, setEtiquetaFiltro] = useState<string>("todas");
+  const [ordenacao, setOrdenacao] = useState<Ordenacao>("recentes");
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  const [ordenacaoAberta, setOrdenacaoAberta] = useState(false);
+
+  // Seleção múltipla
+  const [modoSelecao, setModoSelecao] = useState(false);
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+  const [modalMassa, setModalMassa] = useState<null | "agente" | "equipe" | "etiqueta" | "prioridade" | "excluir">(null);
+
+  // Painel de contato
+  const [painelAberto, setPainelAberto] = useState(true);
   const [novaTag, setNovaTag] = useState("");
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const agentName = useMemo(() => {
@@ -65,32 +100,17 @@ export function AtendimentoInbox({
     return m;
   }, [agents]);
 
+  const labelColors = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of labels) m.set(l.nome, l.cor);
+    return m;
+  }, [labels]);
+
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
 
-  // Escopo por status (as abas de atribuição contam dentro dele).
-  const byStatus = useMemo(
-    () => conversations.filter((c) => statusFilter === "todas" || c.status === statusFilter),
-    [conversations, statusFilter],
-  );
-  const counts = useMemo(() => ({
-    minhas: byStatus.filter((c) => c.responsavel_id === currentUserId).length,
-    nao_atribuidas: byStatus.filter((c) => !c.responsavel_id).length,
-    todas: byStatus.length,
-  }), [byStatus, currentUserId]);
-
-  const filtered = useMemo(() => {
-    return byStatus.filter((c) => {
-      if (assignFilter === "minhas" && c.responsavel_id !== currentUserId) return false;
-      if (assignFilter === "nao_atribuidas" && c.responsavel_id) return false;
-      if (busca.trim()) {
-        const q = busca.toLowerCase();
-        const hay = `${c.contato_nome ?? ""} ${c.contato_telefone ?? ""} ${c.last_message_preview ?? ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [byStatus, assignFilter, busca, currentUserId]);
-
+  // ------------------------------------------------------------------
+  // Carregamento
+  // ------------------------------------------------------------------
   const loadMessages = useCallback(async (convId: string) => {
     const supabase = createSupabaseBrowser();
     const { data } = await supabase
@@ -107,9 +127,22 @@ export function AtendimentoInbox({
       .from("conversations")
       .select("*")
       .order("last_message_at", { ascending: false })
-      .limit(200);
+      .limit(300);
     if (data) setConversations(data as Conversation[]);
   }, []);
+
+  // Quais conversas têm nota interna me mencionando (aba "Menções").
+  const loadMencoes = useCallback(async () => {
+    const supabase = createSupabaseBrowser();
+    const { data } = await supabase
+      .from("messages")
+      .select("conversation_id")
+      .contains("mentions", [currentUser.id])
+      .limit(300);
+    setMinhasMencoes(new Set((data ?? []).map((m) => m.conversation_id as string)));
+  }, [currentUser.id]);
+
+  useEffect(() => { void loadMencoes(); }, [loadMencoes]);
 
   function patchLocal(id: string, patch: Partial<Conversation>) {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -118,6 +151,7 @@ export function AtendimentoInbox({
   // Ao selecionar: carrega mensagens e zera o não-lidas.
   useEffect(() => {
     if (!selectedId) return;
+    setRespondendoA(null);
     setLoadingMsgs(true);
     loadMessages(selectedId).finally(() => setLoadingMsgs(false));
     const supabase = createSupabaseBrowser();
@@ -126,8 +160,7 @@ export function AtendimentoInbox({
     });
   }, [selectedId, loadMessages]);
 
-  // Tempo real: assina inserts de mensagens e mudanças de conversas
-  // (a RLS filtra por atendente). Fallback lento por polling a cada 30s.
+  // Tempo real + fallback por polling.
   useEffect(() => {
     const supabase = createSupabaseBrowser();
     const channel = supabase
@@ -136,6 +169,9 @@ export function AtendimentoInbox({
         const m = payload.new as Message;
         if (m.conversation_id === selectedId) {
           setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+        }
+        if (m.mentions?.includes(currentUser.id)) {
+          setMinhasMencoes((prev) => new Set(prev).add(m.conversation_id));
         }
         void refreshConversations();
       })
@@ -151,71 +187,133 @@ export function AtendimentoInbox({
       clearInterval(t);
       void supabase.removeChannel(channel);
     };
-  }, [selectedId, loadMessages, refreshConversations]);
+  }, [selectedId, loadMessages, refreshConversations, currentUser.id]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
-  async function send() {
-    const body = texto.trim();
-    if (!body || !selectedId || sending) return;
-    setSending(true);
-    setNotice(null);
-    const interna = mode === "nota";
-    try {
-      const res = await fetch("/api/atendimento/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: selectedId, texto: body, interna }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setNotice(json.error ?? "Falha ao enviar.");
-      } else {
-        setTexto("");
-        if (json.message) setMessages((prev) => [...prev, json.message as Message]);
-        if (json.delivered === false) {
-          setNotice(`Mensagem registrada, mas NÃO enviada ao cliente (${json.reason}). Conecte um canal em Canais.`);
-        }
-        void refreshConversations();
-      }
-    } catch {
-      setNotice("Erro de rede ao enviar.");
-    } finally {
-      setSending(false);
+  // ------------------------------------------------------------------
+  // Filtros e contadores
+  // ------------------------------------------------------------------
+  const porVista = useMemo(() => {
+    if (vista === "mencoes") return conversations.filter((c) => minhasMencoes.has(c.id));
+    if (vista === "nao_atendidas") {
+      // "Não atendidas" = tem mensagem do cliente e ninguém respondeu ainda.
+      return conversations.filter((c) => !c.primeira_resposta_em && c.status !== "resolvida");
     }
+    return conversations;
+  }, [conversations, vista, minhasMencoes]);
+
+  const byStatus = useMemo(
+    () => porVista.filter((c) => statusFilter === "todas" || c.status === statusFilter),
+    [porVista, statusFilter],
+  );
+
+  const counts = useMemo(() => ({
+    minhas: byStatus.filter((c) => c.responsavel_id === currentUser.id).length,
+    nao_atribuidas: byStatus.filter((c) => !c.responsavel_id).length,
+    todas: byStatus.length,
+  }), [byStatus, currentUser.id]);
+
+  const filtered = useMemo(() => {
+    const lista = byStatus.filter((c) => {
+      if (assignFilter === "minhas" && c.responsavel_id !== currentUser.id) return false;
+      if (assignFilter === "nao_atribuidas" && c.responsavel_id) return false;
+      if (canalFiltro !== "todos" && c.canal !== canalFiltro) return false;
+      if (prioridadeFiltro !== "todas") {
+        if (prioridadeFiltro === "sem" ? c.prioridade !== null : c.prioridade !== prioridadeFiltro) return false;
+      }
+      if (equipeFiltro !== "todas") {
+        if (equipeFiltro === "sem" ? c.team_id !== null : c.team_id !== equipeFiltro) return false;
+      }
+      if (etiquetaFiltro !== "todas" && !c.tags.includes(etiquetaFiltro)) return false;
+      if (busca.trim()) {
+        const q = busca.toLowerCase();
+        const hay = `${c.contato_nome ?? ""} ${c.contato_telefone ?? ""} ${c.last_message_preview ?? ""} ${c.tags.join(" ")}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const peso = (p: ConversationPriority | null) => (p ? PRIORITY_ORDER.indexOf(p) : 99);
+    return [...lista].sort((a, b) => {
+      if (ordenacao === "prioridade") {
+        const d = peso(a.prioridade) - peso(b.prioridade);
+        if (d !== 0) return d;
+        return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
+      }
+      if (ordenacao === "antigas") {
+        return new Date(a.last_message_at).getTime() - new Date(b.last_message_at).getTime();
+      }
+      if (ordenacao === "criacao") {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
+    });
+  }, [
+    byStatus, assignFilter, busca, currentUser.id, canalFiltro,
+    prioridadeFiltro, equipeFiltro, etiquetaFiltro, ordenacao,
+  ]);
+
+  const filtrosAtivos =
+    (canalFiltro !== "todos" ? 1 : 0) + (prioridadeFiltro !== "todas" ? 1 : 0) +
+    (equipeFiltro !== "todas" ? 1 : 0) + (etiquetaFiltro !== "todas" ? 1 : 0);
+
+  // ------------------------------------------------------------------
+  // Ações na conversa
+  // ------------------------------------------------------------------
+  const supa = () => createSupabaseBrowser();
+
+  async function atualizar(id: string, patch: Partial<Conversation>, update: Record<string, unknown>) {
+    patchLocal(id, patch);
+    const { error } = await supa().from("conversations").update(update).eq("id", id);
+    if (error) setNotice({ tipo: "erro", texto: error.message });
   }
 
-  async function assign(agentId: string | null) {
-    if (!selected) return;
-    patchLocal(selected.id, { responsavel_id: agentId });
-    const supabase = createSupabaseBrowser();
-    await supabase.from("conversations").update({ responsavel_id: agentId }).eq("id", selected.id);
-  }
+  const assign = (agentId: string | null) =>
+    selected && atualizar(selected.id, { responsavel_id: agentId }, { responsavel_id: agentId });
 
-  async function mudarStatus(status: ConversationStatus) {
-    if (!selected) return;
-    const patch: Partial<Conversation> = { status };
-    const update: Record<string, unknown> = { status };
+  const assignTeam = (teamId: string | null) =>
+    selected && atualizar(selected.id, { team_id: teamId }, { team_id: teamId });
+
+  const setPrioridade = (p: ConversationPriority | null) =>
+    selected && atualizar(selected.id, { prioridade: p }, { prioridade: p });
+
+  async function mudarStatus(status: ConversationStatus, conv = selected) {
+    if (!conv) return;
+    const patch: Partial<Conversation> = { status, snoozed_until: null };
+    const update: Record<string, unknown> = { status, snoozed_until: null };
     if (status === "resolvida") {
       const now = new Date().toISOString();
-      patch.resolvida_em = now; patch.resolvida_por = currentUserId;
-      update.resolvida_em = now; update.resolvida_por = currentUserId;
+      patch.resolvida_em = now; patch.resolvida_por = currentUser.id;
+      update.resolvida_em = now; update.resolvida_por = currentUser.id;
     }
-    patchLocal(selected.id, patch);
-    const supabase = createSupabaseBrowser();
-    await supabase.from("conversations").update(update).eq("id", selected.id);
+    await atualizar(conv.id, patch, update);
+  }
+
+  async function adiar(ate: Date | null) {
+    if (!selected) return;
+    const iso = ate?.toISOString() ?? null;
+    await atualizar(
+      selected.id,
+      { status: "adiada", snoozed_until: iso },
+      { status: "adiada", snoozed_until: iso },
+    );
+    setNotice({
+      tipo: "info",
+      texto: ate
+        ? `Conversa adiada até ${ate.toLocaleString("pt-BR")}.`
+        : "Conversa adiada até o cliente responder.",
+    });
   }
 
   async function saveTags(tags: string[]) {
     if (!selected) return;
-    patchLocal(selected.id, { tags });
-    const supabase = createSupabaseBrowser();
-    await supabase.from("conversations").update({ tags }).eq("id", selected.id);
+    await atualizar(selected.id, { tags }, { tags });
   }
-  function addTag() {
-    const t = novaTag.trim().toLowerCase();
+  function addTag(valor?: string) {
+    const t = (valor ?? novaTag).trim().toLowerCase();
     if (!t || !selected || selected.tags.includes(t)) { setNovaTag(""); return; }
     void saveTags([...selected.tags, t]);
     setNovaTag("");
@@ -225,27 +323,318 @@ export function AtendimentoInbox({
     void saveTags(selected.tags.filter((x) => x !== t));
   }
 
+  // ------------------------------------------------------------------
+  // Envio (texto + anexos)
+  // ------------------------------------------------------------------
+  async function enviar({
+    texto, interna, arquivos, mentions, assinar,
+  }: {
+    texto: string; interna: boolean; arquivos: File[]; mentions: string[]; assinar: boolean;
+  }) {
+    if (!selectedId || sending) return;
+    setSending(true);
+    setNotice(null);
+    const supabase = supa();
+
+    try {
+      // 1) Sobe os anexos e manda cada um como mensagem própria.
+      for (const file of arquivos) {
+        try {
+          const up = await uploadAtendimentoMedia(supabase, selectedId, file);
+          const res = await fetch("/api/atendimento/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              conversationId: selectedId,
+              interna,
+              mediaUrl: up.url,
+              mediaNome: up.nome,
+              mediaMime: up.mime,
+              mediaTamanho: up.tamanho,
+              tipo: tipoDaMensagemPeloMime(up.mime),
+              replyToId: respondendoA?.id ?? null,
+            }),
+          });
+          const json = await res.json();
+          if (!res.ok) setNotice({ tipo: "erro", texto: json.error ?? "Falha ao enviar o anexo." });
+          else if (json.message) setMessages((prev) => [...prev, json.message as Message]);
+        } catch (e) {
+          setNotice({
+            tipo: "erro",
+            texto: `Anexo "${file.name}": ${uploadErrorMsg(e instanceof Error ? e.message : String(e))}`,
+          });
+        }
+      }
+
+      // 2) O texto (se houver).
+      if (texto) {
+        const res = await fetch("/api/atendimento/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversationId: selectedId,
+            texto,
+            interna,
+            mentions,
+            assinar,
+            replyToId: respondendoA?.id ?? null,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setNotice({ tipo: "erro", texto: json.error ?? "Falha ao enviar." });
+        } else {
+          if (json.message) setMessages((prev) => [...prev, json.message as Message]);
+          if (json.delivered === false) {
+            setNotice({
+              tipo: "erro",
+              texto: `Mensagem registrada, mas NÃO entregue ao cliente (${json.reason}). Verifique o canal em Canais.`,
+            });
+          }
+        }
+      }
+
+      setRespondendoA(null);
+      void refreshConversations();
+    } catch {
+      setNotice({ tipo: "erro", texto: "Erro de rede ao enviar." });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Macros
+  // ------------------------------------------------------------------
+  async function aplicarMacro(macroId: string) {
+    const macro = macros.find((m) => m.id === macroId);
+    if (!macro || !selected) return;
+    const conv = selected;
+    let tags = [...conv.tags];
+    const patch: Partial<Conversation> = {};
+    const update: Record<string, unknown> = {};
+
+    for (const acao of macro.acoes as MacroAction[]) {
+      switch (acao.tipo) {
+        case "atribuir_agente": patch.responsavel_id = acao.valor; update.responsavel_id = acao.valor; break;
+        case "atribuir_equipe": patch.team_id = acao.valor; update.team_id = acao.valor; break;
+        case "mudar_status": {
+          const s = acao.valor as ConversationStatus;
+          patch.status = s; update.status = s;
+          if (s === "resolvida") {
+            const now = new Date().toISOString();
+            patch.resolvida_em = now; update.resolvida_em = now;
+            patch.resolvida_por = currentUser.id; update.resolvida_por = currentUser.id;
+          }
+          break;
+        }
+        case "mudar_prioridade": {
+          const p = (acao.valor || null) as ConversationPriority | null;
+          patch.prioridade = p; update.prioridade = p;
+          break;
+        }
+        case "adicionar_etiqueta":
+          if (!tags.includes(acao.valor)) tags.push(acao.valor);
+          break;
+        case "remover_etiqueta":
+          tags = tags.filter((t) => t !== acao.valor);
+          break;
+        case "enviar_mensagem":
+          await enviar({ texto: acao.valor, interna: false, arquivos: [], mentions: [], assinar: false });
+          break;
+        case "adicionar_nota":
+          await enviar({ texto: acao.valor, interna: true, arquivos: [], mentions: [], assinar: false });
+          break;
+      }
+    }
+
+    patch.tags = tags; update.tags = tags;
+    await atualizar(conv.id, patch, update);
+    setNotice({ tipo: "info", texto: `Macro "${macro.nome}" aplicada.` });
+  }
+
+  // ------------------------------------------------------------------
+  // Ações em massa
+  // ------------------------------------------------------------------
+  const idsSelecionados = useMemo(() => Array.from(selecionadas), [selecionadas]);
+
+  function alternarSelecao(id: string) {
+    setSelecionadas((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      return s;
+    });
+  }
+
+  function selecionarTodas() {
+    setSelecionadas((prev) =>
+      prev.size === filtered.length ? new Set() : new Set(filtered.map((c) => c.id)),
+    );
+  }
+
+  async function massaAtualizar(update: Record<string, unknown>) {
+    if (idsSelecionados.length === 0) return;
+    const { error } = await supa().from("conversations").update(update).in("id", idsSelecionados);
+    if (error) { setNotice({ tipo: "erro", texto: error.message }); return; }
+    setNotice({ tipo: "info", texto: `${idsSelecionados.length} conversa(s) atualizada(s).` });
+    setSelecionadas(new Set());
+    setModalMassa(null);
+    void refreshConversations();
+  }
+
+  async function massaEtiquetar(etiqueta: string) {
+    // tags é array — precisa mesclar conversa a conversa.
+    const alvo = conversations.filter((c) => selecionadas.has(c.id));
+    for (const c of alvo) {
+      if (c.tags.includes(etiqueta)) continue;
+      await supa().from("conversations").update({ tags: [...c.tags, etiqueta] }).eq("id", c.id);
+    }
+    setNotice({ tipo: "info", texto: `Etiqueta "${etiqueta}" aplicada a ${alvo.length} conversa(s).` });
+    setSelecionadas(new Set());
+    setModalMassa(null);
+    void refreshConversations();
+  }
+
+  async function massaExcluir() {
+    const { error } = await supa().from("conversations").delete().in("id", idsSelecionados);
+    if (error) { setNotice({ tipo: "erro", texto: error.message }); return; }
+    setNotice({ tipo: "info", texto: `${idsSelecionados.length} conversa(s) excluída(s).` });
+    setSelecionadas(new Set());
+    setModalMassa(null);
+    setSelectedId(null);
+    void refreshConversations();
+  }
+
+  // ------------------------------------------------------------------
+  // Atalhos de teclado
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const alvo = e.target as HTMLElement | null;
+      const digitando = alvo && ["INPUT", "TEXTAREA"].includes(alvo.tagName);
+      if (e.key === "Escape") { setModoSelecao(false); setSelecionadas(new Set()); return; }
+      if (!e.altKey || !selected) return;
+      const k = e.key.toLowerCase();
+      if (k === "r") {
+        e.preventDefault();
+        void mudarStatus(selected.status === "resolvida" ? "aberta" : "resolvida");
+      } else if (k === "e") {
+        e.preventDefault();
+        void adiar(new Date(Date.now() + 3 * 60 * 60 * 1000));
+      } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !digitando) {
+        e.preventDefault();
+        const i = filtered.findIndex((c) => c.id === selected.id);
+        const prox = e.key === "ArrowDown" ? i + 1 : i - 1;
+        if (filtered[prox]) setSelectedId(filtered[prox].id);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, filtered]);
+
+  // ------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------
+  const tituloVista =
+    vista === "mencoes" ? "Menções" : vista === "nao_atendidas" ? "Não atendidas" : "Conversas";
+
   return (
-    <div className="flex h-full border-t">
-      {/* ---- Lista ---- */}
-      <aside className="w-80 shrink-0 border-r bg-card flex flex-col">
-        <div className="border-b">
-          <div className="p-2 flex items-center gap-1">
-            <div className="relative flex-1">
+    <div className="flex h-full min-h-0">
+      {/* ================= Lista ================= */}
+      <aside className="w-[340px] shrink-0 border-r bg-card flex flex-col min-h-0">
+        <div className="border-b shrink-0">
+          <div className="px-3 pt-2.5 pb-1 flex items-center gap-2">
+            <h1 className="font-semibold text-[15px] flex-1 truncate">{tituloVista}</h1>
+            <span className="text-[10px] rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+              {filtered.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => { setModoSelecao((v) => !v); setSelecionadas(new Set()); }}
+              title="Selecionar várias"
+              className={`p-1.5 rounded-md hover:bg-muted ${modoSelecao ? "text-arini dark:text-gold" : "text-muted-foreground"}`}
+            >
+              <CheckSquare size={15} />
+            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { setFiltrosAbertos((v) => !v); setOrdenacaoAberta(false); }}
+                title="Filtros"
+                className={`p-1.5 rounded-md hover:bg-muted relative ${filtrosAtivos ? "text-arini dark:text-gold" : "text-muted-foreground"}`}
+              >
+                <SlidersHorizontal size={15} />
+                {filtrosAtivos > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-arini dark:bg-gold text-white dark:text-arini text-[8px] flex items-center justify-center">
+                    {filtrosAtivos}
+                  </span>
+                )}
+              </button>
+              {filtrosAbertos && (
+                <PainelFiltros
+                  onFechar={() => setFiltrosAbertos(false)}
+                  canal={canalFiltro} setCanal={setCanalFiltro}
+                  prioridade={prioridadeFiltro} setPrioridade={setPrioridadeFiltro}
+                  equipe={equipeFiltro} setEquipe={setEquipeFiltro}
+                  etiqueta={etiquetaFiltro} setEtiqueta={setEtiquetaFiltro}
+                  teams={teams} labels={labels}
+                  onLimpar={() => {
+                    setCanalFiltro("todos"); setPrioridadeFiltro("todas");
+                    setEquipeFiltro("todas"); setEtiquetaFiltro("todas");
+                  }}
+                />
+              )}
+            </div>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { setOrdenacaoAberta((v) => !v); setFiltrosAbertos(false); }}
+                title="Ordenar"
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-muted"
+              >
+                <ArrowDownUp size={15} />
+              </button>
+              {ordenacaoAberta && (
+                <div className="absolute right-0 top-9 z-40 w-52 rounded-lg border bg-popover shadow-xl overflow-hidden">
+                  {(Object.keys(ORDENACAO_LABELS) as Ordenacao[]).map((o) => (
+                    <button
+                      key={o}
+                      type="button"
+                      onClick={() => { setOrdenacao(o); setOrdenacaoAberta(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted text-left"
+                    >
+                      <span className="flex-1">{ORDENACAO_LABELS[o]}</span>
+                      {ordenacao === o && <Check size={13} className="text-arini dark:text-gold" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void refreshConversations()}
+              className="p-1.5 rounded-md text-muted-foreground hover:bg-muted"
+              title="Atualizar"
+            >
+              <RefreshCw size={15} />
+            </button>
+          </div>
+
+          <div className="px-3 pb-2">
+            <div className="relative">
               <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar…"
-                className="w-full pl-7 pr-2 py-1.5 text-sm rounded-md border bg-background"
+                placeholder="Buscar por nome, telefone ou etiqueta…"
+                className="w-full pl-7 pr-2 py-1.5 text-sm rounded-md border bg-background outline-none focus:ring-2 focus:ring-ring/40"
               />
             </div>
-            <button type="button" onClick={() => void refreshConversations()} className="p-1.5 text-muted-foreground hover:text-arini" title="Atualizar">
-              <RefreshCw size={15} />
-            </button>
           </div>
-          {/* Abas de atribuição com contadores (estilo Chatwoot) */}
-          <div className="flex text-xs px-2 gap-4">
+
+          {/* Abas de atribuição */}
+          <div className="flex text-xs px-3 gap-4">
             {([
               ["minhas", "Minhas", counts.minhas],
               ["nao_atribuidas", "Não atribuídas", counts.nao_atribuidas],
@@ -256,88 +645,136 @@ export function AtendimentoInbox({
                 type="button"
                 onClick={() => setAssignFilter(key)}
                 className={`py-2 border-b-2 -mb-px inline-flex items-center gap-1.5 ${
-                  assignFilter === key ? "border-arini text-arini font-medium" : "border-transparent text-muted-foreground hover:text-foreground"
+                  assignFilter === key
+                    ? "border-arini text-arini dark:text-gold dark:border-gold font-medium"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {label}
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${assignFilter === key ? "bg-arini/10 text-arini" : "bg-muted text-muted-foreground"}`}>{n}</span>
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                  assignFilter === key ? "bg-arini/10 text-arini dark:text-gold dark:bg-gold/15" : "bg-muted text-muted-foreground"
+                }`}>{n}</span>
               </button>
             ))}
           </div>
-          {/* Filtro de status */}
-          <div className="flex gap-1 text-[11px] px-2 py-1.5 border-t bg-muted/20">
-            {(["todas", "aberta", "pendente", "resolvida"] as StatusFilter[]).map((s) => (
+
+          {/* Status */}
+          <div className="flex gap-1 text-[11px] px-3 py-1.5 border-t bg-muted/20 overflow-x-auto">
+            {(["todas", "aberta", "pendente", "adiada", "resolvida"] as StatusFilter[]).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => setStatusFilter(s)}
-                className={`px-2 py-0.5 rounded-full capitalize ${statusFilter === s ? "bg-arini text-white" : "hover:bg-muted text-muted-foreground"}`}
+                className={`px-2 py-0.5 rounded-full whitespace-nowrap ${
+                  statusFilter === s
+                    ? "bg-arini text-white dark:bg-gold dark:text-arini"
+                    : "hover:bg-muted text-muted-foreground"
+                }`}
               >
-                {s === "todas" ? "todos status" : s}
+                {s === "todas" ? "todos status" : CONVERSATION_STATUS_LABELS[s as ConversationStatus]}
               </button>
             ))}
           </div>
-        </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {filtered.length === 0 && (
-            <div className="p-6 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
-              <Inbox size={28} className="opacity-40" />
-              Nenhuma conversa neste filtro.
+          {/* Barra de ações em massa */}
+          {modoSelecao && (
+            <div className="px-3 py-2 border-t bg-muted/40 flex items-center gap-1.5 flex-wrap">
+              <button type="button" onClick={selecionarTodas} className="text-[11px] underline text-muted-foreground hover:text-foreground">
+                {selecionadas.size === filtered.length && filtered.length > 0 ? "Limpar" : "Selecionar todas"}
+              </button>
+              <span className="text-[11px] text-muted-foreground">{selecionadas.size} selecionada(s)</span>
+              <div className="ml-auto flex items-center gap-0.5">
+                <AcaoMassa titulo="Resolver" disabled={!selecionadas.size} onClick={() => void massaAtualizar({ status: "resolvida", resolvida_em: new Date().toISOString(), resolvida_por: currentUser.id })}>
+                  <Check size={14} />
+                </AcaoMassa>
+                <AcaoMassa titulo="Adiar 3 h" disabled={!selecionadas.size} onClick={() => void massaAtualizar({ status: "adiada", snoozed_until: new Date(Date.now() + 3 * 3600_000).toISOString() })}>
+                  <AlarmClock size={14} />
+                </AcaoMassa>
+                <AcaoMassa titulo="Atribuir agente" disabled={!selecionadas.size} onClick={() => setModalMassa("agente")}>
+                  <Users2 size={14} />
+                </AcaoMassa>
+                <AcaoMassa titulo="Prioridade" disabled={!selecionadas.size} onClick={() => setModalMassa("prioridade")}>
+                  <Flag size={14} />
+                </AcaoMassa>
+                <AcaoMassa titulo="Etiquetar" disabled={!selecionadas.size} onClick={() => setModalMassa("etiqueta")}>
+                  <TagIcon size={14} />
+                </AcaoMassa>
+                <AcaoMassa titulo="Excluir" perigo disabled={!selecionadas.size} onClick={() => setModalMassa("excluir")}>
+                  <Trash2 size={14} />
+                </AcaoMassa>
+              </div>
             </div>
           )}
-          {filtered.map((c) => {
-            const active = c.id === selectedId;
-            const resp = c.responsavel_id ? agentName.get(c.responsavel_id) : null;
-            return (
-              <button
-                type="button"
-                key={c.id}
-                onClick={() => setSelectedId(c.id)}
-                className={`w-full text-left px-3 py-2.5 border-b flex flex-col gap-1 ${active ? "bg-arini/5 border-l-2 border-l-arini" : "hover:bg-muted/40"}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full shrink-0 ${CHANNEL_DOT[c.canal] ?? "bg-gray-400"}`} />
-                  <span className="font-medium text-sm truncate flex-1">{contactName(c)}</span>
-                  {c.status === "resolvida" && <Check size={13} className="text-emerald-500 shrink-0" />}
-                  {c.unread_count > 0 && (
-                    <span className="bg-arini text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">{c.unread_count}</span>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground truncate">{c.last_message_preview ?? "—"}</div>
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
-                  <span>{CHANNEL_LABELS[c.canal]}</span>
-                  <span>·</span>
-                  <span>{formatDateTimeBR(c.last_message_at)}</span>
-                  {resp && <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5">{resp.split(" ")[0]}</span>}
-                </div>
-                {c.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {c.tags.slice(0, 3).map((t) => (
-                      <span key={t} className="rounded-full bg-arini/10 text-arini text-[9px] px-1.5 py-0.5">{t}</span>
-                    ))}
-                  </div>
-                )}
-              </button>
-            );
-          })}
+        </div>
+
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <ConversationList
+            conversas={filtered}
+            selecionadaId={selectedId}
+            onSelecionar={setSelectedId}
+            agentName={agentName}
+            labelColors={labelColors}
+            modoSelecao={modoSelecao}
+            selecionadas={selecionadas}
+            onAlternarSelecao={alternarSelecao}
+          />
         </div>
       </aside>
 
-      {/* ---- Thread ---- */}
-      <section className="flex-1 min-w-0 flex flex-col bg-muted/20">
+      {/* ================= Thread ================= */}
+      <section className="flex-1 min-w-0 flex flex-col bg-muted/20 min-h-0">
         {!selected ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">Selecione uma conversa à esquerda.</div>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+            <MessageSquareDot size={40} className="opacity-30" />
+            <p>Selecione uma conversa à esquerda.</p>
+            <p className="text-xs">
+              <kbd className="rounded border px-1.5 py-0.5">Ctrl</kbd> +{" "}
+              <kbd className="rounded border px-1.5 py-0.5">K</kbd> abre o menu de comando ·{" "}
+              <kbd className="rounded border px-1.5 py-0.5">Ctrl</kbd> +{" "}
+              <kbd className="rounded border px-1.5 py-0.5">/</kbd> mostra os atalhos
+            </p>
+          </div>
         ) : (
           <>
-            <header className="px-3 py-2 border-b bg-card flex items-center justify-between gap-2 flex-wrap">
+            <header className="px-3 py-2 border-b bg-card flex items-center justify-between gap-2 flex-wrap shrink-0">
               <div className="min-w-0">
-                <div className="font-semibold text-sm truncate">{contactName(selected)}</div>
-                <div className="text-xs text-muted-foreground">
-                  {CHANNEL_LABELS[selected.canal]}{selected.contato_telefone ? ` · ${selected.contato_telefone}` : ""}
+                <div className="font-semibold text-sm truncate flex items-center gap-1.5">
+                  {contactName(selected)}
+                  {selected.prioridade && (
+                    <span className={`rounded border px-1.5 py-px text-[10px] font-medium ${PRIORITY_CLASSES[selected.prioridade]}`}>
+                      {PRIORITY_LABELS[selected.prioridade]}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {CHANNEL_LABELS[selected.canal]}
+                  {selected.contato_telefone ? ` · ${selected.contato_telefone}` : ""}
+                  {selected.status === "adiada" && selected.snoozed_until &&
+                    ` · adiada até ${new Date(selected.snoozed_until).toLocaleString("pt-BR")}`}
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <select
+                  value={selected.prioridade ?? ""}
+                  onChange={(e) => void setPrioridade((e.target.value || null) as ConversationPriority | null)}
+                  className="text-xs rounded-md border bg-background px-2 py-1.5"
+                  title="Prioridade"
+                >
+                  <option value="">Sem prioridade</option>
+                  {PRIORITY_ORDER.map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+                </select>
+
+                <select
+                  value={selected.team_id ?? ""}
+                  onChange={(e) => void assignTeam(e.target.value || null)}
+                  className="text-xs rounded-md border bg-background px-2 py-1.5 max-w-[130px]"
+                  title="Equipe"
+                >
+                  <option value="">Sem equipe</option>
+                  {teams.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+
                 <select
                   value={selected.responsavel_id ?? ""}
                   onChange={(e) => void assign(e.target.value || null)}
@@ -347,12 +784,19 @@ export function AtendimentoInbox({
                   <option value="">Não atribuído</option>
                   {agents.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
                 </select>
+
+                <SnoozeMenu onAdiar={(ate) => void adiar(ate)} compacto />
+
                 {selected.status !== "resolvida" ? (
                   <>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void mudarStatus(selected.status === "pendente" ? "aberta" : "pendente")} title="Marcar pendente">
+                    <Button
+                      type="button" size="sm" variant="outline"
+                      onClick={() => void mudarStatus(selected.status === "pendente" ? "aberta" : "pendente")}
+                      title="Marcar como pendente"
+                    >
                       <Clock size={14} />
                     </Button>
-                    <Button type="button" size="sm" variant="gold" onClick={() => void mudarStatus("resolvida")}>
+                    <Button type="button" size="sm" variant="gold" onClick={() => void mudarStatus("resolvida")} title="Alt + R">
                       <Check size={14} /> Resolver
                     </Button>
                   </>
@@ -361,105 +805,273 @@ export function AtendimentoInbox({
                     <RotateCcw size={14} /> Reabrir
                   </Button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => setPainelAberto((v) => !v)}
+                  className="p-1.5 rounded-md text-muted-foreground hover:bg-muted"
+                  title={painelAberto ? "Esconder painel do contato" : "Mostrar painel do contato"}
+                >
+                  {painelAberto ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+                </button>
               </div>
             </header>
 
             {/* Etiquetas */}
-            <div className="px-3 py-1.5 border-b bg-card/60 flex items-center gap-1.5 flex-wrap">
-              {selected.tags.map((t) => (
-                <span key={t} className="inline-flex items-center gap-1 rounded-full bg-arini/10 text-arini text-[11px] px-2 py-0.5">
-                  {t}
-                  <button type="button" onClick={() => removeTag(t)} className="hover:text-red-600"><X size={10} /></button>
-                </span>
-              ))}
+            <div className="px-3 py-1.5 border-b bg-card/60 flex items-center gap-1.5 flex-wrap shrink-0">
+              {selected.tags.map((t) => {
+                const cor = labelColors.get(t);
+                return (
+                  <span
+                    key={t}
+                    className="inline-flex items-center gap-1 rounded-full text-[11px] px-2 py-0.5"
+                    style={cor ? { backgroundColor: `${cor}22`, color: cor } : undefined}
+                  >
+                    {!cor ? <span className="text-arini dark:text-gold">{t}</span> : t}
+                    <button type="button" onClick={() => removeTag(t)} className="hover:text-red-600" aria-label={`Remover ${t}`}>
+                      <X size={10} />
+                    </button>
+                  </span>
+                );
+              })}
               <input
+                list="catalogo-etiquetas"
                 value={novaTag}
                 onChange={(e) => setNovaTag(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+                onBlur={() => novaTag && addTag()}
                 placeholder="+ etiqueta"
-                className="text-[11px] bg-transparent outline-none w-24 placeholder:text-muted-foreground"
+                className="text-[11px] bg-transparent outline-none w-28 placeholder:text-muted-foreground"
               />
+              <datalist id="catalogo-etiquetas">
+                {labels.map((l) => <option key={l.id} value={l.nome} />)}
+              </datalist>
             </div>
 
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
-              {loadingMsgs && messages.length === 0 && <p className="text-center text-xs text-muted-foreground">Carregando…</p>}
-              {!loadingMsgs && messages.length === 0 && <p className="text-center text-xs text-muted-foreground">Sem mensagens nesta conversa.</p>}
-              {messages.map((m) => {
-                if (m.interna) {
-                  return (
-                    <div key={m.id} className="flex justify-center">
-                      <div className="max-w-[80%] rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2 text-sm">
-                        <div className="flex items-center gap-1 text-[10px] font-semibold uppercase text-amber-700 mb-0.5">
-                          <StickyNote size={11} /> Nota interna
-                        </div>
-                        <div className="whitespace-pre-line break-words">{m.conteudo}</div>
-                        <div className="mt-1 text-[10px] text-amber-700/70">{formatDateTimeBR(m.created_at)}</div>
-                      </div>
-                    </div>
-                  );
-                }
-                const out = m.direcao === "out";
-                return (
-                  <div key={m.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${out ? "bg-arini text-white rounded-br-sm" : "bg-card border rounded-bl-sm"}`}>
-                      {m.conteudo ? <div className="whitespace-pre-line break-words">{m.conteudo}</div> : <div className="italic opacity-70">[{m.tipo}]</div>}
-                      <div className={`mt-1 text-[10px] ${out ? "text-white/60" : "text-muted-foreground"}`}>
-                        {formatDateTimeBR(m.created_at)}
-                        {out && m.status === "falha" && " · falhou"}
-                        {out && m.status === "enviada" && " · enviada"}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <MessageThread
+              ref={scrollRef}
+              mensagens={messages}
+              carregando={loadingMsgs}
+              autorNome={agentName}
+              onResponder={setRespondendoA}
+            />
 
-            {notice && <div className="px-4 py-2 text-xs bg-amber-50 text-amber-800 border-t border-amber-200">{notice}</div>}
-
-            {/* Composer */}
-            <div className="border-t bg-card">
-              <div className="flex items-center gap-1 px-3 pt-2">
-                <button type="button" onClick={() => setMode("resposta")} className={`text-xs px-2 py-1 rounded-t-md ${mode === "resposta" ? "bg-arini text-white" : "text-muted-foreground hover:bg-muted"}`}>Responder</button>
-                <button type="button" onClick={() => setMode("nota")} className={`text-xs px-2 py-1 rounded-t-md inline-flex items-center gap-1 ${mode === "nota" ? "bg-amber-500 text-white" : "text-muted-foreground hover:bg-muted"}`}>
-                  <StickyNote size={12} /> Nota interna
-                </button>
-                <div className="relative ml-auto">
-                  <button type="button" onClick={() => setShowCanned((v) => !v)} className="text-xs px-2 py-1 rounded-md text-muted-foreground hover:bg-muted inline-flex items-center gap-1" title="Respostas rápidas">
-                    <Zap size={12} /> Rápidas
-                  </button>
-                  {showCanned && (
-                    <div className="absolute right-0 bottom-9 z-10 w-72 max-h-64 overflow-y-auto rounded-md border bg-popover shadow-lg">
-                      {cannedResponses.length === 0 && <div className="p-3 text-xs text-muted-foreground">Nenhuma resposta rápida cadastrada.</div>}
-                      {cannedResponses.map((cr) => (
-                        <button key={cr.id} type="button" onClick={() => { setTexto((t) => (t ? t + "\n" : "") + cr.conteudo); setShowCanned(false); }} className="w-full text-left px-3 py-2 border-b hover:bg-muted/50">
-                          <div className="text-xs font-medium">{cr.titulo} <span className="text-muted-foreground">/{cr.atalho}</span></div>
-                          <div className="text-[11px] text-muted-foreground truncate">{cr.conteudo}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            {notice && (
+              <div
+                className={`px-4 py-2 text-xs border-t flex items-center gap-2 shrink-0 ${
+                  notice.tipo === "erro"
+                    ? "bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/25"
+                    : "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/25"
+                }`}
+              >
+                <span className="flex-1">{notice.texto}</span>
+                <button type="button" onClick={() => setNotice(null)} aria-label="Fechar aviso"><X size={13} /></button>
               </div>
-              <div className={`p-3 pt-2 flex items-end gap-2 ${mode === "nota" ? "bg-amber-50/50" : ""}`}>
-                <Textarea
-                  rows={1}
-                  value={texto}
-                  onChange={(e) => setTexto(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
-                  placeholder={mode === "nota" ? "Nota interna (só a equipe vê)…" : "Escreva uma resposta…  (Enter envia)"}
-                  className="resize-none min-h-[42px] max-h-32"
-                />
-                <Button type="button" variant={mode === "nota" ? "outline" : "gold"} onClick={() => void send()} disabled={sending || !texto.trim()}>
-                  {mode === "nota" ? <StickyNote size={15} /> : <Send size={15} />} {sending ? "…" : mode === "nota" ? "Nota" : "Enviar"}
-                </Button>
-              </div>
-            </div>
+            )}
+
+            <Composer
+              cannedResponses={cannedResponses}
+              macros={macros}
+              agents={agents}
+              assinatura={currentUser.assinatura}
+              respondendoA={respondendoA}
+              onCancelarResposta={() => setRespondendoA(null)}
+              enviando={sending}
+              onEnviar={enviar}
+              onAplicarMacro={(id) => void aplicarMacro(id)}
+            />
           </>
         )}
       </section>
 
-      {/* ---- Painel de contato ---- */}
-      {selected && <ContactPanel conversation={selected} />}
+      {/* ================= Painel de contato ================= */}
+      {selected && painelAberto && <ContactPanel conversation={selected} agentName={agentName} />}
+
+      {/* ================= Modais de ação em massa ================= */}
+      <Modal
+        aberto={modalMassa === "agente"}
+        onFechar={() => setModalMassa(null)}
+        titulo="Atribuir agente"
+        descricao={`${idsSelecionados.length} conversa(s) selecionada(s).`}
+      >
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => void massaAtualizar({ responsavel_id: null })}
+            className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm text-muted-foreground"
+          >
+            Remover atribuição
+          </button>
+          {agents.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => void massaAtualizar({ responsavel_id: a.id })}
+              className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm"
+            >
+              {a.nome}
+            </button>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal
+        aberto={modalMassa === "prioridade"}
+        onFechar={() => setModalMassa(null)}
+        titulo="Definir prioridade"
+        descricao={`${idsSelecionados.length} conversa(s) selecionada(s).`}
+      >
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => void massaAtualizar({ prioridade: null })}
+            className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm text-muted-foreground"
+          >
+            Sem prioridade
+          </button>
+          {PRIORITY_ORDER.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => void massaAtualizar({ prioridade: p })}
+              className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm"
+            >
+              <span className={`rounded border px-1.5 py-px text-[10px] mr-2 ${PRIORITY_CLASSES[p]}`}>
+                {PRIORITY_LABELS[p]}
+              </span>
+            </button>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal
+        aberto={modalMassa === "etiqueta"}
+        onFechar={() => setModalMassa(null)}
+        titulo="Adicionar etiqueta"
+        descricao={`${idsSelecionados.length} conversa(s) selecionada(s).`}
+      >
+        <div className="space-y-1">
+          {labels.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Nenhuma etiqueta no catálogo. Cadastre em Configurações › Etiquetas.
+            </p>
+          )}
+          {labels.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => void massaEtiquetar(l.nome)}
+              className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm flex items-center gap-2"
+            >
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.cor }} />
+              {l.nome}
+            </button>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal
+        aberto={modalMassa === "excluir"}
+        onFechar={() => setModalMassa(null)}
+        titulo="Excluir conversas"
+        descricao="As mensagens dessas conversas também serão apagadas. Não dá para desfazer."
+        rodape={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setModalMassa(null)}>Cancelar</Button>
+            <Button variant="destructive" size="sm" onClick={() => void massaExcluir()}>
+              Excluir {idsSelecionados.length}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm">
+          Você está prestes a excluir <strong>{idsSelecionados.length}</strong> conversa(s)
+          e todo o histórico de mensagens delas.
+        </p>
+      </Modal>
+    </div>
+  );
+}
+
+function AcaoMassa({
+  children, titulo, onClick, disabled, perigo,
+}: {
+  children: React.ReactNode; titulo: string; onClick: () => void; disabled?: boolean; perigo?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={titulo}
+      onClick={onClick}
+      disabled={disabled}
+      className={`p-1.5 rounded-md hover:bg-background disabled:opacity-30 ${
+        perigo ? "text-red-600 dark:text-red-400" : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PainelFiltros({
+  onFechar, canal, setCanal, prioridade, setPrioridade,
+  equipe, setEquipe, etiqueta, setEtiqueta, teams, labels, onLimpar,
+}: {
+  onFechar: () => void;
+  canal: string; setCanal: (v: string) => void;
+  prioridade: string; setPrioridade: (v: string) => void;
+  equipe: string; setEquipe: (v: string) => void;
+  etiqueta: string; setEtiqueta: (v: string) => void;
+  teams: AtendimentoTeam[]; labels: AtendimentoLabel[];
+  onLimpar: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onFechar();
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [onFechar]);
+
+  const cls = "w-full rounded-md border bg-background px-2 py-1.5 text-xs";
+  return (
+    <div ref={ref} className="absolute right-0 top-9 z-40 w-64 rounded-lg border bg-popover shadow-xl p-3 space-y-2.5">
+      <label className="block space-y-1">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Canal</span>
+        <select value={canal} onChange={(e) => setCanal(e.target.value)} className={cls}>
+          <option value="todos">Todos os canais</option>
+          {(Object.keys(CHANNEL_LABELS) as (keyof typeof CHANNEL_LABELS)[]).map((k) => (
+            <option key={k} value={k}>{CHANNEL_LABELS[k]}</option>
+          ))}
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Prioridade</span>
+        <select value={prioridade} onChange={(e) => setPrioridade(e.target.value)} className={cls}>
+          <option value="todas">Qualquer</option>
+          <option value="sem">Sem prioridade</option>
+          {PRIORITY_ORDER.map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Equipe</span>
+        <select value={equipe} onChange={(e) => setEquipe(e.target.value)} className={cls}>
+          <option value="todas">Qualquer</option>
+          <option value="sem">Sem equipe</option>
+          {teams.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Etiqueta</span>
+        <select value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)} className={cls}>
+          <option value="todas">Qualquer</option>
+          {labels.map((l) => <option key={l.id} value={l.nome}>{l.nome}</option>)}
+        </select>
+      </label>
+      <button type="button" onClick={onLimpar} className="w-full text-xs text-muted-foreground hover:text-foreground underline pt-1">
+        Limpar filtros
+      </button>
     </div>
   );
 }

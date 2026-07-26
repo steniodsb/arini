@@ -1,16 +1,35 @@
 import { requireAtendimentoUser } from "@/lib/atendimento-auth";
-import { Building2 } from "lucide-react";
+import { createSupabaseServer } from "@/lib/supabase/server";
+import type { AtendimentoCompany } from "@/lib/types";
+import { EmpresasList, type ContatoVinculado } from "./EmpresasList";
 
+export const dynamic = "force-dynamic";
+
+// Empresas agrupam contatos (leads.company_id). Trazemos os contatos já
+// vinculados junto: serve tanto para contar por empresa na tabela quanto para
+// listar no drawer, sem uma segunda ida ao banco por empresa aberta.
 export default async function EmpresasPage() {
-  await requireAtendimentoUser();
+  const { user } = await requireAtendimentoUser();
+  const supabase = createSupabaseServer();
+
+  const [empresasRes, contatosRes] = await Promise.all([
+    supabase.from("atendimento_companies").select("*").order("nome"),
+    supabase
+      .from("leads")
+      .select("id, nome, telefone, email, company_id")
+      .not("company_id", "is", null)
+      .order("nome")
+      .limit(2000),
+  ]);
+
+  const erro = empresasRes.error?.message ?? contatosRes.error?.message ?? null;
+
   return (
-    <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-3">
-      <Building2 size={40} className="text-muted-foreground/40" />
-      <h1 className="font-display text-xl text-arini">Empresas</h1>
-      <p className="text-sm text-muted-foreground max-w-sm">
-        Agrupamento de contatos por empresa/organização. Em desenvolvimento (Onda C) —
-        vai reunir contatos, conversas e atributos por empresa.
-      </p>
-    </div>
+    <EmpresasList
+      initial={(empresasRes.data ?? []) as AtendimentoCompany[]}
+      contatos={(contatosRes.data ?? []) as ContatoVinculado[]}
+      usuarioId={user.id}
+      erroInicial={erro}
+    />
   );
 }

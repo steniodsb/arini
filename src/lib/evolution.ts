@@ -210,6 +210,46 @@ export async function sendText(
   return { id: res.key?.id ?? null };
 }
 
+/**
+ * Envia mídia por URL. Na v2 o corpo também é plano e o `mediatype` aceita
+ * image | video | document; áudio tem endpoint próprio (sendWhatsAppAudio),
+ * porque a Evolution converte para o formato de nota de voz.
+ */
+export async function sendMedia(
+  cfg: EvolutionConfig,
+  to: string,
+  media: { url: string; tipo: "imagem" | "audio" | "video" | "documento"; nome?: string; mime?: string; legenda?: string },
+): Promise<{ id: string | null }> {
+  const number = onlyDigits(to);
+
+  if (media.tipo === "audio") {
+    const res = await call<{ key?: { id?: string } }>(
+      cfg,
+      `/message/sendWhatsAppAudio/${encodeURIComponent(cfg.instance_name)}`,
+      { method: "POST", body: { number, audio: media.url } },
+    );
+    return { id: res.key?.id ?? null };
+  }
+
+  const mediatype = media.tipo === "imagem" ? "image" : media.tipo === "video" ? "video" : "document";
+  const res = await call<{ key?: { id?: string } }>(
+    cfg,
+    `/message/sendMedia/${encodeURIComponent(cfg.instance_name)}`,
+    {
+      method: "POST",
+      body: {
+        number,
+        mediatype,
+        mimetype: media.mime,
+        media: media.url,
+        fileName: media.nome,
+        caption: media.legenda,
+      },
+    },
+  );
+  return { id: res.key?.id ?? null };
+}
+
 /** A Evolution espera só dígitos (DDI+DDD+número), sem +, espaço ou traço. */
 export function onlyDigits(v: string): string {
   return v.replace(/\D/g, "");

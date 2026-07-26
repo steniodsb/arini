@@ -5,72 +5,99 @@ produto com anos de desenvolvimento e **50+ telas/modais**. Este é o mapa compl
 por prioridade. Executamos de cima pra baixo, em ondas (loop).
 
 Legenda: ✅ pronto · 🟡 parcial · 🧩 scaffold (tela existe, lógica mínima) · 🔲 falta
+· 🔑 **depende do Stenio** (ver `ATENDIMENTO-PENDENCIAS.md`)
 
 Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot/chatwoot.
+
+> **Estado geral (Ondas A–E entregues):** 45 rotas compilando, `npm run build` verde.
+> O que falta é quase todo **infra/credencial** (🔑) ou o motor de execução em
+> background (automações, disparo de campanha, IA).
 
 ---
 
 ## P0 — Núcleo do inbox (usável no dia a dia)
 - ✅ Sistema separado (subdomínio, login/sessão próprios, acesso por flag)
-- ✅ Shell com sidebar (Conversas, Contatos, Empresas, Relatórios, Campanhas, Canais, Config)
-- ✅ Inbox 2 colunas + thread + resposta em tempo real (Realtime)
+- ✅ Shell estilo Chatwoot: sidebar nomeada, recolhível, com subitens de Conversas
+- ✅ **Tema claro / escuro / automático** (por agente, salvo no perfil, sem flash)
+- ✅ Inbox 3 colunas + thread + tempo real (Supabase Realtime)
 - ✅ Abas Minhas / Não atribuídas / Todos (contadores) + status + busca
-- ✅ Atribuição de agente · status aberta/pendente/resolvida · notas internas
-- ✅ Etiquetas na conversa · respostas rápidas · painel de contato (contexto CRM)
-- 🔲 Anexos/mídia (enviar+receber imagem, áudio, documento, vídeo)
-- 🔲 Snooze (adiar) + status "adiada"
-- 🔲 Prioridade da conversa (baixa/média/alta/urgente) + ordenação
-- 🔲 Ações em massa (selecionar várias: resolver/atribuir/etiquetar)
-- 🔲 Menções @ + aba "Menções" + "Não atendidas"
-- 🔲 Emoji picker · assinatura do agente · citar mensagem
-- 🔲 Command bar (Cmd+K) + atalhos de teclado
+- ✅ Atribuição de agente · **atribuição a equipe** · status · notas internas
+- ✅ Etiquetas (catálogo com cor) · respostas rápidas · painel de contato
+- ✅ **Anexos/mídia**: enviar e receber imagem, áudio, vídeo e documento
+      (lightbox, player inline, cartão de download)
+- ✅ **Snooze (adiar)** + status "adiada" + volta sozinha no prazo
+- ✅ **Prioridade** (baixa/média/alta/urgente) + ordenação por prioridade
+- ✅ **Ações em massa**: resolver, adiar, atribuir, priorizar, etiquetar, excluir
+- ✅ **Menções @** em nota interna + notificação + aba "Menções"
+- ✅ Aba "Não atendidas" (sem primeira resposta)
+- ✅ **Emoji picker** · **assinatura do agente** · **citar mensagem**
+- ✅ **Command bar (Ctrl/Cmd+K)** + **atalhos de teclado** (Ctrl+/ lista todos)
+- ✅ Filtros avançados (canal, prioridade, equipe, etiqueta) + 4 ordenações
+- ✅ Separadores de dia, status de entrega (✓/✓✓/lida), autor na bolha
 
 ## P1 — Operação de equipe (config essencial)
-- 🟡 Contatos: lista (de leads) — falta detalhe, criar/editar/mesclar, importar CSV, notas
-- 🧩 Empresas
+- ✅ Contatos: lista, detalhe (drawer), criar/editar, **mesclar**, **importar CSV**,
+      notas, atributos personalizados, ações em massa
+- ✅ Empresas: lista, CRUD, drawer de detalhe com contatos vinculados
 - ✅ Config › Agentes (liberar acesso `atendimento_access`)
 - ✅ Config › Equipes (times) — CRUD + membros
 - ✅ Config › Etiquetas (catálogo com cor) — CRUD
 - ✅ Config › Respostas rápidas — CRUD
-- 🟡 Canais (WhatsApp: Evolution/Cloud/Coexistence) — falta config por caixa
-- 🔲 Config › Caixas de entrada (agentes, horário, saudação, auto-atribuição, CSAT, pré-chat)
-- 🟡 Relatórios: visão geral — faltam Agentes, Etiquetas, Times, Conversas no tempo, CSAV/CSAT, export CSV
-- 🔲 Atribuir conversa a Equipe (coluna existe, falta UI)
-- 🔲 Perfil do agente (avatar, assinatura, notificações, idioma, senha, sessões, token)
+- ✅ Config › **Caixas de entrada** — 6 abas (Geral, Agentes, Mensagens
+      automáticas, Atribuição, Pré-chat, CSAT)
+- ✅ **Relatórios completos**: visão geral, agentes, equipes, etiquetas, caixas,
+      conversas no tempo (heatmap 7×24) + **exportar CSV**
+- ✅ **Perfil do agente**: dados, avatar (URL), assinatura, aparência,
+      disponibilidade, notificações, trocar senha
+- 🟡 Canais (WhatsApp: Evolution/Cloud/Coexistence) — 🔑 falta credencial real
 
 ## P2 — Automação e escala
-- 🔲 Macros (sequência de ações em 1 clique) + modal builder
-- 🔲 Regras de automação (condições → ações, gatilhos)
-- 🔲 Atributos personalizados (conversa e contato)
-- 🔲 Horário comercial (business hours) + mensagem fora do horário
-- 🔲 SLA (tempos: 1ª resposta, próxima, resolução) + alertas
-- 🔲 CSAT (pesquisa de satisfação) + relatório
-- 🔲 Segmentos/filtros salvos de conversas e contatos
+- ✅ **Macros** (construtor de sequência de ações) + aplicar dentro da conversa
+- ✅ **Regras de automação** (condições → ações) — cadastro + motor
+      (`src/lib/atendimento/automations.ts`)
+- 🟡 Motor de automação **não é disparado sozinho** — falta o gancho no webhook
+- ✅ **Atributos personalizados** (conversa e contato) + render no painel
+- ✅ **Horário comercial** por caixa + mensagem fora do horário
+- ✅ **SLA** — políticas (1ª resposta, próxima, resolução); 🔲 falta o job que marca violação
+- ✅ **CSAT** — ativação por caixa + painel de resultado (média, distribuição, taxa)
+- 🔲 Segmentos/filtros salvos (tabela `atendimento_segments` pronta, falta UI)
 
 ## P3 — Multichannel completo
-- 🔲 Widget de site (live-chat) + pré-chat + aparência
-- 🔲 Instagram · Facebook Messenger · Telegram · E-mail (IMAP/SMTP) · SMS · API channel
-- 🔲 Continuidade de conversa (e-mail) · respostas por e-mail
+- ✅ **Webhook da Evolution** (`/api/webhooks/evolution`) — recebe mensagem, mídia,
+      status de entrega, QR e conexão, com validação de segredo
+- ✅ **Envio unificado** (`src/lib/atendimento/outbound.ts`) — texto e mídia por
+      Evolution **ou** Cloud API, escolhendo o canal da conversa
+- ✅ Webhook da Meta (WhatsApp/Instagram/Facebook/Messenger) — já existia
+- 🔲 Widget de site (live-chat) + pré-chat renderizado no site
+- 🔲 Telegram · E-mail (IMAP/SMTP) · SMS · API channel
+      (a caixa de entrada já aceita esses canais no cadastro)
 
 ## P4 — Avançado / plataforma
-- 🔲 Campanhas: ao vivo (widget) e disparo em massa (WhatsApp)
-- 🔲 Central de Ajuda (Help Center): portais, categorias, artigos, publicação
-- 🔲 Integrações (Slack, Dialogflow, etc.) + Aplicativos do painel
-- 🔲 Webhooks · Tokens de API · Logs de auditoria
+- ✅ **Campanhas**: cadastro de disparo e ao vivo, seletor de público com
+      cálculo real; 🔲 falta o worker que envia
+- ✅ **Central de Ajuda**: portais, categorias, artigos, editor markdown com
+      pré-visualização, publicar/despublicar/arquivar
+- 🧩 Webhooks · Tokens de API · Registro de auditoria (telas honestas de "falta")
+- 🔲 Integrações (Slack, Dialogflow) + Aplicativos do painel
 - 🔲 Papéis personalizados (permissões granulares) + billing
-- 🔲 Pipeline/CRM kanban embutido (já existe no CRM Arini)
 
 ## P5 — IA (Capitão / Agentes IA)
-- 🔲 Copiloto (sugestões ao atendente) · respostas sugeridas
-- 🔲 Bot de triagem por intenção (Claude) · auto-resolução
-- 🔲 Base de conhecimento p/ IA (FAQ) · handoff humano
+- 🧩 Tela de Agentes IA com os 3 recursos planejados e o que falta para ligar
+- 🔲 Copiloto (sugestões ao atendente) — 🔑 exige `ANTHROPIC_API_KEY`
+- 🔲 Bot de triagem por intenção · auto-resolução
+- 🔲 Base de conhecimento p/ IA (usa os artigos da Central de Ajuda)
 
 ---
 
 ### Ordem de execução (ondas do loop)
 1. **Onda A (feito)**: shell + Config (Agentes/Equipes/Etiquetas/Respostas) + Contatos v1
-2. **Onda B**: anexos/mídia, prioridade, snooze, ações em massa, atribuir a equipe
-3. **Onda C**: caixas de entrada (config), relatórios completos, perfil do agente, contato detalhe
-4. **Onda D**: automação (macros, regras), atributos personalizados, horário, SLA, CSAT
-5. **Onda E**: multichannel (widget, IG, e-mail…), campanhas, help center
-6. **Onda F**: IA (copiloto + bot)
+2. **Onda B (feito)**: anexos, prioridade, snooze, ações em massa, equipe, menções,
+   emoji, citar, assinatura, command bar, atalhos, filtros
+3. **Onda C (feito)**: caixas de entrada, relatórios completos, perfil do agente,
+   contato detalhe/mesclar/importar, empresas
+4. **Onda D (feito)**: macros, regras de automação, atributos personalizados,
+   horário comercial, SLA, CSAT
+5. **Onda E (feito)**: webhook + envio Evolution, campanhas, central de ajuda,
+   tema claro/escuro
+6. **Onda F (próxima)**: gancho das automações no webhook, worker de campanha,
+   job de SLA, widget de site, IA

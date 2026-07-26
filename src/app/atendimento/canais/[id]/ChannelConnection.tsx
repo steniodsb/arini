@@ -119,12 +119,12 @@ export function ChannelConnection({
     <div className="rounded-lg border p-4 space-y-4">
       <div className="flex items-start gap-3">
         {isEvolution ? (
-          <QrCode size={20} className="text-arini shrink-0 mt-0.5" />
+          <QrCode size={20} className="text-arini dark:text-gold shrink-0 mt-0.5" />
         ) : (
-          <Plug size={20} className="text-arini shrink-0 mt-0.5" />
+          <Plug size={20} className="text-arini dark:text-gold shrink-0 mt-0.5" />
         )}
         <div className="min-w-0">
-          <h2 className="font-medium text-arini">
+          <h2 className="font-medium text-arini dark:text-gold">
             {isEvolution ? "Conectar lendo o QR Code" : "Validar a conexão com a Meta"}
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -160,7 +160,7 @@ export function ChannelConnection({
 
       {!isEvolution && (
         <div className="rounded-md bg-muted p-3 text-xs">
-          <div className="font-medium text-arini mb-1">Antes de validar</div>
+          <div className="font-medium text-arini dark:text-gold mb-1">Antes de validar</div>
           <p className="text-muted-foreground">
             No painel da Meta, aponte o webhook para{" "}
             <code className="font-mono break-all">{webhookUrl}</code> usando o mesmo Verify Token

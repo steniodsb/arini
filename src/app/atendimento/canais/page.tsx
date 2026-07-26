@@ -40,7 +40,7 @@ export default async function CanaisPage() {
       <div className="max-w-4xl mx-auto p-6 space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="font-display text-3xl text-arini">Canais</h1>
+            <h1 className="font-display text-3xl text-arini dark:text-gold">Canais</h1>
             <p className="text-muted-foreground mt-1 text-sm">
               Os números de WhatsApp que o atendimento usa para conversar com os clientes.
             </p>
@@ -51,7 +51,7 @@ export default async function CanaisPage() {
         {channels.length === 0 ? (
           <div className="rounded-lg border border-dashed p-10 text-center">
             <MessageSquare size={32} className="mx-auto text-muted-foreground/40" />
-            <h2 className="mt-3 font-medium text-arini">Nenhum canal conectado ainda</h2>
+            <h2 className="mt-3 font-medium text-arini dark:text-gold">Nenhum canal conectado ainda</h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
               Conecte um WhatsApp para começar a receber e responder mensagens por aqui. Dá para
               escolher entre a Evolution API (QR Code) ou a API oficial da Meta.
@@ -63,11 +63,11 @@ export default async function CanaisPage() {
               <li key={c.id}>
                 <Link
                   href={`/atendimento/canais/${c.id}`}
-                  className="block rounded-lg border bg-white p-4 hover:border-gold transition-colors"
+                  className="block rounded-lg border bg-card p-4 hover:border-gold transition-colors"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium text-arini truncate">{c.nome}</div>
+                      <div className="font-medium text-arini dark:text-gold truncate">{c.nome}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {CHANNEL_PROVIDER_LABELS[c.provedor]}
                         {c.telefone ? ` · ${c.telefone}` : ""}
