@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
+import { ipDaRequisicao, registrarAuditoria } from "@/lib/atendimento/audit";
 import type { ChannelProvider } from "@/lib/types";
 
 /**
@@ -77,7 +78,9 @@ export async function POST(req: Request) {
   // Só a diretoria cadastra canal (a config carrega token de acesso).
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin_central, sector, ativo")
+    // `nome` entra só para desnormalizar o autor no log de auditoria — o
+    // log tem que continuar legível se o perfil for apagado depois.
+    .select("nome, is_admin_central, sector, ativo")
     .eq("id", user.id)
     .maybeSingle();
   const isDiretoria = !!profile?.ativo && (profile.is_admin_central || profile.sector === "admin_central");
@@ -164,6 +167,26 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  // Auditoria: canal guarda credencial de terceiro, então "quem cadastrou
+  // este canal" é pergunta de segurança, não de curiosidade.
+  // `config` NUNCA entra em `detalhes` — ela carrega api_key, access_token
+  // e app_secret, e a tela de auditoria é lida por todo o atendimento.
+  await registrarAuditoria(admin, {
+    atorId: user.id,
+    atorNome: profile?.nome ?? user.email ?? null,
+    acao: "criou",
+    entidade: "atendimento_channels",
+    entidadeId: data.id as string,
+    detalhes: {
+      nome,
+      provedor,
+      canal: CANAL_DO_PROVEDOR[provedor],
+      // Só os NOMES das chaves preenchidas, jamais os valores.
+      campos_config: Object.keys(config),
+    },
+    ip: ipDaRequisicao(req),
+  });
 
   return NextResponse.json({ ok: true, id: data.id });
 }

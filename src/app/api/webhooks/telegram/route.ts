@@ -4,6 +4,12 @@ import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { getFileUrl } from "@/lib/telegram";
 import { guardarMidiaRecebida } from "@/lib/atendimento/media-inbound";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { autoResposta, triagemAutomatica } from "@/lib/atendimento/ia-triagem";
+import {
+  emitirContatoCriado,
+  emitirConversaCriada,
+  emitirMensagemCriada,
+} from "@/lib/atendimento/webhook-eventos";
 import type { MessageTipo } from "@/lib/types";
 
 type Admin = ReturnType<typeof createSupabaseAdmin>;
@@ -240,6 +246,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ignored: "mensagem sem conteúdo legível" });
   }
 
+  // CONTATO BLOQUEADO — descarte silencioso, ANTES de gravar qualquer coisa.
+  // Feito aqui, e não depois: se gravássemos a mensagem e só então
+  // ignorássemos, o bloqueio não bloquearia nada — a conversa subiria para o
+  // topo da caixa do mesmo jeito. Respondemos 200 para o Telegram parar de
+  // reenviar o update, e o remetente não recebe nenhum sinal de que foi
+  // bloqueado (é justamente o ponto de "silencioso").
+  const { data: leadBloqueio } = await admin
+    .from("leads")
+    .select("bloqueado")
+    .eq("external_id", `${LEAD_PREFIX}${chatId}`)
+    .limit(1)
+    .maybeSingle();
+  if (leadBloqueio?.bloqueado) {
+    return NextResponse.json({ ok: true, ignored: "contato bloqueado" });
+  }
+
   const { data: dup } = await admin
     .from("messages")
     .select("id")
@@ -283,10 +305,11 @@ export async function POST(req: Request) {
     leadId = (lead?.id as string) ?? null;
 
     if (!leadId) {
+      const nomeLead = nome || `Contato Telegram ${chatId}`;
       const { data: novoLead } = await admin
         .from("leads")
         .insert({
-          nome: nome || `Contato Telegram ${chatId}`,
+          nome: nomeLead,
           // Sem telefone: o Telegram só entrega o chat_id e o @username.
           telefone: null,
           external_id: leadExternalId,
@@ -298,6 +321,19 @@ export async function POST(req: Request) {
         .select("id")
         .single();
       leadId = (novoLead?.id as string) ?? null;
+
+      // Webhook `contato_criado` — o dedupe por external_id não achou
+      // ninguém, então este chat é mesmo um contato novo.
+      if (leadId) {
+        emitirContatoCriado(admin, {
+          id: leadId,
+          nome: nomeLead,
+          // O Telegram não entrega telefone; deixar explícito evita o
+          // integrador achar que perdemos o dado.
+          telefone: null,
+          origem: "telegram",
+        });
+      }
     }
 
     const { data: novaConv, error: convErr } = await admin
@@ -321,6 +357,16 @@ export async function POST(req: Request) {
       );
     }
     conversationId = novaConv.id as string;
+
+    // Webhook `conversa_criada` — este ramo É o nascimento da conversa.
+    emitirConversaCriada(admin, {
+      id: conversationId,
+      canal: "telegram",
+      status: "aberta",
+      contato_nome: nome,
+      contato_telefone: null,
+      lead_id: leadId,
+    });
   }
 
   // 3) Grava a mensagem. Update de bot só chega para mensagem do cliente —
@@ -337,20 +383,47 @@ export async function POST(req: Request) {
       })
     : null;
 
-  await admin.from("messages").insert({
-    conversation_id: conversationId,
-    direcao: "in",
-    remetente: "cliente",
-    tipo: conteudo.tipo,
-    conteudo: conteudo.texto,
-    media_url: guardada?.url ?? null,
-    media_nome: conteudo.mediaNome,
-    media_mime: guardada?.mime ?? conteudo.mediaMime,
-    media_tamanho: guardada?.tamanho ?? null,
-    external_id: externalIdMensagem,
-    raw_payload: payload as unknown as Record<string, unknown>,
-    status: "recebida",
-  });
+  const { data: msgCriada } = await admin
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      direcao: "in",
+      remetente: "cliente",
+      tipo: conteudo.tipo,
+      conteudo: conteudo.texto,
+      media_url: guardada?.url ?? null,
+      media_nome: conteudo.mediaNome,
+      media_mime: guardada?.mime ?? conteudo.mediaMime,
+      media_tamanho: guardada?.tamanho ?? null,
+      external_id: externalIdMensagem,
+      raw_payload: payload as unknown as Record<string, unknown>,
+      status: "recebida",
+    })
+    // id/created_at servem só para identificar a mensagem no payload.
+    .select("id, created_at")
+    .maybeSingle();
+
+  // Webhook `mensagem_criada`. Nem `raw_payload` nem a URL temporária do
+  // Telegram entram no corpo — aquela URL carrega o token do bot.
+  emitirMensagemCriada(
+    admin,
+    {
+      id: conversationId,
+      canal: "telegram",
+      status: "aberta",
+      contato_nome: nome,
+      contato_telefone: null,
+      lead_id: leadId,
+    },
+    {
+      id: (msgCriada?.id as string) ?? null,
+      direcao: "in",
+      remetente: "cliente",
+      tipo: conteudo.tipo,
+      texto: conteudo.texto,
+      criada_em: (msgCriada?.created_at as string) ?? null,
+    },
+  );
 
   // 4) Denormaliza o inbox: a mensagem do cliente conta como não lida e
   //    reabre a conversa adiada.
@@ -383,10 +456,21 @@ export async function POST(req: Request) {
     interna: false,
   });
 
+  // 6) IA — triagem e auto-resposta, na mesma ordem sempre: primeiro
+  //    classificar/etiquetar/rotear, depois responder. Assim a auto-resposta
+  //    já sai com a conversa na equipe certa. Nenhuma das duas lança, e as
+  //    duas saem na primeira linha quando a caixa não tem a chave ligada.
+  const triagem = await triagemAutomatica(admin, conversationId, {
+    conversaNova: !convExistente,
+  });
+  const auto = await autoResposta(admin, conversationId);
+
   return NextResponse.json({
     ok: true,
     conversation_id: conversationId,
     automacoes: automacao.regrasDisparadas,
+    ia_triagem: triagem.executada,
+    ia_auto_resposta: auto.enviada,
   });
 }
 

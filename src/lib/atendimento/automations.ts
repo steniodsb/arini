@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  emitirConversaAtualizada,
+  emitirConversaResolvida,
+} from "@/lib/atendimento/webhook-eventos";
 import type {
   AtendimentoAutomation,
   AutomationCondition,
@@ -290,8 +294,46 @@ export async function aplicarAcoes(
   }
 
   if (Object.keys(patch).length > 0) {
-    const { error } = await supabase.from("conversations").update(patch).eq("id", conversationId);
+    // O `select` no update é o que permite montar o payload do webhook sem
+    // uma segunda leitura — e devolve o estado JÁ aplicado, que é o que o
+    // consumidor precisa ver.
+    const { data: atualizada, error } = await supabase
+      .from("conversations")
+      .update(patch)
+      .eq("id", conversationId)
+      .select("id, canal, status, contato_nome, contato_telefone, lead_id")
+      .maybeSingle();
     if (error) erros.push(`Falha ao atualizar a conversa: ${error.message}`);
+
+    // Webhooks de saída das AUTOMAÇÕES: uma regra que resolve ou reatribui
+    // a conversa é uma mudança real, e o integrador não tem como saber que
+    // ela aconteceu (não houve clique de ninguém).
+    //
+    // Só dispara quando o `select` volta: com um client sem service role a
+    // leitura de `atendimento_webhooks` é barrada pela RLS e o disparo não
+    // teria efeito nenhum mesmo. Nada aqui bloqueia — ver webhook-eventos.
+    if (atualizada) {
+      const evento = {
+        id: atualizada.id as string,
+        canal: atualizada.canal as string | null,
+        status: atualizada.status as string | null,
+        contato_nome: atualizada.contato_nome as string | null,
+        contato_telefone: atualizada.contato_telefone as string | null,
+        lead_id: atualizada.lead_id as string | null,
+      };
+      if (patch.status === "resolvida") {
+        emitirConversaResolvida(supabase, evento, {
+          resolvida_em: patch.resolvida_em ?? null,
+          // Automação não tem gente por trás — o campo fica nulo de propósito.
+          resolvida_por: null,
+        });
+      } else {
+        emitirConversaAtualizada(supabase, evento, {
+          por: "automacao",
+          campos: Object.keys(patch),
+        });
+      }
+    }
   }
 
   if (mensagens.length > 0) {

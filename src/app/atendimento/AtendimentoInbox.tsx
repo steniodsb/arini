@@ -316,26 +316,49 @@ export function AtendimentoInbox({
   const setPrioridade = (p: ConversationPriority | null) =>
     selected && atualizar(selected.id, { prioridade: p }, { prioridade: p });
 
-  async function mudarStatus(status: ConversationStatus, conv = selected) {
+  /**
+   * Mudança de status vai pela rota de API, não pelo Supabase direto. Do
+   * navegador não dá para gravar auditoria (o log não tem policy de
+   * escrita, de propósito) nem assinar o webhook de saída (o segredo não
+   * pode ir para o cliente) — e as automações de "conversa_resolvida"
+   * ficariam órfãs. A UI atualiza otimista e volta atrás se der erro.
+   */
+  async function mudarStatus(
+    status: ConversationStatus,
+    conv = selected,
+    snoozedUntil: string | null = null,
+  ) {
     if (!conv) return;
-    const patch: Partial<Conversation> = { status, snoozed_until: null };
-    const update: Record<string, unknown> = { status, snoozed_until: null };
+    const anterior = { status: conv.status, snoozed_until: conv.snoozed_until };
+    const patch: Partial<Conversation> = { status, snoozed_until: snoozedUntil };
     if (status === "resolvida") {
-      const now = new Date().toISOString();
-      patch.resolvida_em = now; patch.resolvida_por = currentUser.id;
-      update.resolvida_em = now; update.resolvida_por = currentUser.id;
+      patch.resolvida_em = new Date().toISOString();
+      patch.resolvida_por = currentUser.id;
     }
-    await atualizar(conv.id, patch, update);
+    patchLocal(conv.id, patch);
+
+    try {
+      const res = await fetch(`/api/atendimento/conversas/${conv.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, snoozedUntil }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        patchLocal(conv.id, anterior);
+        setNotice({ tipo: "erro", texto: json.error ?? "Não deu para mudar o status." });
+        return;
+      }
+      void refreshConversations();
+    } catch {
+      patchLocal(conv.id, anterior);
+      setNotice({ tipo: "erro", texto: "Erro de rede ao mudar o status." });
+    }
   }
 
   async function adiar(ate: Date | null) {
     if (!selected) return;
-    const iso = ate?.toISOString() ?? null;
-    await atualizar(
-      selected.id,
-      { status: "adiada", snoozed_until: iso },
-      { status: "adiada", snoozed_until: iso },
-    );
+    await mudarStatus("adiada", selected, ate?.toISOString() ?? null);
     setNotice({
       tipo: "info",
       texto: ate
@@ -562,10 +585,25 @@ export function AtendimentoInbox({
     void refreshConversations();
   }
 
+  /** Excluir é a ação mais destrutiva do inbox — vai pela rota, que grava
+   *  quem apagou o quê. A RLS continua decidindo o que o agente pode. */
   async function massaExcluir() {
-    const { error } = await supa().from("conversations").delete().in("id", idsSelecionados);
-    if (error) { setNotice({ tipo: "erro", texto: error.message }); return; }
-    setNotice({ tipo: "info", texto: `${idsSelecionados.length} conversa(s) excluída(s).` });
+    try {
+      const res = await fetch("/api/atendimento/conversas", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: idsSelecionados }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotice({ tipo: "erro", texto: json.error ?? "Não deu para excluir." });
+        return;
+      }
+      setNotice({ tipo: "info", texto: `${idsSelecionados.length} conversa(s) excluída(s).` });
+    } catch {
+      setNotice({ tipo: "erro", texto: "Erro de rede ao excluir." });
+      return;
+    }
     setSelecionadas(new Set());
     setModalMassa(null);
     setSelectedId(null);

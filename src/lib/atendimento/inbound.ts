@@ -1,6 +1,11 @@
 import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import {
+  emitirContatoCriado,
+  emitirConversaCriada,
+  emitirMensagemCriada,
+} from "@/lib/atendimento/webhook-eventos";
 import type { ConversationChannel, MessageTipo } from "@/lib/types";
 
 // =====================================================================
@@ -76,7 +81,14 @@ type ConversaExistente = {
 };
 
 export type ResultadoEntrada =
-  | { ok: true; conversationId: string; duplicada: boolean; automacoes: number }
+  | {
+      ok: true;
+      conversationId: string;
+      duplicada: boolean;
+      automacoes: number;
+      /** Contato bloqueado: a mensagem foi descartada de propósito. */
+      bloqueada?: boolean;
+    }
   | { ok: false; erro: string };
 
 /** Compara segredo em tempo constante (mesma regra do webhook da Evolution). */
@@ -167,6 +179,40 @@ export async function autenticarCanalWebhook(
  * Nunca lança: devolve `{ ok:false, erro }` para o webhook responder algo
  * inteligível em vez de estourar 500 (e o provedor ficar reentregando).
  */
+/**
+ * O contato está bloqueado? Procura na mesma ordem do dedupe de lead:
+ * external_id (chave nossa, exata) → e-mail → telefone. Qualquer falha de
+ * consulta devolve `false` — na dúvida, é melhor deixar a mensagem entrar
+ * do que perdê-la por causa de um erro de rede.
+ */
+async function contatoBloqueado(
+  admin: SupabaseClient,
+  chaves: { leadExternalId?: string | null; telefone: string | null; email: string | null },
+): Promise<boolean> {
+  const { leadExternalId, telefone, email } = chaves;
+  try {
+    const buscas: { coluna: string; valor: string }[] = [];
+    if (leadExternalId) buscas.push({ coluna: "external_id", valor: leadExternalId });
+    if (email) buscas.push({ coluna: "email", valor: email });
+    if (telefone) {
+      buscas.push({ coluna: "whatsapp", valor: telefone });
+      buscas.push({ coluna: "telefone", valor: telefone });
+    }
+    for (const { coluna, valor } of buscas) {
+      const { data } = await admin
+        .from("leads")
+        .select("bloqueado")
+        .eq(coluna, valor)
+        .limit(1)
+        .maybeSingle();
+      if (data) return (data as { bloqueado?: boolean }).bloqueado === true;
+    }
+  } catch {
+    // Consulta falhou — não é motivo para descartar a mensagem do cliente.
+  }
+  return false;
+}
+
 export async function registrarMensagemEntrada(
   admin: SupabaseClient,
   entrada: EntradaMensagem,
@@ -204,6 +250,17 @@ export async function registrarMensagemEntrada(
         automacoes: 0,
       };
     }
+  }
+
+  // ---- 0.5) Contato bloqueado -----------------------------------------
+  // `leads.bloqueado` existia desde a 0031, mas nenhum webhook o checava:
+  // bloquear alguém era só uma marcação decorativa e a mensagem entrava na
+  // caixa do mesmo jeito. A checagem mora aqui porque este é o miolo
+  // compartilhado — cobre WhatsApp, e-mail, SMS e o canal por API de uma
+  // vez. Descartamos em silêncio e devolvemos ok: o provedor não pode ver
+  // diferença entre bloqueado e entregue, senão vira canal de sondagem.
+  if (await contatoBloqueado(admin, { leadExternalId, telefone, email })) {
+    return { ok: true, conversationId: "", duplicada: false, bloqueada: true, automacoes: 0 };
   }
 
   // ---- 1) Acha-ou-cria a conversa ------------------------------------
@@ -252,10 +309,11 @@ export async function registrarMensagemEntrada(
     }
 
     if (!leadId) {
+      const nomeLead = nome || email || telefone || `Contato ${externalIdConversa}`;
       const { data: novoLead } = await admin
         .from("leads")
         .insert({
-          nome: nome || email || telefone || `Contato ${externalIdConversa}`,
+          nome: nomeLead,
           telefone,
           email,
           external_id: leadExternalId,
@@ -267,6 +325,18 @@ export async function registrarMensagemEntrada(
         .select("id")
         .single();
       leadId = (novoLead?.id as string) ?? null;
+
+      // Webhook `contato_criado`: só quando o dedupe acima falhou em achar
+      // alguém, ou seja, quando a pessoa é mesmo nova no CRM.
+      if (leadId) {
+        emitirContatoCriado(admin, {
+          id: leadId,
+          nome: nomeLead,
+          telefone,
+          email,
+          origem: "outros",
+        });
+      }
     }
 
     const { data: novaConv, error: convErr } = await admin
@@ -288,24 +358,63 @@ export async function registrarMensagemEntrada(
       return { ok: false, erro: convErr?.message ?? "falha ao abrir conversa" };
     }
     conversationId = novaConv.id as string;
+
+    // Webhook `conversa_criada`: aqui e não no fim da função, porque é
+    // exatamente este ramo que representa "a conversa nasceu".
+    emitirConversaCriada(admin, {
+      id: conversationId,
+      canal,
+      status: "aberta",
+      contato_nome: nome,
+      contato_telefone: telefone,
+      lead_id: leadId,
+    });
   }
 
   // ---- 3) Grava a mensagem -------------------------------------------
   const preview = texto?.slice(0, 140) ?? `[${tipo}]`;
-  const { error: msgErr } = await admin.from("messages").insert({
-    conversation_id: conversationId,
-    direcao: "in",
-    remetente: "cliente",
-    tipo,
-    conteudo: texto,
-    media_url: entrada.mediaUrl ?? null,
-    media_nome: entrada.mediaNome ?? null,
-    media_mime: entrada.mediaMime ?? null,
-    external_id: externalIdMensagem ?? null,
-    raw_payload: rawPayload,
-    status: "recebida",
-  });
+  const { data: msgCriada, error: msgErr } = await admin
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      direcao: "in",
+      remetente: "cliente",
+      tipo,
+      conteudo: texto,
+      media_url: entrada.mediaUrl ?? null,
+      media_nome: entrada.mediaNome ?? null,
+      media_mime: entrada.mediaMime ?? null,
+      external_id: externalIdMensagem ?? null,
+      raw_payload: rawPayload,
+      status: "recebida",
+    })
+    // Devolvemos o id/created_at só para o payload do webhook conseguir
+    // identificar a mensagem do lado de fora.
+    .select("id, created_at")
+    .single();
   if (msgErr) return { ok: false, erro: msgErr.message };
+
+  // Webhook `mensagem_criada`. `raw_payload` fica de fora de propósito —
+  // ele carrega o corpo cru do provedor (e às vezes credencial dentro).
+  emitirMensagemCriada(
+    admin,
+    {
+      id: conversationId,
+      canal,
+      status: "aberta",
+      contato_nome: nome ?? null,
+      contato_telefone: telefone,
+      lead_id: leadId,
+    },
+    {
+      id: (msgCriada?.id as string) ?? null,
+      direcao: "in",
+      remetente: "cliente",
+      tipo,
+      texto,
+      criada_em: (msgCriada?.created_at as string) ?? null,
+    },
+  );
 
   // ---- 4) Denormaliza o inbox ----------------------------------------
   // Mensagem do cliente sempre conta como não lida e reabre a conversa

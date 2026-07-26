@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAtendimentoUser, hasAtendimentoAccess } from "@/lib/atendimento-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
+import { ipDaRequisicao, registrarAuditoria } from "@/lib/atendimento/audit";
+import { emitirContatoCriado } from "@/lib/atendimento/webhook-eventos";
 import { LEAD_ORIGINS, LEAD_STAGES } from "@/lib/types";
 import type { ContatoInput } from "@/app/atendimento/contatos/tipos";
 
@@ -72,12 +74,48 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdmin();
 
+  /**
+   * Atalho de auditoria desta rota: o ator e o IP são sempre os mesmos,
+   * e a entidade é sempre `leads`. Repetir isso em seis `case` só
+   * convidaria a divergir.
+   */
+  const auditar = (
+    acao: string,
+    entidadeId: string | null,
+    detalhes: Record<string, unknown>,
+  ) =>
+    registrarAuditoria(admin, {
+      atorId: sessao.user.id,
+      atorNome: sessao.profile?.nome ?? sessao.user.email ?? null,
+      acao,
+      entidade: "leads",
+      entidadeId,
+      detalhes,
+      ip: ipDaRequisicao(req),
+    });
+
   try {
     switch (body.acao) {
       case "criar": {
         const dados = sanear(body.dados, true);
         const { data, error } = await admin.from("leads").insert(dados).select("*").single();
         if (error) throw new Error(error.message);
+
+        await auditar("criou", data.id as string, {
+          nome: data.nome ?? null,
+          telefone: data.telefone ?? null,
+          email: data.email ?? null,
+        });
+        // Webhook `contato_criado`: contato cadastrado à mão pelo agente
+        // conta tanto quanto o que nasce de uma mensagem recebida.
+        emitirContatoCriado(admin, {
+          id: data.id as string,
+          nome: (data.nome as string | null) ?? null,
+          telefone: (data.telefone as string | null) ?? null,
+          email: (data.email as string | null) ?? null,
+          origem: (data.origem as string | null) ?? null,
+        });
+
         return NextResponse.json({ contato: data });
       }
 
@@ -93,14 +131,37 @@ export async function POST(req: Request) {
           .select("*")
           .single();
         if (error) throw new Error(error.message);
+
+        // Só os NOMES dos campos tocados: guardar os valores duplicaria
+        // dado pessoal do cliente dentro do log, sem ganho de rastro.
+        await auditar("atualizou", body.id, {
+          nome: data.nome ?? null,
+          campos: Object.keys(dados).filter((k) => k !== "ultima_interacao_em"),
+        });
+
         return NextResponse.json({ contato: data });
       }
 
       case "excluir": {
         const ids = Array.isArray(body.ids) ? body.ids : [];
         if (ids.length === 0) return NextResponse.json({ error: "Nenhum contato informado." }, { status: 400 });
+
+        // Lê antes de apagar: depois não sobra de onde tirar o nome, e um
+        // log só com uuid não responde "quem apagou o contato do fulano?".
+        const { data: alvos } = await admin
+          .from("leads").select("id, nome, telefone, email").in("id", ids);
+
         const { error } = await admin.from("leads").delete().in("id", ids);
         if (error) throw new Error(error.message);
+
+        await auditar("excluiu", ids.length === 1 ? ids[0] : null, {
+          quantidade: ids.length,
+          contatos: (alvos ?? []).map((c) => ({
+            id: c.id,
+            nome: c.nome ?? c.telefone ?? c.email ?? null,
+          })),
+        });
+
         return NextResponse.json({ ok: true, excluidos: ids.length });
       }
 
@@ -113,6 +174,16 @@ export async function POST(req: Request) {
         }
         const { data, error } = await admin.from("leads").update(dados).in("id", ids).select("*");
         if (error) throw new Error(error.message);
+
+        // Edição em massa é justamente onde um clique errado estraga muita
+        // ficha de uma vez — merece uma linha só, com a lista dentro.
+        await auditar("atualizou", null, {
+          em_massa: true,
+          quantidade: ids.length,
+          ids,
+          campos: Object.keys(dados),
+        });
+
         return NextResponse.json({ contatos: data ?? [] });
       }
 
@@ -147,6 +218,18 @@ export async function POST(req: Request) {
             }
           }
         }
+        if (importados > 0) {
+          await auditar("importou", null, {
+            importados,
+            recebidas: linhas.length,
+            falhas: falhas.length,
+          });
+        }
+        // Importação NÃO dispara `contato_criado`: uma planilha com 2 mil
+        // linhas viraria 2 mil POSTs no endpoint do cliente e derrubaria
+        // o webhook pelo limite de falhas seguidas. Quem quiser reagir a
+        // importação usa o relatório, não o webhook.
+
         return NextResponse.json({ importados, falhas });
       }
 
@@ -182,6 +265,15 @@ export async function POST(req: Request) {
 
         const { error: e4 } = await admin.from("leads").delete().eq("id", origemId);
         if (e4) throw new Error(`Falha ao excluir o contato duplicado: ${e4.message}`);
+
+        // Mesclar apaga uma ficha de verdade e move histórico entre elas.
+        // Se depois alguém disser "sumiu um contato", é este log que conta
+        // para onde ele foi.
+        await auditar("mesclou", destinoId, {
+          destino_id: destinoId,
+          origem_id: origemId,
+          destino_nome: destino.nome ?? null,
+        });
 
         return NextResponse.json({ contato: destino });
       }

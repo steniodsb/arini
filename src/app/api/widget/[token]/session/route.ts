@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
+import { emitirContatoCriado, emitirConversaCriada } from "@/lib/atendimento/webhook-eventos";
 import {
   apenasDigitos,
   carregarCaixaPorToken,
@@ -156,6 +157,19 @@ export async function POST(req: Request, { params }: { params: { token: string }
     if (erroConv || !nova) return jsonCors({ erro: "falha ao abrir conversa" }, 500, headers);
     conversationId = (nova as { id: string }).id;
     conversaNova = true;
+
+    // Webhook `conversa_criada` do chat do site. É AQUI que a conversa do
+    // widget nasce (a rota /messages só grava mensagem numa que já existe).
+    // O `contact_token` fica fora do payload de propósito: ele é a
+    // credencial de sessão do visitante, não um identificador público.
+    emitirConversaCriada(admin, {
+      id: conversationId,
+      canal: "site",
+      status: "aberta",
+      contato_nome: contato.nome ?? sessao.nome,
+      contato_telefone: contato.telefone ?? sessao.telefone,
+      lead_id: leadId,
+    });
   }
 
   // 4) Saudação automática: entra como mensagem do SISTEMA (não é o
@@ -252,10 +266,11 @@ async function acharOuCriarLead(
     if (data) return await tocarLead(admin, data as { id: string; nome: string | null }, contato);
   }
 
+  const nomeLead = contato.nome || "Visitante do site";
   const { data: novo } = await admin
     .from("leads")
     .insert({
-      nome: contato.nome || "Visitante do site",
+      nome: nomeLead,
       telefone,
       whatsapp: telefone,
       email,
@@ -266,7 +281,21 @@ async function acharOuCriarLead(
     .select("id")
     .single();
 
-  return (novo as { id: string } | null)?.id ?? null;
+  const novoId = (novo as { id: string } | null)?.id ?? null;
+
+  // Webhook `contato_criado` — chegamos aqui só depois de o dedupe por
+  // telefone e por e-mail ter falhado, então é gente nova de verdade.
+  if (novoId) {
+    emitirContatoCriado(admin, {
+      id: novoId,
+      nome: nomeLead,
+      telefone,
+      email,
+      origem: "site",
+    });
+  }
+
+  return novoId;
 }
 
 /** Marca o lead como vivo e completa o nome se ele estava genérico/vazio. */

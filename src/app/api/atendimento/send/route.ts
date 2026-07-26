@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
 import { enviarMensagem } from "@/lib/atendimento/outbound";
+import { emitirMensagemCriada } from "@/lib/atendimento/webhook-eventos";
 import type { ConversationChannel, MessageStatus, MessageTipo } from "@/lib/types";
 
 /**
@@ -61,7 +62,11 @@ export async function POST(req: Request) {
   // RLS garante que o usuário só acessa conversas permitidas.
   const { data: conv, error: convErr } = await supabase
     .from("conversations")
-    .select("id, canal, external_id, contato_telefone, primeira_resposta_em, channel_id, status")
+    // contato_nome e lead_id entram só para montar o payload do webhook
+    // `mensagem_criada` sem precisar de uma segunda leitura da conversa.
+    .select(
+      "id, canal, external_id, contato_nome, contato_telefone, lead_id, primeira_resposta_em, channel_id, status",
+    )
     .eq("id", conversationId)
     .maybeSingle();
   if (convErr) return NextResponse.json({ error: convErr.message }, { status: 400 });
@@ -172,6 +177,37 @@ export async function POST(req: Request) {
   // depois de o atendente falar com o cliente.
   if (conv.status === "adiada") { patch.status = "aberta"; patch.snoozed_until = null; }
   await supabase.from("conversations").update(patch).eq("id", conversationId);
+
+  // Webhook `mensagem_criada` da resposta do agente.
+  //
+  // Está DEPOIS do insert e do patch de propósito: o evento só sai quando
+  // a mensagem existe de verdade no histórico. Sai mesmo que o envio ao
+  // provedor tenha falhado (`delivered:false`) — do ponto de vista do
+  // inbox a mensagem foi criada, e esconder isso do integrador daria um
+  // histórico com buracos.
+  //
+  // NOTA INTERNA NÃO CHEGA AQUI: o ramo `interna` retorna bem antes. Isso
+  // é regra, não acaso — nota é conversa da equipe e não pode ser POSTada
+  // para um endpoint de terceiro.
+  emitirMensagemCriada(
+    admin,
+    {
+      id: conversationId,
+      canal,
+      status: (patch.status as string | undefined) ?? (conv.status as string | null),
+      contato_nome: (conv.contato_nome as string | null) ?? null,
+      contato_telefone: (conv.contato_telefone as string | null) ?? null,
+      lead_id: (conv.lead_id as string | null) ?? null,
+    },
+    {
+      id: (msg?.id as string) ?? null,
+      direcao: "out",
+      remetente: "atendente",
+      tipo,
+      texto: textoFinal,
+      criada_em: (msg?.created_at as string) ?? agora,
+    },
+  );
 
   return NextResponse.json({
     ok: true,

@@ -11,6 +11,7 @@ import {
   type RelMembro,
   type RelMensagem,
   type RelPessoa,
+  type RelPoliticaSla,
 } from "./RelatoriosPanel";
 
 export const dynamic = "force-dynamic";
@@ -37,11 +38,16 @@ export default async function RelatoriosPage() {
     { data: membros },
     { data: etiquetas },
     { data: caixas },
+    { data: politicasSla },
   ] = await Promise.all([
     admin
       .from("conversations")
       .select(
-        "id, canal, status, prioridade, responsavel_id, team_id, tags, inbox_id, created_at, resolvida_em, resolvida_por, primeira_resposta_em, sla_violado",
+        // As colunas de SLA (política + os dois prazos) vêm junto porque a aba
+        // de SLA recalcula a violação no cliente: o flag `sla_violado` é
+        // carimbado por cron e só pega quem AINDA estava vencido na hora em
+        // que o job rodou — quem respondeu atrasado escapa dele.
+        "id, canal, status, prioridade, responsavel_id, team_id, tags, inbox_id, created_at, resolvida_em, resolvida_por, primeira_resposta_em, sla_violado, sla_policy_id, sla_first_response_due, sla_resolution_due",
       )
       .gte("created_at", desde)
       .order("created_at", { ascending: true })
@@ -66,6 +72,10 @@ export default async function RelatoriosPage() {
     admin.from("atendimento_team_members").select("team_id, profile_id"),
     admin.from("atendimento_labels").select("id, nome, cor").order("nome"),
     admin.from("atendimento_inboxes").select("id, nome, canal").order("nome"),
+    admin
+      .from("atendimento_sla_policies")
+      .select("id, nome, primeira_resposta_min, resolucao_min")
+      .order("nome"),
   ]);
 
   return (
@@ -79,6 +89,7 @@ export default async function RelatoriosPage() {
         membros={(membros ?? []) as RelMembro[]}
         etiquetas={(etiquetas ?? []) as RelEtiqueta[]}
         caixas={(caixas ?? []) as RelCaixa[]}
+        politicasSla={(politicasSla ?? []) as RelPoliticaSla[]}
         janelaDias={JANELA_DIAS}
       />
     </PageShell>

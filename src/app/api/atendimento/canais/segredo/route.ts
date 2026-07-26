@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
+import { ipDaRequisicao, registrarAuditoria } from "@/lib/atendimento/audit";
 
 /**
  * Segredo de webhook dos canais HTTP (e-mail, SMS e API genérica).
@@ -34,7 +35,8 @@ export async function POST(req: Request) {
   // Mesma regra das outras rotas de canal: o segredo é credencial.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin_central, sector, ativo")
+    // `nome` só para desnormalizar o autor no log de auditoria.
+    .select("nome, is_admin_central, sector, ativo")
     .eq("id", user.id)
     .maybeSingle();
   const isDiretoria =
@@ -69,10 +71,12 @@ export async function POST(req: Request) {
   }
 
   const config = { ...((canal.config ?? {}) as Record<string, string>) };
+  const tinhaSegredo = Boolean(config.webhook_secret);
 
   // 24 bytes em hex = 48 caracteres. Mesmo tamanho usado na Evolution e no
   // Telegram — não há motivo para dois padrões de segredo no sistema.
-  if (!config.webhook_secret || body.regenerar === true) {
+  const gerouSegredo = !config.webhook_secret || body.regenerar === true;
+  if (gerouSegredo) {
     config.webhook_secret = crypto.randomBytes(24).toString("hex");
   }
 
@@ -103,6 +107,25 @@ export async function POST(req: Request) {
     })
     .eq("id", channelId);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  // Auditoria: regenerar o segredo DERRUBA na hora quem estiver usando o
+  // antigo. Quando um integrador reclamar que "parou de funcionar", este
+  // log é o que responde quem trocou e quando. O segredo em si nunca vai
+  // para `detalhes` — só o fato de ter sido gerado.
+  await registrarAuditoria(admin, {
+    atorId: user.id,
+    atorNome: profile?.nome ?? user.email ?? null,
+    acao: gerouSegredo && tinhaSegredo ? "regenerou_segredo" : "atualizou",
+    entidade: "atendimento_channels",
+    entidadeId: channelId,
+    detalhes: {
+      provedor: canal.provedor,
+      segredo_gerado: gerouSegredo,
+      segredo_substituido: gerouSegredo && tinhaSegredo,
+      callback_url: config.callback_url ?? null,
+    },
+    ip: ipDaRequisicao(req),
+  });
 
   return NextResponse.json({
     ok: true,

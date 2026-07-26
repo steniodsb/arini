@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { toChannelStatus, type EvolutionState } from "@/lib/evolution";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import {
+  emitirContatoCriado,
+  emitirConversaCriada,
+  emitirMensagemCriada,
+} from "@/lib/atendimento/webhook-eventos";
 import type { MessageTipo } from "@/lib/types";
 
 type Admin = ReturnType<typeof createSupabaseAdmin>;
@@ -227,10 +232,11 @@ export async function POST(req: Request) {
     leadId = (lead?.id as string) ?? null;
 
     if (!leadId) {
+      const nomeLead = nome || `Contato ${telefone}`;
       const { data: novoLead } = await admin
         .from("leads")
         .insert({
-          nome: nome || `Contato ${telefone}`,
+          nome: nomeLead,
           telefone,
           whatsapp: telefone,
           origem: "whatsapp",
@@ -239,6 +245,17 @@ export async function POST(req: Request) {
         .select("id")
         .single();
       leadId = (novoLead?.id as string) ?? null;
+
+      // Webhook `contato_criado` — só quando o dedupe por telefone não
+      // achou ninguém, isto é, quando a pessoa é nova no CRM.
+      if (leadId) {
+        emitirContatoCriado(admin, {
+          id: leadId,
+          nome: nomeLead,
+          telefone,
+          origem: "whatsapp",
+        });
+      }
     }
 
     const { data: novaConv, error: convErr } = await admin
@@ -259,24 +276,63 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: convErr?.message ?? "falha ao abrir conversa" }, { status: 500 });
     }
     conversationId = novaConv.id as string;
+
+    // Webhook `conversa_criada` — este ramo É o nascimento da conversa.
+    emitirConversaCriada(admin, {
+      id: conversationId,
+      canal: "whatsapp",
+      status: "aberta",
+      contato_nome: nome,
+      contato_telefone: telefone,
+      lead_id: leadId,
+    });
   }
 
   // 3) Grava a mensagem.
   const preview = conteudo.texto?.slice(0, 140) ?? `[${conteudo.tipo}]`;
-  await admin.from("messages").insert({
-    conversation_id: conversationId,
-    direcao: fromMe ? "out" : "in",
-    // fromMe sem autor = respondido pelo celular (coexistence do Baileys).
-    remetente: fromMe ? "atendente" : "cliente",
-    tipo: conteudo.tipo,
-    conteudo: conteudo.texto,
-    media_url: conteudo.mediaUrl,
-    media_nome: conteudo.mediaNome,
-    media_mime: conteudo.mediaMime,
-    external_id: externalId,
-    raw_payload: payload as unknown as Record<string, unknown>,
-    status: fromMe ? "enviada" : "recebida",
-  });
+  const { data: msgCriada } = await admin
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      direcao: fromMe ? "out" : "in",
+      // fromMe sem autor = respondido pelo celular (coexistence do Baileys).
+      remetente: fromMe ? "atendente" : "cliente",
+      tipo: conteudo.tipo,
+      conteudo: conteudo.texto,
+      media_url: conteudo.mediaUrl,
+      media_nome: conteudo.mediaNome,
+      media_mime: conteudo.mediaMime,
+      external_id: externalId,
+      raw_payload: payload as unknown as Record<string, unknown>,
+      status: fromMe ? "enviada" : "recebida",
+    })
+    // id/created_at servem só para identificar a mensagem no payload.
+    .select("id, created_at")
+    .maybeSingle();
+
+  // Webhook `mensagem_criada`. Vale para os dois sentidos: o eco de
+  // `fromMe` é uma resposta real dada pelo celular e o integrador
+  // precisa vê-la para não achar que o cliente ficou sem resposta.
+  // `raw_payload` nunca entra no corpo — é o pacote cru da Evolution.
+  emitirMensagemCriada(
+    admin,
+    {
+      id: conversationId,
+      canal: "whatsapp",
+      status: "aberta",
+      contato_nome: nome,
+      contato_telefone: telefone,
+      lead_id: leadId,
+    },
+    {
+      id: (msgCriada?.id as string) ?? null,
+      direcao: fromMe ? "out" : "in",
+      remetente: fromMe ? "atendente" : "cliente",
+      tipo: conteudo.tipo,
+      texto: conteudo.texto,
+      criada_em: (msgCriada?.created_at as string) ?? null,
+    },
+  );
 
   // 4) Denormaliza o inbox. Só mensagem do cliente conta como não lida, e
   //    a chegada dela reabre a conversa adiada (o cliente respondeu).

@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { autoResposta, triagemAutomatica } from "@/lib/atendimento/ia-triagem";
+import { emitirMensagemCriada } from "@/lib/atendimento/webhook-eventos";
 import {
   carregarCaixaPorToken,
   corsAberto,
@@ -136,6 +138,15 @@ export async function POST(req: Request, { params }: { params: { token: string }
   // Sem conversa não há onde gravar — o widget precisa chamar /session antes.
   if (!conversationId) return jsonCors({ erro: "sessão inválida" }, 404, headers);
 
+  // CONTATO BLOQUEADO — descarte silencioso, ANTES de gravar.
+  // O visitante recebe 200 (nada de erro na tela: quem foi bloqueado não
+  // precisa saber que foi), mas a mensagem não entra na caixa. Sem o
+  // `mensagem` na resposta o widget simplesmente não ecoa o balão — o
+  // script trata o campo como opcional.
+  if (await contatoBloqueado(admin, conversationId)) {
+    return jsonCors({ ok: true }, 200, headers);
+  }
+
   // Primeira mensagem do cliente nesta conversa? Serve para as automações
   // de "conversa_criada" (boas-vindas, roteamento) rodarem uma vez só.
   const { count } = await admin
@@ -182,6 +193,37 @@ export async function POST(req: Request, { params }: { params: { token: string }
     .update({ ultima_atividade: new Date().toISOString() })
     .eq("contact_token", contactToken);
 
+  // Webhook `mensagem_criada` do chat do site. Precisamos reler a conversa
+  // porque aqui só temos o id — e o payload tem que trazer o contato para
+  // ser útil de verdade a quem consome. É uma leitura barata e por índice.
+  // Nunca sai daqui o `contact_token`: ele é a credencial da sessão do
+  // visitante, quem o tiver lê a conversa inteira pelo endpoint público.
+  const { data: convWebhook } = await admin
+    .from("conversations")
+    .select("id, canal, status, contato_nome, contato_telefone, lead_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  emitirMensagemCriada(
+    admin,
+    {
+      id: conversationId,
+      canal: (convWebhook?.canal as string | null) ?? "site",
+      status: (convWebhook?.status as string | null) ?? "aberta",
+      contato_nome: (convWebhook?.contato_nome as string | null) ?? null,
+      contato_telefone: (convWebhook?.contato_telefone as string | null) ?? null,
+      lead_id: (convWebhook?.lead_id as string | null) ?? null,
+    },
+    {
+      id: mensagem.id,
+      direcao: "in",
+      remetente: "cliente",
+      tipo: "texto",
+      texto,
+      criada_em: mensagem.criadaEm,
+    },
+  );
+
   // Mesmas regras de automação dos outros canais — o chat do site não é
   // cidadão de segunda classe. `dispararAutomacoes` nunca lança.
   await dispararAutomacoes(admin, conversationId, {
@@ -191,7 +233,36 @@ export async function POST(req: Request, { params }: { params: { token: string }
     interna: false,
   });
 
+  // IA — mesma ordem do webhook do Telegram: triagem antes, auto-resposta
+  // depois. A auto-resposta do chat do site chega ao visitante pelo próprio
+  // polling do widget (a mensagem gravada JÁ é a entrega), então ela aparece
+  // no painel alguns segundos depois — não vai no corpo desta resposta.
+  await triagemAutomatica(admin, conversationId, { conversaNova: primeiraDoCliente });
+  await autoResposta(admin, conversationId);
+
   return jsonCors({ ok: true, mensagem }, 201, headers);
+}
+
+/**
+ * O contato dono desta conversa está bloqueado?
+ * Conversa sem lead vinculado (visitante que nunca virou contato) nunca
+ * está bloqueada — não há o que bloquear.
+ */
+async function contatoBloqueado(admin: SupabaseClient, conversationId: string): Promise<boolean> {
+  const { data: conv } = await admin
+    .from("conversations")
+    .select("lead_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+  const leadId = (conv as { lead_id: string | null } | null)?.lead_id;
+  if (!leadId) return false;
+
+  const { data: lead } = await admin
+    .from("leads")
+    .select("bloqueado")
+    .eq("id", leadId)
+    .maybeSingle();
+  return Boolean((lead as { bloqueado: boolean } | null)?.bloqueado);
 }
 
 // =====================================================================

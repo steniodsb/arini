@@ -22,9 +22,11 @@ import {
   Download,
   Inbox as InboxIcon,
   Tag,
+  Timer,
   Users,
   UsersRound,
 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Alerta, Card, EmptyState, PageHeader, Table, TextInput } from "@/components/atendimento/ui";
 import {
@@ -63,6 +65,18 @@ export type RelConversa = {
   resolvida_por: string | null;
   primeira_resposta_em: string | null;
   sla_violado: boolean | null;
+  /** Política herdada da caixa no momento em que a conversa nasceu (0033). */
+  sla_policy_id: string | null;
+  sla_first_response_due: string | null;
+  sla_resolution_due: string | null;
+};
+
+/** Política de SLA — só os campos que o relatório usa. */
+export type RelPoliticaSla = {
+  id: string;
+  nome: string;
+  primeira_resposta_min: number | null;
+  resolucao_min: number | null;
 };
 
 export type RelMensagem = {
@@ -115,6 +129,56 @@ function minutosEntre(inicioIso: string | null, fimIso: string | null): number |
   if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
   const diff = (b - a) / 60_000;
   return diff >= 0 ? diff : null;
+}
+
+// ===== SLA: veredicto por conversa ===================================
+
+type VeredictoSla = {
+  violouPrimeira: boolean;
+  violouResolucao: boolean;
+  violou: boolean;
+  /** Instante em que o prazo estourou — é por ele que a série diária conta. */
+  momento: string | null;
+};
+
+/**
+ * A conversa cumpriu o SLA?
+ *
+ * NÃO confiamos só em `conversations.sla_violado`: aquele flag é carimbado
+ * por um cron (`/api/atendimento/jobs`) que marca quem AINDA estava vencido
+ * no instante em que ele rodou. Quem respondeu com 10 min de atraso, mas
+ * antes da varredura, passa batido. Aqui recalculamos comparando o carimbo
+ * do marco (1ª resposta / resolução) com o prazo gravado na conversa, e
+ * mantemos o flag do cron como rede de segurança (OR).
+ *
+ * Conversa ainda sem o marco cumprido só é violação quando o prazo JÁ passou
+ * — senão contaríamos como violada uma conversa que ainda tem tempo.
+ */
+function avaliarSla(c: RelConversa, agoraMs: number): VeredictoSla {
+  const vencidos: number[] = [];
+
+  const checar = (dueIso: string | null, cumpridoIso: string | null): boolean => {
+    if (!dueIso) return false;
+    const due = new Date(dueIso).getTime();
+    if (!Number.isFinite(due)) return false;
+    const cumprido = cumpridoIso ? new Date(cumpridoIso).getTime() : null;
+    const estourou =
+      cumprido !== null && Number.isFinite(cumprido) ? cumprido > due : agoraMs > due;
+    if (estourou) vencidos.push(due);
+    return estourou;
+  };
+
+  const violouPrimeira = checar(c.sla_first_response_due, c.primeira_resposta_em);
+  const violouResolucao = checar(c.sla_resolution_due, c.resolvida_em);
+  const violou = violouPrimeira || violouResolucao || c.sla_violado === true;
+
+  // O prazo mais antigo estourado é o momento em que o SLA "quebrou". Se só o
+  // flag do cron acusou (sem prazo gravado), a abertura é a melhor âncora.
+  const momento = vencidos.length > 0
+    ? new Date(Math.min(...vencidos)).toISOString()
+    : violou ? c.created_at : null;
+
+  return { violouPrimeira, violouResolucao, violou, momento };
 }
 
 /** Média que devolve null (e não 0) quando não há amostra — evita "0 min" mentiroso. */
@@ -225,7 +289,7 @@ const CANAL_CAIXA_LABELS: Record<string, string> = {
 
 // ===== Abas e período ================================================
 
-type Aba = "visao" | "agentes" | "equipes" | "etiquetas" | "caixas" | "tempo";
+type Aba = "visao" | "agentes" | "equipes" | "etiquetas" | "caixas" | "tempo" | "sla";
 type Periodo = "hoje" | "7" | "30" | "90" | "custom";
 
 const ABAS: { chave: Aba; label: string; icone: typeof BarChart3 }[] = [
@@ -234,6 +298,7 @@ const ABAS: { chave: Aba; label: string; icone: typeof BarChart3 }[] = [
   { chave: "equipes", label: "Equipes", icone: UsersRound },
   { chave: "etiquetas", label: "Etiquetas", icone: Tag },
   { chave: "caixas", label: "Caixas de entrada", icone: InboxIcon },
+  { chave: "sla", label: "SLA", icone: Timer },
   { chave: "tempo", label: "Conversas no tempo", icone: CalendarClock },
 ];
 
@@ -297,6 +362,7 @@ export function RelatoriosPanel({
   membros,
   etiquetas,
   caixas,
+  politicasSla,
   janelaDias,
 }: {
   conversas: RelConversa[];
@@ -307,6 +373,7 @@ export function RelatoriosPanel({
   membros: RelMembro[];
   etiquetas: RelEtiqueta[];
   caixas: RelCaixa[];
+  politicasSla: RelPoliticaSla[];
   janelaDias: number;
 }) {
   const [aba, setAba] = useState<Aba>("visao");
@@ -656,6 +723,134 @@ export function RelatoriosPanel({
       .sort((a, b) => b.total - a.total);
   }, [caixas, conversasPeriodo]);
 
+  // ---- SLA ----------------------------------------------------------------
+  const sla = useMemo(() => {
+    const agoraMs = Date.now();
+    // Só entram conversas que herdaram uma política (0033). Sem política não
+    // há prazo, e contá-las como "cumpridas" inflaria o percentual de graça.
+    const comSla = conversasPeriodo.filter((c) => c.sla_policy_id);
+
+    const politicaPorId = new Map<string, RelPoliticaSla>();
+    for (const p of politicasSla) politicaPorId.set(p.id, p);
+
+    type LinhaPolitica = {
+      id: string;
+      nome: string;
+      metaPrimeira: number | null;
+      metaResolucao: number | null;
+      total: number;
+      cumpridas: number;
+      violadas: number;
+    };
+    const linhasPolitica = new Map<string, LinhaPolitica>();
+    for (const p of politicasSla) {
+      linhasPolitica.set(p.id, {
+        id: p.id,
+        nome: p.nome,
+        metaPrimeira: p.primeira_resposta_min,
+        metaResolucao: p.resolucao_min,
+        total: 0, cumpridas: 0, violadas: 0,
+      });
+    }
+
+    const violacoesPorAgente = new Map<string, { atribuidas: number; violacoes: number }>();
+    const violacoesPorDia = new Map<string, number>();
+    const cursor = new Date(inicio);
+    for (let i = 0; cursor.getTime() <= fim.getTime() && i <= 400; i += 1) {
+      violacoesPorDia.set(chaveDia(cursor), 0);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    let violadas = 0;
+    let violouPrimeira = 0;
+    let violouResolucao = 0;
+    const primeirasRespostas: number[] = [];
+    const metasPonderadas: number[] = [];
+
+    for (const c of comSla) {
+      const v = avaliarSla(c, agoraMs);
+      const politica = c.sla_policy_id ? politicaPorId.get(c.sla_policy_id) : undefined;
+
+      // Política apagada depois de a conversa nascer: a conversa continua com
+      // prazo válido, então ela precisa aparecer em algum lugar da tabela.
+      const chave = c.sla_policy_id as string;
+      let linha = linhasPolitica.get(chave);
+      if (!linha) {
+        linha = {
+          id: chave, nome: "Política removida",
+          metaPrimeira: null, metaResolucao: null,
+          total: 0, cumpridas: 0, violadas: 0,
+        };
+        linhasPolitica.set(chave, linha);
+      }
+      linha.total += 1;
+
+      if (v.violou) {
+        violadas += 1;
+        linha.violadas += 1;
+        if (v.violouPrimeira) violouPrimeira += 1;
+        if (v.violouResolucao) violouResolucao += 1;
+
+        const dono = c.responsavel_id ?? "__sem__";
+        const alvo = violacoesPorAgente.get(dono) ?? { atribuidas: 0, violacoes: 0 };
+        alvo.violacoes += 1;
+        violacoesPorAgente.set(dono, alvo);
+
+        if (v.momento) {
+          const k = chaveDia(new Date(v.momento));
+          if (violacoesPorDia.has(k)) violacoesPorDia.set(k, (violacoesPorDia.get(k) ?? 0) + 1);
+        }
+      } else {
+        linha.cumpridas += 1;
+      }
+
+      const dono = c.responsavel_id ?? "__sem__";
+      const alvo = violacoesPorAgente.get(dono) ?? { atribuidas: 0, violacoes: 0 };
+      alvo.atribuidas += 1;
+      violacoesPorAgente.set(dono, alvo);
+
+      const pr = minutosEntre(c.created_at, c.primeira_resposta_em);
+      if (pr !== null) primeirasRespostas.push(pr);
+      // Meta média ponderada: cada conversa "vota" com a meta da política dela.
+      if (politica?.primeira_resposta_min) metasPonderadas.push(politica.primeira_resposta_min);
+    }
+
+    const tabelaPoliticas = Array.from(linhasPolitica.values())
+      .map((l) => ({ ...l, percentual: percentual(l.cumpridas, l.total) }))
+      .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, "pt-BR"));
+
+    const tabelaAgentes = Array.from(violacoesPorAgente.entries())
+      .map(([id, v]) => ({
+        id,
+        nome: id === "__sem__" ? "Sem responsável" : nomePorId.get(id) ?? "Agente removido",
+        atribuidas: v.atribuidas,
+        violacoes: v.violacoes,
+        percentual: percentual(v.violacoes, v.atribuidas),
+      }))
+      .filter((l) => l.violacoes > 0)
+      .sort((a, b) => b.violacoes - a.violacoes);
+
+    return {
+      total: comSla.length,
+      violadas,
+      cumpridas: comSla.length - violadas,
+      pctCumprimento: percentual(comSla.length - violadas, comSla.length),
+      violouPrimeira,
+      violouResolucao,
+      tmpr: media(primeirasRespostas),
+      metaMedia: media(metasPonderadas),
+      politicas: tabelaPoliticas,
+      agentes: tabelaAgentes,
+      serie: Array.from(violacoesPorDia.entries()).map(([dia, valor]) => ({
+        dia,
+        rotulo: rotuloDia(dia),
+        violacoes: valor,
+      })),
+      /** Nenhuma conversa do período herdou política — a aba vira EmptyState. */
+      semPolitica: comSla.length === 0,
+    };
+  }, [conversasPeriodo, politicasSla, nomePorId, inicio, fim]);
+
   // ---- Conversas no tempo -------------------------------------------------
   const tempo = useMemo(() => {
     const porDiaSemana = WEEKDAY_LABELS.map((label) => ({ dia: label.slice(0, 3), nome: label, conversas: 0 }));
@@ -735,6 +930,36 @@ export function RelatoriosPanel({
       baixarCsv(`relatorio_caixas_${sufixo}.csv`, [
         ["Caixa de entrada", "Canal", "Total", "Abertas", "Pendentes", "Resolvidas", "Adiadas"],
         ...linhasCaixa.map((c): CelulaCsv[] => [c.nome, c.canal, c.total, c.aberta, c.pendente, c.resolvida, c.adiada]),
+      ]);
+      return;
+    }
+    if (aba === "sla") {
+      baixarCsv(`relatorio_sla_${sufixo}.csv`, [
+        ["Indicador", "Valor"],
+        ["Conversas com SLA", sla.total],
+        ["Violaram", sla.violadas],
+        ["Cumprimento", `${numeroBr(sla.pctCumprimento)}%`],
+        ["Violações de 1ª resposta", sla.violouPrimeira],
+        ["Violações de resolução", sla.violouResolucao],
+        ["1ª resposta (média)", duracaoOuTraco(sla.tmpr)],
+        ["Meta média de 1ª resposta", duracaoOuTraco(sla.metaMedia)],
+        [],
+        ["Política", "Meta 1ª resposta", "Meta resolução", "Conversas", "Cumpridas", "Violadas", "% cumprimento"],
+        ...sla.politicas.map((p): CelulaCsv[] => [
+          p.nome,
+          p.metaPrimeira === null ? "—" : formatarDuracao(p.metaPrimeira),
+          p.metaResolucao === null ? "—" : formatarDuracao(p.metaResolucao),
+          p.total, p.cumpridas, p.violadas,
+          p.total > 0 ? `${numeroBr(p.percentual)}%` : "—",
+        ]),
+        [],
+        ["Agente", "Conversas com SLA", "Violações", "% violado"],
+        ...sla.agentes.map((a): CelulaCsv[] => [
+          a.nome, a.atribuidas, a.violacoes, `${numeroBr(a.percentual)}%`,
+        ]),
+        [],
+        ["Dia", "Violações"],
+        ...sla.serie.map((d): CelulaCsv[] => [d.rotulo, d.violacoes]),
       ]);
       return;
     }
@@ -851,6 +1076,7 @@ export function RelatoriosPanel({
             />
           )}
           {aba === "caixas" && <AbaCaixas linhas={linhasCaixa} />}
+          {aba === "sla" && <AbaSla dados={sla} />}
           {aba === "tempo" && <AbaTempo dados={tempo} />}
         </>
       )}
@@ -1286,6 +1512,178 @@ function AbaCaixas({
             </tr>
           ))}
         </Table>
+      </Card>
+    </div>
+  );
+}
+
+// =====================================================================
+// Aba: SLA
+// =====================================================================
+
+type DadosSla = {
+  total: number;
+  violadas: number;
+  cumpridas: number;
+  pctCumprimento: number;
+  violouPrimeira: number;
+  violouResolucao: number;
+  tmpr: number | null;
+  metaMedia: number | null;
+  politicas: {
+    id: string;
+    nome: string;
+    metaPrimeira: number | null;
+    metaResolucao: number | null;
+    total: number;
+    cumpridas: number;
+    violadas: number;
+    percentual: number;
+  }[];
+  agentes: { id: string; nome: string; atribuidas: number; violacoes: number; percentual: number }[];
+  serie: { dia: string; rotulo: string; violacoes: number }[];
+  semPolitica: boolean;
+};
+
+/** Verde acima de 90%, âmbar acima de 70%, vermelho abaixo — leitura de relance. */
+function corDoCumprimento(pct: number): string {
+  if (pct >= 90) return "text-emerald-600 dark:text-emerald-400";
+  if (pct >= 70) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
+}
+
+function AbaSla({ dados }: { dados: DadosSla }) {
+  // Sem conversa com política, todo o resto seria "0 de 0" — o que parece
+  // "SLA perfeito" quando na verdade o SLA nem está ligado. Explicamos onde liga.
+  if (dados.semPolitica) {
+    return (
+      <Card>
+        <EmptyState
+          titulo="Nenhuma conversa com política de SLA no período"
+          descricao="O SLA não é ligado por conversa: ele vem da CAIXA DE ENTRADA. Escolha uma política em Configurações › Caixas de entrada e, a partir daí, toda conversa que nascer naquela caixa herda os prazos de 1ª resposta e de resolução."
+          icone={<Timer size={34} />}
+          acao={
+            <Button asChild variant="gold" size="sm">
+              <Link href="/atendimento/configuracoes/caixas">Configurar caixas de entrada</Link>
+            </Button>
+          }
+        />
+      </Card>
+    );
+  }
+
+  const dentroDaMeta =
+    dados.tmpr !== null && dados.metaMedia !== null ? dados.tmpr <= dados.metaMedia : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Indicador
+          rotulo="Conversas com SLA"
+          valor={dados.total}
+          detalhe={`${dados.cumpridas} dentro do prazo`}
+        />
+        <Indicador
+          rotulo="Violaram o SLA"
+          valor={dados.violadas}
+          detalhe={`${dados.violouPrimeira} de 1ª resposta · ${dados.violouResolucao} de resolução`}
+        />
+        <div className="rounded-xl border bg-card p-3.5">
+          <div className={`text-xl font-semibold leading-tight ${corDoCumprimento(dados.pctCumprimento)}`}>
+            {numeroBr(dados.pctCumprimento)}%
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-1">Cumprimento do SLA</div>
+          <div className="text-[10px] text-muted-foreground/70 mt-0.5">
+            {dados.cumpridas} de {dados.total} conversas
+          </div>
+        </div>
+        <Indicador
+          rotulo="1ª resposta (média) x meta"
+          valor={duracaoOuTraco(dados.tmpr)}
+          detalhe={
+            dados.metaMedia === null
+              ? "nenhuma política define meta de 1ª resposta"
+              : `meta média: ${formatarDuracao(dados.metaMedia)}${
+                  dentroDaMeta === null ? "" : dentroDaMeta ? " · dentro da meta" : " · acima da meta"
+                }`
+          }
+        />
+      </div>
+
+      <Alerta tipo="info">
+        A violação é recalculada aqui comparando o prazo gravado na conversa com o momento em que o marco
+        foi cumprido. Conversas ainda sem 1ª resposta (ou sem resolução) só contam como violadas depois de
+        o prazo vencer. Conversas sem política de SLA ficam fora de todos os números desta aba.
+      </Alerta>
+
+      <Card titulo="Violações por dia" descricao="Contadas no dia em que o prazo estourou, não no dia da abertura.">
+        <div className="p-3">
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={dados.serie} margin={{ top: 5, right: 10, left: -18, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={COR_GRADE} />
+              <XAxis dataKey="rotulo" stroke={COR_EIXO} fontSize={11} minTickGap={18} />
+              <YAxis stroke={COR_EIXO} fontSize={11} allowDecimals={false} />
+              <Tooltip contentStyle={ESTILO_TOOLTIP} labelStyle={{ color: "hsl(var(--foreground))" }} />
+              <Legend iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+              <Line
+                type="monotone"
+                dataKey="violacoes"
+                name="Violações"
+                stroke={PALETA[4]}
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      <Card titulo="Desempenho por política" descricao="Metas cadastradas em Configurações › SLA.">
+        <Table
+          colunas={["Política", "Meta 1ª resposta", "Meta resolução", "Conversas", "Cumpridas", "Violadas", "% cumprimento"]}
+        >
+          {dados.politicas.map((p) => (
+            <tr key={p.id} className="hover:bg-muted/30">
+              <td className="px-3 py-2 font-medium">{p.nome}</td>
+              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                {p.metaPrimeira === null ? "não monitora" : formatarDuracao(p.metaPrimeira)}
+              </td>
+              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                {p.metaResolucao === null ? "não monitora" : formatarDuracao(p.metaResolucao)}
+              </td>
+              <td className="px-3 py-2 tabular-nums">{p.total}</td>
+              <td className="px-3 py-2 tabular-nums">{p.cumpridas}</td>
+              <td className="px-3 py-2 tabular-nums">{p.violadas}</td>
+              <td className={`px-3 py-2 tabular-nums font-medium ${p.total > 0 ? corDoCumprimento(p.percentual) : "text-muted-foreground"}`}>
+                {p.total > 0 ? `${numeroBr(p.percentual)}%` : "—"}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      </Card>
+
+      <Card
+        titulo="Violações por agente"
+        descricao="Crédito pelo responsável atual da conversa. Agentes sem nenhuma violação não aparecem."
+      >
+        {dados.agentes.length === 0 ? (
+          <EmptyState
+            titulo="Nenhuma violação de SLA no período"
+            descricao="Todas as conversas com política cumpriram os prazos."
+            icone={<Timer size={34} />}
+          />
+        ) : (
+          <Table colunas={["Agente", "Conversas com SLA", "Violações", "% violado"]}>
+            {dados.agentes.map((a) => (
+              <tr key={a.id} className="hover:bg-muted/30">
+                <td className="px-3 py-2 font-medium">{a.nome}</td>
+                <td className="px-3 py-2 tabular-nums">{a.atribuidas}</td>
+                <td className="px-3 py-2 tabular-nums">{a.violacoes}</td>
+                <td className="px-3 py-2 tabular-nums text-muted-foreground">{numeroBr(a.percentual)}%</td>
+              </tr>
+            ))}
+          </Table>
+        )}
       </Card>
     </div>
   );

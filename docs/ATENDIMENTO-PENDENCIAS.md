@@ -1,7 +1,7 @@
 # Atendimento — o que depende de VOCÊ (Stenio)
 
-Tudo aqui é ação **fora do código**. As ondas **A a G** estão entregues:
-`npm run build` verde com **113 rotas**, migrações **0031–0036 já aplicadas**
+Tudo aqui é ação **fora do código**. As ondas **A a H** estão entregues:
+`npm run build` verde com **117 rotas**, migrações **0031–0036 já aplicadas**
 em produção.
 
 Ordem sugerida: 1 → 2 → 3. Sem os itens 1 e 2 o sistema abre mas não recebe
@@ -167,18 +167,22 @@ para a cara da Arini:
 | Apagar mensagem, marcar não lida, busca na thread | ✅ pronto |
 | Som e notificação do sistema | ✅ pronto |
 | Copiloto de IA (sugerir / resumir / classificar) | ✅ pronto — 🔑 exige `ANTHROPIC_API_KEY` |
-| Triagem e auto-resposta por IA rodando sozinhas | ❌ falta o gancho no webhook |
+| Triagem e auto-resposta por IA rodando sozinhas | ✅ ligadas no Telegram e no chat do site, com trava anti-loop |
 | Automações disparando nos webhooks | ✅ ligado |
 | Central de Ajuda pública (portal, categorias, artigos, votos) | ✅ pronto, com 6 artigos semeados |
-| Webhooks de saída | 🟡 módulo pronto e botão "Testar" funciona; nenhum evento os dispara ainda |
+| Webhooks de saída | ✅ disparando em conversa criada/atualizada/resolvida, mensagem e contato |
 | Tokens de API | 🟡 cadastro pronto; **não existe API pública que os valide** |
-| Registro de auditoria | 🟡 grava só 3 ações (token e webhook); falta instrumentar o resto |
-| Papéis e permissões | 🟡 cadastro pronto; **quem controla acesso ainda é a RLS**, não o papel |
+| Registro de auditoria | ✅ canais, acesso de agente, contatos, conversas e login — 🟡 falta caixas/macros/SLA |
+| Papéis e permissões | 🟡 cadastro pronto; **quem controla acesso ainda é a RLS** — reescrevê-la é decisão sua (seção 9) |
 | Integrações (Slack, Dialogflow) | 🟡 credenciais guardadas; nada é chamado em evento algum |
 | Campanha, SLA e snooze automáticos | 🟡 jobs prontos — 🔑 falta ligar o cron (seção 2.1) |
 | Templates de WhatsApp | ✅ cadastro + sincronizar/enviar à Meta — 🔑 exige canal Cloud API |
 | Anexo em e-mail | 🟡 sai como link, não como arquivo MIME |
+| Bloquear contato | ✅ bloqueia de fato em todos os canais (checagem no `inbound.ts`) |
+| Relatório de SLA | ✅ por política, por agente e violações no tempo |
+| Categorias de respostas rápidas | ✅ agrupamento e filtro |
 | `dominio_customizado` do portal de ajuda | ❌ a coluna existe, mas nada a usa |
+| Excluir canal | ❌ não existe rota nem botão |
 
 ## 8. Verificação feita nesta entrega
 
@@ -205,3 +209,22 @@ para a cara da Arini:
   mercado, e no inbound do e-mail.
 - **Widget do site**: compila e o script passa em `node --check`, mas não foi
   aberto num navegador nem embutido num site de verdade.
+
+---
+
+## 9. Uma decisão que eu NÃO tomei por você 🔑
+
+Os **papéis personalizados** estão cadastrados e podem ser atribuídos ao
+agente, mas hoje quem realmente controla o acesso é a **RLS do Supabase**
+(setor do CRM + `atendimento_access`), não o papel.
+
+Fazer o papel mandar de verdade significa **reescrever as políticas de RLS**
+de `conversations`, `messages`, `leads` e companhia. Num banco com dados
+reais, sem você por perto para validar, uma policy errada ou esconde
+conversa de quem precisa, ou mostra para quem não devia. Não é o tipo de
+coisa que se faz de madrugada e sozinho.
+
+Quando quiser encarar, o caminho é: criar uma função `fn_tem_permissao(uid,
+'conversa:ver_todas')` que lê `profiles.atendimento_role_id`, e trocar as
+policies uma a uma, testando com um usuário de cada papel antes de aplicar
+na próxima.

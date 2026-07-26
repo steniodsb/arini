@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import {
@@ -214,6 +215,14 @@ export function ContatosList({
         descricao={`${contatos.length} contatos carregados · ${filtrados.length} no filtro atual`}
         acoes={
           <>
+            {/* Atalho para a lista de bloqueados — a ação em massa "Bloquear"
+                fica logo abaixo, e sem este link não haveria como rever depois
+                quem foi parar lá. */}
+            <Button asChild variant="outline" size="sm">
+              <Link href="/atendimento/contatos/bloqueados">
+                <Ban size={15} /> Bloqueados
+              </Link>
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => setCsvAberto(true)}>
               <Upload size={15} /> Importar CSV
             </Button>

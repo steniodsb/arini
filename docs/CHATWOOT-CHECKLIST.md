@@ -9,7 +9,7 @@ Legenda: ✅ pronto · 🟡 parcial · 🧩 scaffold (tela existe, lógica míni
 
 Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot/chatwoot.
 
-> **Estado geral (Ondas A–G entregues):** **113 rotas** compilando, `npm run build`
+> **Estado geral (Ondas A–H entregues):** **117 rotas** compilando, `npm run build`
 > verde, migrações **0031–0036 aplicadas** em produção. O que falta é quase todo
 > **infra/credencial** (🔑): conectar um canal, ligar o cron dos jobs e liberar o
 > acesso dos atendentes. Ver `ATENDIMENTO-PENDENCIAS.md`.
@@ -81,10 +81,11 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
       envio** em `/api/atendimento/jobs` — 🔑 falta ligar o cron
 - ✅ **Central de Ajuda**: portais, categorias, artigos, editor markdown com
       pré-visualização, publicar/despublicar/arquivar
-- ✅ **Webhooks de saída** (HMAC, auto-desativação após 10 falhas) — 🟡 nenhum
-      evento os dispara ainda
+- ✅ **Webhooks de saída** (HMAC, auto-desativação após 10 falhas) — **disparando**
+      em conversa criada/atualizada/resolvida, mensagem e contato
 - ✅ **Tokens de API** (só hash no banco) — 🟡 sem API pública que os valide
-- ✅ **Registro de auditoria** — 🟡 instrumentado em 3 ações apenas
+- ✅ **Registro de auditoria** — canais, acesso de agente, contatos, conversas
+      e login; 🟡 falta caixas, macros, SLA e integrações
 - ✅ **Templates de WhatsApp** — cadastro, sincronizar e enviar à Meta
 - ✅ **Integrações** (Slack, Dialogflow, Tradutor) + **apps do painel** — 🟡
       credenciais guardadas, nada é chamado em evento ainda
@@ -97,7 +98,11 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
       intenção — com cache e regras antialucinação — 🔑 exige `ANTHROPIC_API_KEY`
 - ✅ Tela de IA com config por caixa, playground e histórico de uso
 - ✅ **Base de conhecimento** alimentada pelos artigos publicados
-- 🔲 Triagem e auto-resposta rodando sozinhas (falta o gancho no webhook)
+- ✅ **Triagem automática**: classifica a intenção, etiqueta e roteia para a
+      equipe. Roda só na criação da conversa (é o que triagem significa, e
+      evita estourar o timeout do webhook)
+- ✅ **Auto-resposta** fora do horário ou sem agente online, com trava
+      anti-loop (1/hora e nunca duas seguidas sem o cliente falar)
 
 ---
 
@@ -117,6 +122,9 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
    mensagem, som e notificação, Telegram, e-mail/SMS/API, templates de WhatsApp,
    segmentos salvos, avatar, portal público da Central de Ajuda, papéis,
    integrações e configurações da conta
-8. **Onda H (próxima)**: instrumentar auditoria e webhooks em todos os eventos,
-   fazer os papéis mandarem de verdade (reescrever a RLS), triagem por IA
-   automática, anexo MIME no e-mail, domínio próprio do portal de ajuda
+8. **Onda H (feito)**: webhooks de saída disparando nos eventos, auditoria
+   instrumentada, triagem e auto-resposta por IA, relatório de SLA, bloqueio
+   de contato valendo em todos os canais, categorias de resposta rápida
+9. **Onda I (próxima)**: fazer os papéis mandarem de verdade (reescrever a
+   RLS — 🔑 decisão do Stenio), auditoria nas telas de config, anexo MIME no
+   e-mail, domínio próprio do portal, excluir canal
