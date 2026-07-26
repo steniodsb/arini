@@ -67,9 +67,19 @@ export function AtendimentoInbox({
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
 
+  // Escopo por status (as abas de atribuição contam dentro dele).
+  const byStatus = useMemo(
+    () => conversations.filter((c) => statusFilter === "todas" || c.status === statusFilter),
+    [conversations, statusFilter],
+  );
+  const counts = useMemo(() => ({
+    minhas: byStatus.filter((c) => c.responsavel_id === currentUserId).length,
+    nao_atribuidas: byStatus.filter((c) => !c.responsavel_id).length,
+    todas: byStatus.length,
+  }), [byStatus, currentUserId]);
+
   const filtered = useMemo(() => {
-    return conversations.filter((c) => {
-      if (statusFilter !== "todas" && c.status !== statusFilter) return false;
+    return byStatus.filter((c) => {
       if (assignFilter === "minhas" && c.responsavel_id !== currentUserId) return false;
       if (assignFilter === "nao_atribuidas" && c.responsavel_id) return false;
       if (busca.trim()) {
@@ -79,7 +89,7 @@ export function AtendimentoInbox({
       }
       return true;
     });
-  }, [conversations, statusFilter, assignFilter, busca, currentUserId]);
+  }, [byStatus, assignFilter, busca, currentUserId]);
 
   const loadMessages = useCallback(async (convId: string) => {
     const supabase = createSupabaseBrowser();
@@ -219,8 +229,8 @@ export function AtendimentoInbox({
     <div className="flex h-full border-t">
       {/* ---- Lista ---- */}
       <aside className="w-80 shrink-0 border-r bg-card flex flex-col">
-        <div className="p-2 border-b space-y-2">
-          <div className="flex items-center gap-1">
+        <div className="border-b">
+          <div className="p-2 flex items-center gap-1">
             <div className="relative flex-1">
               <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -234,27 +244,39 @@ export function AtendimentoInbox({
               <RefreshCw size={15} />
             </button>
           </div>
-          <div className="flex gap-1 text-xs">
+          {/* Abas de atribuição com contadores (estilo Chatwoot) */}
+          <div className="flex text-xs px-2 gap-4">
+            {([
+              ["minhas", "Minhas", counts.minhas],
+              ["nao_atribuidas", "Não atribuídas", counts.nao_atribuidas],
+              ["todas", "Todos", counts.todas],
+            ] as [AssignFilter, string, number][]).map(([key, label, n]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setAssignFilter(key)}
+                className={`py-2 border-b-2 -mb-px inline-flex items-center gap-1.5 ${
+                  assignFilter === key ? "border-arini text-arini font-medium" : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${assignFilter === key ? "bg-arini/10 text-arini" : "bg-muted text-muted-foreground"}`}>{n}</span>
+              </button>
+            ))}
+          </div>
+          {/* Filtro de status */}
+          <div className="flex gap-1 text-[11px] px-2 py-1.5 border-t bg-muted/20">
             {(["todas", "aberta", "pendente", "resolvida"] as StatusFilter[]).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => setStatusFilter(s)}
-                className={`px-2 py-1 rounded-md capitalize ${statusFilter === s ? "bg-arini text-white" : "hover:bg-muted"}`}
+                className={`px-2 py-0.5 rounded-full capitalize ${statusFilter === s ? "bg-arini text-white" : "hover:bg-muted text-muted-foreground"}`}
               >
-                {s}
+                {s === "todas" ? "todos status" : s}
               </button>
             ))}
           </div>
-          <select
-            value={assignFilter}
-            onChange={(e) => setAssignFilter(e.target.value as AssignFilter)}
-            className="w-full text-xs rounded-md border bg-background px-2 py-1.5"
-          >
-            <option value="todas">Todas as conversas</option>
-            <option value="minhas">Atribuídas a mim</option>
-            <option value="nao_atribuidas">Não atribuídas</option>
-          </select>
         </div>
 
         <div className="flex-1 overflow-y-auto">

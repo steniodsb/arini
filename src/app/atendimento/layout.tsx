@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { getAtendimentoUser, hasAtendimentoAccess } from "@/lib/atendimento-auth";
 import { Logo } from "@/components/brand/Logo";
 import { LogoutButton } from "./LogoutButton";
+import { AtendimentoNav } from "./AtendimentoNav";
 
-// Shell do SISTEMA DE ATENDIMENTO — separado do CRM (sem a sidebar do
-// /admin). As telas de login e "sem acesso" renderizam sozinhas.
+// Shell do SISTEMA DE ATENDIMENTO — sidebar de ícones estilo Chatwoot,
+// separado do CRM. As telas de login e "sem acesso" renderizam sozinhas.
 export default async function AtendimentoLayout({
   children,
 }: {
@@ -15,44 +15,21 @@ export default async function AtendimentoLayout({
   const { profile } = result;
 
   return (
-    <div className="h-screen flex flex-col bg-muted/30">
-      <header className="h-14 shrink-0 bg-arini text-white flex items-center justify-between px-4 gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <Logo variant="light" size={26} href="/atendimento" />
-          <span className="font-display text-lg leading-none">Atendimento</span>
-          <nav className="flex items-center gap-1 ml-3 text-sm">
-            <Link
-              href="/atendimento"
-              className="px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors"
-            >
-              Conversas
-            </Link>
-            <Link
-              href="/atendimento/canais"
-              className="px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors"
-            >
-              Canais
-            </Link>
-            <Link
-              href="/atendimento/respostas"
-              className="px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors"
-            >
-              Respostas
-            </Link>
-            <Link
-              href="/atendimento/relatorios"
-              className="px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors"
-            >
-              Relatórios
-            </Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-4 text-sm min-w-0">
-          <span className="truncate text-white/80">{profile?.nome}</span>
-          <LogoutButton />
-        </div>
-      </header>
-      <main className="flex-1 min-h-0">{children}</main>
+    <div className="h-screen flex bg-muted/30">
+      <AtendimentoNav />
+      <div className="flex-1 min-w-0 flex flex-col">
+        <header className="h-12 shrink-0 bg-card border-b flex items-center justify-between px-4 gap-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <Logo size={22} href="/atendimento" />
+            <span className="font-display text-base leading-none text-arini">Atendimento</span>
+          </div>
+          <div className="flex items-center gap-3 text-sm min-w-0">
+            <span className="truncate text-muted-foreground">{profile?.nome}</span>
+            <LogoutButton />
+          </div>
+        </header>
+        <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
+      </div>
     </div>
   );
 }

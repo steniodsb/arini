@@ -16,7 +16,7 @@ export default function SemAcessoPage() {
             Peça à diretoria para habilitar o seu acesso.
           </p>
           <div className="mt-6 flex justify-center">
-            <div className="rounded-md bg-arini px-4 py-2">
+            <div className="rounded-md border px-4 py-2">
               <LogoutButton />
             </div>
           </div>

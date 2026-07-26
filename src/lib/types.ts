@@ -371,6 +371,20 @@ export interface AgentOption {
   nome: string;
 }
 
+export interface AtendimentoLabel {
+  id: string;
+  nome: string;
+  cor: string;
+  created_at: string;
+}
+
+export interface AtendimentoTeam {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  created_at: string;
+}
+
 export const CHANNEL_LABELS: Record<ConversationChannel, string> = {
   whatsapp: "WhatsApp",
   instagram: "Instagram",
