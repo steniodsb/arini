@@ -34,6 +34,12 @@ export default async function AtendimentoLayout({
               Canais
             </Link>
             <Link
+              href="/atendimento/respostas"
+              className="px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors"
+            >
+              Respostas
+            </Link>
+            <Link
               href="/atendimento/relatorios"
               className="px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors"
             >
