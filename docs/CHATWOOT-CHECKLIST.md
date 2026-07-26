@@ -55,7 +55,8 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
 - ✅ **Macros** (construtor de sequência de ações) + aplicar dentro da conversa
 - ✅ **Regras de automação** (condições → ações) — cadastro + motor
       (`src/lib/atendimento/automations.ts`)
-- 🟡 Motor de automação **não é disparado sozinho** — falta o gancho no webhook
+- ✅ Motor **ligado aos webhooks** (`src/lib/atendimento/triggers.ts`): dispara
+      `conversa_criada` e `mensagem_criada`, com horário comercial calculado
 - ✅ **Atributos personalizados** (conversa e contato) + render no painel
 - ✅ **Horário comercial** por caixa + mensagem fora do horário
 - ✅ **SLA** — políticas (1ª resposta, próxima, resolução); 🔲 falta o job que marca violação
@@ -99,5 +100,5 @@ Fontes: chatwoot.com/features, chatwoot.com/hc/user-guide, deepwiki.com/chatwoot
    horário comercial, SLA, CSAT
 5. **Onda E (feito)**: webhook + envio Evolution, campanhas, central de ajuda,
    tema claro/escuro
-6. **Onda F (próxima)**: gancho das automações no webhook, worker de campanha,
-   job de SLA, widget de site, IA
+6. **Onda F (próxima)**: worker de campanha, job de SLA, widget de site, IA
+   (o gancho das automações no webhook já entrou nesta onda)

@@ -141,7 +141,7 @@ para a cara da Arini:
 | Anexos na conversa (enviar/ver) | ✅ pronto |
 | Prioridade, snooze, ações em massa, menções | ✅ pronto |
 | Macros, automações, SLA, CSAT, horário — **cadastro** | ✅ pronto |
-| Automação **disparar sozinha** | ❌ falta o gancho no webhook |
+| Automação **disparar sozinha** | ✅ ligada nos webhooks (`lib/atendimento/triggers.ts`) — sem teste com tráfego real |
 | Campanha **enviar de fato** | ❌ falta o worker/cron + template aprovado na Meta |
 | SLA **marcar violação** | ❌ falta o job periódico |
 | Snooze despertar sem ninguém abrir a tela | 🟡 desperta ao carregar a caixa; falta cron |
