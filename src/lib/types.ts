@@ -1133,3 +1133,109 @@ export const ONBOARDING_PASSOS = [
 ] as const;
 
 export type OnboardingPassoId = (typeof ONBOARDING_PASSOS)[number]["id"];
+
+// =====================================================================
+// Agenda — visualizações (migration 0038)
+// =====================================================================
+
+export type AgendaVista = "kanban" | "timeline" | "mes" | "semana" | "lista";
+
+export const AGENDA_VISTA_LABELS: Record<AgendaVista, string> = {
+  kanban: "Quadro",
+  timeline: "Linha do tempo",
+  mes: "Mês",
+  semana: "Semana",
+  lista: "Lista",
+};
+
+export type AgendaTipo =
+  | "visita" | "reuniao" | "ligacao" | "retorno" | "assinatura" | "gravacao" | "outro";
+
+export const AGENDA_TIPO_LABELS: Record<AgendaTipo, string> = {
+  visita: "Visita",
+  reuniao: "Reunião",
+  ligacao: "Ligação",
+  retorno: "Retorno",
+  assinatura: "Assinatura",
+  gravacao: "Gravação",
+  outro: "Outro",
+};
+
+/** Cor de cada tipo. Hex porque o Tailwind não gera classe dinâmica. */
+export const AGENDA_TIPO_COR: Record<AgendaTipo, string> = {
+  visita: "#a855f7",
+  reuniao: "#3b82f6",
+  ligacao: "#f59e0b",
+  retorno: "#ec4899",
+  assinatura: "#10b981",
+  gravacao: "#6366f1",
+  outro: "#64748b",
+};
+
+export type AgendaStatus =
+  | "agendado" | "confirmado" | "concluido" | "cancelado" | "nao_compareceu";
+
+export const AGENDA_STATUS_LABELS: Record<AgendaStatus, string> = {
+  agendado: "Agendado",
+  confirmado: "Confirmado",
+  concluido: "Concluído",
+  cancelado: "Cancelado",
+  nao_compareceu: "Não compareceu",
+};
+
+/** Ordem das colunas quando o quadro agrupa por status. */
+export const AGENDA_STATUS_ORDEM: AgendaStatus[] = [
+  "agendado", "confirmado", "concluido", "nao_compareceu", "cancelado",
+];
+
+export const AGENDA_STATUS_CLASSES: Record<AgendaStatus, string> = {
+  agendado: "bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30",
+  confirmado: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+  concluido: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  cancelado: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
+  nao_compareceu: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+};
+
+/** Como o quadro agrupa as colunas. */
+export type AgendaAgrupamento = "dia" | "status" | "tipo" | "setor" | "responsavel";
+
+export const AGENDA_AGRUPAMENTO_LABELS: Record<AgendaAgrupamento, string> = {
+  dia: "Por dia",
+  status: "Por status",
+  tipo: "Por tipo",
+  setor: "Por setor",
+  responsavel: "Por responsável",
+};
+
+/**
+ * Item unificado da agenda. `agenda_events` e `lead_appointments` são
+ * tabelas diferentes, mas toda visualização trata as duas igual — só a
+ * gravação precisa saber de qual veio (por isso `origem`).
+ */
+export interface AgendaItem {
+  /** "evt:<uuid>" ou "apt:<uuid>" — o prefixo diz a tabela de origem. */
+  id: string;
+  origem: "evento" | "agendamento";
+  /** Id puro, sem prefixo — é o que vai no `.eq("id", ...)`. */
+  rawId: string;
+  titulo: string;
+  tipo: AgendaTipo;
+  status: AgendaStatus;
+  /** Nulo = ainda SEM data. Vive no painel lateral até alguém arrastar. */
+  data_hora: string | null;
+  duracao_min: number;
+  /** Ocupa o dia todo — o mês desenha barra, não pílula com hora. */
+  dia_inteiro: boolean;
+  observacoes: string | null;
+  local: string | null;
+  cor: string | null;
+  ordem: number;
+  responsavel_id: string | null;
+  setor_destino: Sector | null;
+  criado_por_sector: Sector | null;
+  /** Só em agendamento de lead. */
+  lead_id: string | null;
+  lead_nome: string | null;
+  property_id: string | null;
+  property_codigo: string | null;
+}
