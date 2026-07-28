@@ -1,7 +1,8 @@
 # Atendimento — o que depende de VOCÊ (Stenio)
 
-Tudo aqui é ação **fora do código**. O código da Onda A→E está entregue,
-compilando (`npm run build` verde, 45 rotas) e commitado.
+Tudo aqui é ação **fora do código**. As ondas **A a I** estão entregues:
+`npm run build` verde com **128 rotas**, migrações **0031–0037 já aplicadas**
+em produção.
 
 Ordem sugerida: 1 → 2 → 3. Sem os itens 1 e 2 o sistema abre mas não recebe
 mensagem nenhuma.
@@ -29,19 +30,17 @@ As migrações `0031` e `0032` **já foram aplicadas** no Supabase de produção
 ## 1. Liberar o acesso dos atendentes ⚠️ BLOQUEANTE (2 min)
 
 Hoje **só 1 pessoa** tem acesso ao atendimento (a diretoria). Todo o resto do
-time vai bater na tela "sem acesso". Ainda não existe tela para isso — rode no
-SQL Editor do Supabase, um por atendente:
+time vai bater na tela "sem acesso".
+
+**Tem tela para isso**: entre em **Configurações › Agentes** e ligue o
+interruptor de cada atendente. (Uma versão anterior deste documento dizia que
+só dava por SQL — estava errado.)
+
+Se preferir pelo banco, ou se ainda não conseguir entrar:
 
 ```sql
 update public.profiles set atendimento_access = true
 where email = 'pessoa@arininegociosimobiliarios.com.br';
-```
-
-Para conferir quem já tem:
-
-```sql
-select nome, email, atendimento_access, is_admin_central
-from public.profiles where ativo order by nome;
 ```
 
 ## 2. Deploy e domínio ⚠️ BLOQUEANTE
@@ -65,16 +64,24 @@ Existe um endpoint que roda as tarefas de fundo: **despertar conversa adiada**,
 **marcar violação de SLA** e **enviar as campanhas**. Ele não roda sozinho —
 precisa de alguém chamando de minuto em minuto.
 
-- [ ] Defina `ATENDIMENTO_JOBS_SECRET` no ambiente de produção (qualquer
-      string longa e aleatória). **Sem ela o endpoint responde 503** — é
-      proposital, para não ficar aberto na internet.
-- [ ] Agende a chamada (cron do VPS, Dokploy, ou Vercel Cron):
+**Na Vercel**, o agendamento já está pronto em `vercel.json` (a cada 5 min).
+Você só precisa:
+
+- [ ] Definir **`CRON_SECRET`** nas variáveis de ambiente. A Vercel manda esse
+      valor sozinha no `Authorization: Bearer`, então não há mais nada a fazer.
+
+**No VPS/Dokploy** (que é onde o resto do projeto roda hoje):
+
+- [ ] Definir **`ATENDIMENTO_JOBS_SECRET`** (qualquer string longa e aleatória).
+- [ ] Agendar no cron:
 
 ```bash
 curl -X POST https://atendimento.arininegociosimobiliarios.com.br/api/atendimento/jobs -H "x-jobs-secret: SEU_SEGREDO"
 ```
 
-De minuto em minuto é seguro: os três jobs são idempotentes.
+De minuto em minuto é seguro: os três jobs são idempotentes. **Sem nenhuma das
+duas variáveis o endpoint responde 503** — é proposital, para não ficar aberto
+na internet.
 
 ## 3. WhatsApp — decidir o caminho 🔑 DECISÃO SUA
 
@@ -154,33 +161,88 @@ para a cara da Arini:
 
 | Item | Situação |
 |---|---|
-| Receber mensagem pela Evolution | ✅ pronto (`/api/webhooks/evolution`) |
-| Enviar texto e mídia (Evolution e Cloud API) | ✅ pronto |
-| Anexos na conversa (enviar/ver) | ✅ pronto |
-| Prioridade, snooze, ações em massa, menções | ✅ pronto |
-| Macros, automações, SLA, CSAT, horário — **cadastro** | ✅ pronto |
-| Automação **disparar sozinha** | ✅ ligada nos webhooks (`lib/atendimento/triggers.ts`) — sem teste com tráfego real |
-| Campanha **enviar de fato** | 🟡 worker pronto (`/api/atendimento/jobs`) — falta ligar o cron (seção 2) e, na Meta, template aprovado |
-| SLA **marcar violação** | 🟡 job pronto — falta ligar o cron (seção 2) |
-| Snooze despertar sem ninguém abrir a tela | 🟡 job pronto — falta ligar o cron (seção 2) |
-| Widget de chat no site | ❌ não existe |
-| Telegram, e-mail, SMS | ❌ só o cadastro da caixa aceita; sem integração |
-| Copiloto / bot de IA | ❌ Onda F |
-| Upload de avatar do agente | ❌ só URL por enquanto |
-| Webhooks de saída, tokens de API, auditoria | ❌ telas de "em construção" |
+| WhatsApp (Evolution e Cloud API), Telegram, chat do site | ✅ envio e recebimento prontos |
+| E-mail (Resend), SMS, canal via API | ✅ código pronto — 🔑 sem credencial, nada roda |
+| Anexos, prioridade, snooze, massa, menções, participantes | ✅ pronto |
+| Apagar mensagem, marcar não lida, busca na thread | ✅ pronto |
+| Som e notificação do sistema | ✅ pronto |
+| Copiloto de IA (sugerir / resumir / classificar) | ✅ pronto — 🔑 exige `ANTHROPIC_API_KEY` |
+| Triagem e auto-resposta por IA rodando sozinhas | ✅ ligadas no Telegram e no chat do site, com trava anti-loop |
+| Automações disparando nos webhooks | ✅ ligado |
+| Central de Ajuda pública (portal, categorias, artigos, votos) | ✅ pronto, com 6 artigos semeados |
+| Webhooks de saída | ✅ disparando em conversa criada/atualizada/resolvida, mensagem e contato |
+| Tokens de API | 🟡 cadastro pronto; **não existe API pública que os valide** |
+| Registro de auditoria | ✅ canais, acesso de agente, contatos, conversas e login — 🟡 falta caixas/macros/SLA |
+| Papéis e permissões | 🟡 cadastro pronto; **quem controla acesso ainda é a RLS** — reescrevê-la é decisão sua (seção 9) |
+| Integrações (Slack, Dialogflow) | 🟡 credenciais guardadas; nada é chamado em evento algum |
+| Campanha, SLA e snooze automáticos | 🟡 jobs prontos — 🔑 falta ligar o cron (seção 2.1) |
+| Templates de WhatsApp | ✅ cadastro + sincronizar/enviar à Meta — 🔑 exige canal Cloud API |
+| Anexo em e-mail | 🟡 sai como link, não como arquivo MIME |
+| Bloquear contato | ✅ bloqueia de fato em todos os canais (checagem no `inbound.ts`) |
+| Relatório de SLA | ✅ por política, por agente e violações no tempo |
+| Categorias de respostas rápidas | ✅ agrupamento e filtro |
+| `dominio_customizado` do portal de ajuda | ❌ a coluna existe, mas nada a usa |
+| Excluir canal | ❌ não existe rota nem botão |
+| Gravar áudio no composer | ✅ com medidor, pausa e preview — 🟡 sem teste com microfone real |
+| Agent Bots (motor, API `/api/bot/v1`, handoff) | ✅ ida provada pelo botão Testar; volta sem bot real |
+| Relatório ao vivo (tempo real + modo TV) | ✅ |
+| Relatório de bot | ✅ código pronto; sem dado real para validar |
+| Exportar contatos em CSV | ✅ busca o filtro inteiro no banco, em lotes |
+| Assistente de primeiros passos | ✅ com detecção automática do que já está feito |
 
 ## 8. Verificação feita nesta entrega
 
 - `npx tsc --noEmit` — limpo.
-- `npm run build` — 45 rotas, sem erro.
-- `npx next lint` — só avisos pré-existentes de import não usado.
-- Banco de produção — conferido por consulta direta: 22 tabelas, colunas
-  novas e seeds no lugar (tabela da seção 0).
-- Mecanismo de tema — testado no navegador: `escuro` → classe `dark`,
-  `claro` → `light`, `sistema` segue o SO, e as variáveis CSS trocam de
-  fato (`--background` 0 0% 100% ↔ 153 60% 8%).
-- ❗ **Nenhuma tela foi vista logada.** O shell autenticado exige sessão, e
-  eu não entro com a sua senha. Também **nada foi testado com um WhatsApp
-  conectado** (não há canal cadastrado ainda). Espere ajustes finos na
-  primeira rodada com mensagem de verdade — em especial no webhook da
-  Evolution, que só dá para validar com tráfego real.
+- `npm run build` — **113 rotas**, sem erro.
+- `npx next lint` — 7 avisos, **todos pré-existentes do CRM**, nenhum do atendimento.
+- Banco de produção — conferido por consulta direta: migrações **0031 a 0036
+  aplicadas**, seeds no lugar, enum `lead_origin` com `telegram` e `email`.
+- Central de Ajuda — 6 artigos reais publicados, para o portal não nascer vazio.
+- Portal público — testado contra o banco real num dev server: home, categoria,
+  busca e 404 respondendo certo; escape de HTML e bloqueio de `javascript:`
+  validados.
+- Tema — testado no navegador: `escuro` → classe `dark`, `claro` → `light`,
+  `sistema` segue o SO, variáveis CSS trocando de fato.
+
+### O que continua SEM teste real
+
+- **Nenhuma tela do painel foi vista logada** — o shell exige sessão e eu não
+  entro com a sua senha.
+- **Nenhuma integração externa foi exercitada**: WhatsApp, Telegram, Resend,
+  SMS e Graph API da Meta não têm credencial cadastrada. Todo o código desses
+  canais segue a documentação, sem uma única chamada real. Espere ajuste fino
+  na primeira rodada — em especial no corpo do SMS, que não tem padrão de
+  mercado, e no inbound do e-mail.
+- **Widget do site**: compila e o script passa em `node --check`, mas não foi
+  aberto num navegador nem embutido num site de verdade.
+
+---
+
+## 8.1 Armadilha do Agent Bot ⚠️
+
+O bot só dispara quando a conversa tem caixa de entrada resolvida.
+`conversations.inbox_id` **só é preenchido pelo chat do site** — WhatsApp,
+Telegram, e-mail e SMS abrem conversa sem caixa. O código cai num plano B
+que casa `atendimento_inboxes.channel_id` com o canal da conversa.
+
+**Na prática:** se a caixa não estiver amarrada à conexão em
+**Configurações › Caixas de entrada**, o bot nunca vai disparar nesses
+canais — e a tela não avisa disso. Se for usar bot fora do chat do site,
+confira esse vínculo primeiro.
+
+## 9. Uma decisão que eu NÃO tomei por você 🔑
+
+Os **papéis personalizados** estão cadastrados e podem ser atribuídos ao
+agente, mas hoje quem realmente controla o acesso é a **RLS do Supabase**
+(setor do CRM + `atendimento_access`), não o papel.
+
+Fazer o papel mandar de verdade significa **reescrever as políticas de RLS**
+de `conversations`, `messages`, `leads` e companhia. Num banco com dados
+reais, sem você por perto para validar, uma policy errada ou esconde
+conversa de quem precisa, ou mostra para quem não devia. Não é o tipo de
+coisa que se faz de madrugada e sozinho.
+
+Quando quiser encarar, o caminho é: criar uma função `fn_tem_permissao(uid,
+'conversa:ver_todas')` que lê `profiles.atendimento_role_id`, e trocar as
+policies uma a uma, testando com um usuário de cada papel antes de aplicar
+na próxima.

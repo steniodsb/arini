@@ -1,0 +1,143 @@
+/* =====================================================================
+   Estilos do PORTAL PÚBLICO da Central de Ajuda.
+
+   1) MODO ESCURO POR PREFERÊNCIA DO SISTEMA
+      O `tailwind.config.ts` usa `darkMode: ["class"]` e os tokens escuros
+      moram em `.dark` — quem liga essa classe é o provider do Atendimento,
+      que NÃO existe no site público. Um visitante com o SO no escuro veria
+      o portal branco estourado. Como não podemos mexer no globals.css nem
+      no config, redeclaramos os MESMOS tokens dentro de
+      `@media (prefers-color-scheme: dark)` no container do portal. Assim
+      todas as classes semânticas (bg-background, text-muted-foreground…)
+      passam a responder à preferência do sistema, sem JS e sem flash.
+
+   2) TIPOGRAFIA DE LEITURA LONGA
+      O markdown reutilizado do editor gera títulos pequenos (text-base /
+      text-sm), certos para uma pré-visualização em painel e apertados
+      demais para um artigo. `.ajuda-prose` sobe as escalas por
+      especificidade (classe + elemento vence a utilitária pura).
+   ===================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  [data-ajuda] {
+    --background: 153 60% 8%;
+    --foreground: 40 90% 95%;
+    --card: 153 50% 10%;
+    --card-foreground: 40 90% 95%;
+    --popover: 153 50% 10%;
+    --popover-foreground: 40 90% 95%;
+    --primary: 40 92% 58%;
+    --primary-foreground: 153 60% 8%;
+    --secondary: 153 40% 18%;
+    --secondary-foreground: 40 90% 95%;
+    --muted: 153 30% 15%;
+    --muted-foreground: 150 10% 70%;
+    --accent: 40 92% 58%;
+    --accent-foreground: 153 60% 8%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 153 30% 18%;
+    --input: 153 30% 18%;
+    --ring: 40 92% 58%;
+  }
+}
+
+/* Cor de marca do portal: a página define --ajuda-marca inline (valor
+   validado como hex em dados.ts). No escuro trocamos pelo dourado da marca
+   porque a cor do portal costuma ser escura e sumiria no fundo. */
+[data-ajuda] {
+  --ajuda-link: var(--ajuda-marca, #092316);
+}
+@media (prefers-color-scheme: dark) {
+  [data-ajuda] {
+    --ajuda-link: #f8bf32;
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* Corpo do artigo                                                   */
+/* --------------------------------------------------------------- */
+
+.ajuda-prose {
+  font-size: 1.0625rem;
+  line-height: 1.75;
+}
+
+.ajuda-prose h1,
+.ajuda-prose h2,
+.ajuda-prose h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  /* Sem isso a âncora do sumário para debaixo do cabeçalho fixo. */
+  scroll-margin-top: 6rem;
+}
+
+.ajuda-prose h1 {
+  font-size: 1.6rem;
+  margin-top: 2.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.ajuda-prose h2 {
+  font-size: 1.35rem;
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  padding-top: 0.25rem;
+}
+
+.ajuda-prose h3 {
+  font-size: 1.1rem;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.ajuda-prose p {
+  margin-top: 1.05rem;
+  margin-bottom: 1.05rem;
+  line-height: 1.8;
+}
+
+.ajuda-prose ul,
+.ajuda-prose ol {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  padding-left: 1.4rem;
+}
+
+.ajuda-prose li {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+  line-height: 1.75;
+}
+
+/* O markdown compartilhado pinta links com `text-arini dark:text-gold`, e o
+   variant `dark:` depende da classe `.dark` que não existe aqui. Forçamos a
+   cor de marca do portal para o link ficar legível nos dois temas. */
+.ajuda-prose a {
+  color: var(--ajuda-link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.ajuda-prose a:hover {
+  opacity: 0.8;
+}
+
+.ajuda-prose code {
+  word-break: break-word;
+}
+
+/* Destaque do termo buscado. */
+.ajuda-marca-busca {
+  background-color: rgb(248 191 50 / 0.35);
+  color: inherit;
+  border-radius: 0.2rem;
+  padding: 0 0.12em;
+}
+
+/* Foco sempre visível — o visitante pode navegar só de teclado. */
+[data-ajuda] :focus-visible {
+  outline: 2px solid var(--ajuda-link);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}

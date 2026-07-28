@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,7 @@ import { errMessage, formatDateTimeBR } from "@/lib/utils";
 import {
   Ban,
   Building2,
+  Download,
   GitMerge,
   Plus,
   Search,
@@ -35,6 +37,7 @@ import { ContatoDetalhe } from "./ContatoDetalhe";
 import {
   CAMPOS_CSV,
   corEtapa,
+  formatarAtributo,
   inicialDe,
   parseCSV,
   rotuloEtapa,
@@ -49,6 +52,104 @@ import {
 const POR_PAGINA = 50;
 /** Tamanho do lote no importador — insert único por requisição. */
 const LOTE_IMPORT = 100;
+/**
+ * Acima disso a montagem do arquivo trava a aba por alguns segundos (é tudo
+ * síncrono no cliente). Em vez de deixar o usuário achando que quebrou,
+ * avisamos antes e deixamos ele decidir.
+ */
+const LIMITE_AVISO_EXPORT = 5000;
+
+// =====================================================================
+// Exportação de CSV
+//
+// Escrevemos com separador ";" e BOM UTF-8 de propósito: é o que o Excel
+// em português abre direto. Com "," ele joga a linha inteira numa célula
+// só, e sem o BOM ele lê o arquivo como ANSI e destrói os acentos.
+// =====================================================================
+
+/**
+ * Escapa um campo conforme o RFC 4180 (que é o que o Excel entende): só
+ * envolve em aspas quando o valor tem separador, aspas ou quebra de linha,
+ * e duplica as aspas internas. Vírgula não precisa de aspas aqui — o
+ * separador é ";" —, mas `"` e `\n` precisam, senão a linha se parte.
+ */
+function escaparCSV(valor: string): string {
+  return /[";\r\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor;
+}
+
+/** Data para planilha: vazio em vez do "—" que a tela usa. */
+function dataCSV(d: string | null): string {
+  return d ? formatDateTimeBR(d) : "";
+}
+
+/** Monta o conteúdo do arquivo: cabeçalho fixo + uma coluna por atributo. */
+function montarCSV(
+  linhas: ContatoRow[],
+  empresas: EmpresaOpcao[],
+  atributos: CustomAttributeDef[],
+): string {
+  // Map em vez de find dentro do laço: com milhares de linhas o find vira O(n·m).
+  const nomeEmpresaPorId = new Map(empresas.map((e) => [e.id, e.nome]));
+
+  const cabecalho = [
+    "Nome",
+    "Telefone",
+    "WhatsApp",
+    "E-mail",
+    "Origem",
+    "Etapa do funil",
+    "Empresa",
+    "Bloqueado",
+    "Criado em",
+    "Última interação",
+    ...atributos.map((a) => a.nome),
+  ];
+
+  const corpo = linhas.map((c) => [
+    c.nome ?? "",
+    c.telefone ?? "",
+    c.whatsapp ?? "",
+    c.email ?? "",
+    c.origem ? rotuloOrigem(c.origem) : "",
+    c.stage ? rotuloEtapa(c.stage) : "",
+    c.company_id ? nomeEmpresaPorId.get(c.company_id) ?? "" : "",
+    c.bloqueado ? "Sim" : "Não",
+    dataCSV(c.created_at),
+    dataCSV(c.ultima_interacao_em),
+    ...atributos.map((a) => {
+      const v = c.custom_attributes?.[a.chave];
+      // `formatarAtributo` devolve "—" para vazio, e isso viraria sujeira na planilha.
+      return v === undefined || v === null || v === "" ? "" : formatarAtributo(a, v);
+    }),
+  ]);
+
+  // CRLF: é o fim de linha que o Excel espera em CSV.
+  return [cabecalho, ...corpo]
+    .map((l) => l.map((v) => escaparCSV(String(v))).join(";"))
+    .join("\r\n");
+}
+
+/** Data local (não a UTC do toISOString, que já vira o dia seguinte às 21h). */
+function nomeArquivoCSV(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `contatos-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.csv`;
+}
+
+function baixarCSV(conteudo: string, nomeArquivo: string) {
+  // \uFEFF = BOM UTF-8, escrito escapado de propósito: o caractere é invisível
+  // e qualquer editor/formatador poderia comê-lo sem ninguém perceber.
+  const blob = new Blob(["\uFEFF", conteudo], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Sem o revoke o Blob fica preso na memória da aba até recarregar a página.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 /** Colunas que a lista lê do banco ao recarregar (mesma seleção da page.tsx). */
 const COLUNAS_LEAD =
   "id, nome, telefone, whatsapp, email, origem, stage, observacoes, company_id, custom_attributes, bloqueado, avatar_url, created_at, ultima_interacao_em";
@@ -101,6 +202,8 @@ export function ContatosList({
   const [empresaMassaAberto, setEmpresaMassaAberto] = useState(false);
   const [empresaMassa, setEmpresaMassa] = useState("");
   const [detalheId, setDetalheId] = useState<string | null>(null);
+  const [exportando, setExportando] = useState(false);
+  const [exportAvisoAberto, setExportAvisoAberto] = useState(false);
 
   const detalhe = contatos.find((c) => c.id === detalheId) ?? null;
   const nomeEmpresa = (id: string | null) =>
@@ -207,6 +310,92 @@ export function ContatosList({
     .map((id) => contatos.find((c) => c.id === id))
     .filter((c): c is ContatoRow => Boolean(c));
 
+  /**
+   * O que vai para o arquivo: a seleção manual quando existe, senão TUDO que
+   * está no filtro atual — não só a página visível. Exportar a página seria
+   * uma pegadinha: o usuário filtra 340 contatos e recebe 50.
+   */
+  const alvoExport = selecionados.length > 0 ? selecionadosObj : filtrados;
+  const rotuloExport =
+    selecionados.length > 0
+      ? `Exportar ${selecionados.length} selecionado${selecionados.length > 1 ? "s" : ""}`
+      : `Exportar ${filtrados.length} contato${filtrados.length === 1 ? "" : "s"}`;
+
+  /**
+   * Busca no BANCO todos os contatos que casam com o filtro, em lotes.
+   *
+   * A tela carrega no máximo 500 contatos (`.limit(500)`), então exportar a
+   * lista em memória entregaria um CSV silenciosamente truncado — o pior
+   * tipo de bug num arquivo que a pessoa vai usar para tomar decisão. Com
+   * seleção manual isso não se aplica: o que está selecionado já está aqui.
+   */
+  async function buscarTodosParaExport(): Promise<ContatoRow[]> {
+    const supabase = createSupabaseBrowser();
+    const TAMANHO_LOTE = 1000;
+    const acumulado: ContatoRow[] = [];
+    const q = busca.trim();
+
+    for (let inicio = 0; ; inicio += TAMANHO_LOTE) {
+      let query = supabase
+        .from("leads")
+        .select(COLUNAS_LEAD)
+        .order("ultima_interacao_em", { ascending: false })
+        .range(inicio, inicio + TAMANHO_LOTE - 1);
+
+      if (filtroEtapa) query = query.eq("stage", filtroEtapa);
+      if (filtroOrigem) query = query.eq("origem", filtroOrigem);
+      if (filtroEmpresa === "__sem__") query = query.is("company_id", null);
+      else if (filtroEmpresa) query = query.eq("company_id", filtroEmpresa);
+      if (q) {
+        const t = q.replace(/[%_]/g, (m) => `\\${m}`);
+        query = query.or(
+          `nome.ilike.%${t}%,telefone.ilike.%${t}%,whatsapp.ilike.%${t}%,email.ilike.%${t}%`,
+        );
+      }
+
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      const lote = (data ?? []) as unknown as ContatoRow[];
+      acumulado.push(...lote);
+      // Último lote veio incompleto → acabou.
+      if (lote.length < TAMANHO_LOTE) break;
+      // Trava de segurança: 50 mil linhas já é muito para um CSV no navegador.
+      if (acumulado.length >= 50_000) break;
+    }
+    return acumulado;
+  }
+
+  async function exportarCSV(confirmado = false) {
+    const usandoSelecao = selecionados.length > 0;
+    if (!usandoSelecao && filtrados.length === 0) {
+      setErro("Não há contatos no filtro atual para exportar.");
+      return;
+    }
+    // Base grande: confirma antes, porque a montagem é síncrona e congela a aba.
+    if (!confirmado && !usandoSelecao && filtrados.length > LIMITE_AVISO_EXPORT) {
+      setExportAvisoAberto(true);
+      return;
+    }
+    setExportando(true);
+    setErro(null);
+    // Cede um frame ao React para ele pintar o estado "ocupado" ANTES de
+    // travar a thread montando o arquivo.
+    await new Promise((r) => setTimeout(r, 0));
+    try {
+      const linhas = usandoSelecao ? selecionadosObj : await buscarTodosParaExport();
+      if (linhas.length === 0) {
+        setErro("Não há contatos no filtro atual para exportar.");
+        return;
+      }
+      baixarCSV(montarCSV(linhas, empresas, atributos), nomeArquivoCSV());
+      setExportAvisoAberto(false);
+    } catch (e) {
+      setErro(errMessage(e));
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <PageShell>
       <PageHeader
@@ -214,8 +403,28 @@ export function ContatosList({
         descricao={`${contatos.length} contatos carregados · ${filtrados.length} no filtro atual`}
         acoes={
           <>
+            {/* Atalho para a lista de bloqueados — a ação em massa "Bloquear"
+                fica logo abaixo, e sem este link não haveria como rever depois
+                quem foi parar lá. */}
+            <Button asChild variant="outline" size="sm">
+              <Link href="/atendimento/contatos/bloqueados">
+                <Ban size={15} /> Bloqueados
+              </Link>
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => setCsvAberto(true)}>
               <Upload size={15} /> Importar CSV
+            </Button>
+            {/* O rótulo diz exatamente quantas linhas vão sair, para ninguém
+                exportar 12 achando que baixou a base inteira. */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={exportando || alvoExport.length === 0}
+              title="Gera um CSV com o que está no filtro atual (ou só com os selecionados)."
+              onClick={() => void exportarCSV()}
+            >
+              {exportando ? <Spinner size={14} /> : <Download size={15} />} {rotuloExport}
             </Button>
             <Button
               type="button"
@@ -502,6 +711,46 @@ export function ContatosList({
           }}
         />
       )}
+
+      {/* Aviso de exportação grande — melhor perguntar do que congelar a aba
+          por vários segundos sem explicação nenhuma. */}
+      <Modal
+        aberto={exportAvisoAberto}
+        onFechar={() => setExportAvisoAberto(false)}
+        titulo="Exportação grande"
+        descricao={`${alvoExport.length.toLocaleString("pt-BR")} contatos serão gravados no arquivo.`}
+        rodape={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setExportAvisoAberto(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="gold"
+              size="sm"
+              disabled={exportando}
+              onClick={() => void exportarCSV(true)}
+            >
+              {exportando ? <Spinner size={14} /> : "Exportar mesmo assim"}
+            </Button>
+          </>
+        }
+      >
+        <Alerta tipo="atencao">
+          O arquivo é montado dentro do navegador. Acima de{" "}
+          {LIMITE_AVISO_EXPORT.toLocaleString("pt-BR")} linhas a aba pode ficar travada por alguns
+          segundos até o download começar — é normal, não feche a página.
+        </Alerta>
+        <p className="text-xs text-muted-foreground">
+          Se quiser um recorte menor, cancele e use os filtros (etapa, origem, empresa) ou marque só
+          os contatos que interessam antes de exportar.
+        </p>
+      </Modal>
 
       <Modal
         aberto={empresaMassaAberto}

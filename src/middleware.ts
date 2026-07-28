@@ -30,6 +30,11 @@ export async function middleware(req: NextRequest) {
   const isAdminPath = path.startsWith("/admin");
   const isAtendimentoPath = path.startsWith("/atendimento");
   const isApiPath = path.startsWith("/api");
+  // A Central de Ajuda é conteúdo PÚBLICO, mas é administrada dentro do
+  // atendimento. Se ela só existisse no domínio raiz, o agente clicaria em
+  // "ver artigo publicado" e seria jogado para fora do sistema. Por isso
+  // /ajuda responde em qualquer host, como /api.
+  const isAjudaPath = path.startsWith("/ajuda");
   const baseHost = hostname.replace(/^(crm|atendimento)\./, "").replace(/^www\./, "");
 
   const redirectToHost = (targetHostname: string, pathname = path) =>
@@ -43,14 +48,14 @@ export async function middleware(req: NextRequest) {
       // O CRM não mora aqui.
       if (isAdminPath) return redirectToHost(`crm.${baseHost}`);
       // Qualquer outro conteúdo (site público) volta pro domínio raiz.
-      if (!isAtendimentoPath && !isApiPath) return redirectToHost(baseHost);
+      if (!isAtendimentoPath && !isApiPath && !isAjudaPath) return redirectToHost(baseHost);
     } else if (isCrmHost) {
       // Entrada do CRM: crm.dominio/ → /admin
       if (path === "/") return redirectToHost(hostname, "/admin");
       // O Atendimento é outro sistema, em outro host.
       if (isAtendimentoPath) return redirectToHost(`atendimento.${baseHost}`);
       // Conteúdo público não pertence ao subdomínio do CRM → volta pro raiz.
-      if (!isAdminPath && !isApiPath) return redirectToHost(baseHost);
+      if (!isAdminPath && !isApiPath && !isAjudaPath) return redirectToHost(baseHost);
     } else {
       // No domínio raiz, cada sistema mora no seu subdomínio.
       if (isAdminPath) return redirectToHost(`crm.${baseHost}`);

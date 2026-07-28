@@ -29,6 +29,7 @@ export default async function AtendimentoLayout({
             nome={profile?.nome ?? "Agente"}
             email={profile?.email ?? ""}
             disponibilidade={disponibilidade}
+            avatarUrl={profile?.avatar_url ?? null}
           />
           <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
             {children}

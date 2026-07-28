@@ -26,6 +26,13 @@ export function LoginForm() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) { setError(error.message); return; }
+
+    // Registra "entrou" no log de auditoria. Sem `await` de propósito: é
+    // efeito colateral: um log lento (ou fora do ar) não pode segurar o
+    // usuário na tela de login. A rota lê a sessão pelo cookie que o
+    // signInWithPassword acabou de gravar — a senha nunca sai daqui.
+    void fetch("/api/atendimento/login", { method: "POST" }).catch(() => undefined);
+
     const next = params.get("next");
     router.push(next && next.startsWith("/atendimento") ? next : "/atendimento");
     router.refresh();

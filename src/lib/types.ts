@@ -35,7 +35,8 @@ export type LeadStage =
 
 export type LeadOrigin =
   | "instagram" | "facebook" | "site" | "whatsapp" | "ligacao"
-  | "indicacao" | "trafego_pago" | "placa" | "portal" | "tiktok" | "messenger" | "outros";
+  | "indicacao" | "trafego_pago" | "placa" | "portal" | "tiktok" | "messenger"
+  | "telegram" | "email" | "outros";
 
 export type ClientType =
   | "comprador" | "vendedor" | "locatario" | "locador" | "proprietario"
@@ -335,11 +336,13 @@ export const LEAD_STAGES: { key: LeadStage; label: string; color: string }[] = [
 // =====================================================================
 // Atendimento omnichannel (conversas + mensagens) — migration 0025
 // =====================================================================
-export type ConversationChannel = "whatsapp" | "instagram" | "facebook" | "messenger";
+export type ConversationChannel =
+  | "whatsapp" | "instagram" | "facebook" | "messenger"
+  | "telegram" | "email" | "sms" | "site" | "api";
 export type ConversationStatus = "aberta" | "pendente" | "resolvida" | "adiada";
 export type ConversationPriority = "baixa" | "media" | "alta" | "urgente";
 export type MessageDirecao = "in" | "out";
-export type MessageRemetente = "cliente" | "atendente" | "sistema" | "ia";
+export type MessageRemetente = "cliente" | "atendente" | "sistema" | "ia" | "bot";
 export type MessageTipo =
   | "texto" | "imagem" | "audio" | "documento" | "video" | "template" | "sistema";
 export type MessageStatus = "recebida" | "enviada" | "entregue" | "lida" | "falha";
@@ -364,6 +367,8 @@ export interface Conversation {
   created_at: string;
   /** Equipe responsável (além do agente) — migration 0030. */
   team_id: string | null;
+  /** Canal físico por onde a conversa entrou — migration 0027. */
+  channel_id: string | null;
   /** Prioridade; nula = sem prioridade definida (padrão do Chatwoot). */
   prioridade: ConversationPriority | null;
   /** Quando a conversa adiada volta sozinha para "aberta". */
@@ -375,7 +380,24 @@ export interface Conversation {
   sla_first_response_due: string | null;
   sla_resolution_due: string | null;
   sla_violado: boolean;
+  /** O agente marcou de volta como não lida — o contador não serve p/ isso. */
+  marcada_nao_lida: boolean;
+  /** Intenção e resumo detectados pela IA (0034). */
+  ia_intencao: string | null;
+  ia_resumo: string | null;
+  /** Estado do agent bot NESTA conversa (0037). */
+  bot_status: BotStatus;
+  bot_id: string | null;
+  bot_transferida_em: string | null;
 }
+
+export type BotStatus = "sem_bot" | "ativo" | "transferida";
+
+export const BOT_STATUS_LABELS: Record<BotStatus, string> = {
+  sem_bot: "Sem bot",
+  ativo: "Bot conduzindo",
+  transferida: "Transferida para humano",
+};
 
 export interface Message {
   id: string;
@@ -396,6 +418,9 @@ export interface Message {
   media_tamanho: number | null;
   reply_to_id: string | null;
   mentions: string[];
+  /** Apagar é soft delete: o rastro fica, o conteúdo some (ver 0035). */
+  apagada_em: string | null;
+  apagada_por: string | null;
 }
 
 export interface CannedResponse {
@@ -653,11 +678,118 @@ export const CHANNEL_LABELS: Record<ConversationChannel, string> = {
   instagram: "Instagram",
   facebook: "Facebook",
   messenger: "Messenger",
+  telegram: "Telegram",
+  email: "E-mail",
+  sms: "SMS",
+  site: "Chat do site",
+  api: "API",
 };
+
+// ===== Onda F — plataforma (migration 0034) ==========================
+
+export type WebhookEvent =
+  | "conversa_criada" | "conversa_atualizada" | "conversa_resolvida"
+  | "mensagem_criada" | "contato_criado";
+
+export const WEBHOOK_EVENT_LABELS: Record<WebhookEvent, string> = {
+  conversa_criada: "Conversa criada",
+  conversa_atualizada: "Conversa atualizada",
+  conversa_resolvida: "Conversa resolvida",
+  mensagem_criada: "Mensagem criada",
+  contato_criado: "Contato criado",
+};
+
+export interface AtendimentoWebhook {
+  id: string;
+  nome: string;
+  url: string;
+  secret: string;
+  eventos: WebhookEvent[];
+  ativo: boolean;
+  ultimo_status: number | null;
+  ultimo_erro: string | null;
+  ultimo_envio_em: string | null;
+  falhas_seguidas: number;
+  criado_por: string | null;
+  created_at: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  webhook_id: string;
+  evento: string;
+  payload: Record<string, unknown> | null;
+  status: number | null;
+  erro: string | null;
+  duracao_ms: number | null;
+  created_at: string;
+}
+
+export type ApiScope = "leitura" | "escrita" | "admin";
+
+export const API_SCOPE_LABELS: Record<ApiScope, string> = {
+  leitura: "Leitura (listar conversas, contatos, relatórios)",
+  escrita: "Escrita (enviar mensagem, criar contato, mudar status)",
+  admin: "Administração (canais, agentes, configurações)",
+};
+
+export interface ApiToken {
+  id: string;
+  nome: string;
+  prefixo: string;
+  escopos: ApiScope[];
+  ultimo_uso_em: string | null;
+  expira_em: string | null;
+  revogado: boolean;
+  criado_por: string | null;
+  created_at: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  ator_id: string | null;
+  ator_nome: string | null;
+  acao: string;
+  entidade: string;
+  entidade_id: string | null;
+  detalhes: Record<string, unknown> | null;
+  ip: string | null;
+  created_at: string;
+}
+
+export interface WidgetSession {
+  id: string;
+  inbox_id: string;
+  contact_token: string;
+  conversation_id: string | null;
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+  pre_chat: Record<string, string>;
+  user_agent: string | null;
+  referrer: string | null;
+  ultima_atividade: string;
+  created_at: string;
+}
+
+export type IaSuggestionType = "resposta" | "resumo" | "intencao";
+
+export interface IaSugestao {
+  id: string;
+  conversation_id: string;
+  baseada_em: string | null;
+  tipo: IaSuggestionType;
+  conteudo: string;
+  modelo: string | null;
+  usada: boolean;
+  created_at: string;
+}
 
 // ===== Canais do Atendimento (como o WhatsApp é conectado) ===========
 // Três modos, com trade-offs bem diferentes — ver 0027_atendimento_canais.sql.
-export type ChannelProvider = "evolution" | "cloud_api" | "cloud_api_coexistence";
+export type ChannelProvider =
+  | "evolution" | "cloud_api" | "cloud_api_coexistence"
+  | "telegram_bot" | "email_smtp" | "sms_generico" | "widget" | "api_generica";
 
 export type ChannelStatus =
   | "desconectado"
@@ -684,6 +816,11 @@ export const CHANNEL_PROVIDER_LABELS: Record<ChannelProvider, string> = {
   evolution: "Evolution API (QR Code)",
   cloud_api: "API Oficial da Meta",
   cloud_api_coexistence: "API Oficial — mantendo o número no celular",
+  telegram_bot: "Telegram (Bot API)",
+  email_smtp: "E-mail (SMTP + IMAP)",
+  sms_generico: "SMS (provedor genérico)",
+  widget: "Chat do site (widget)",
+  api_generica: "Canal via API",
 };
 
 export const CHANNEL_STATUS_LABELS: Record<ChannelStatus, string> = {
@@ -703,7 +840,8 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
 
 export const LEAD_ORIGINS: LeadOrigin[] = [
   "instagram","facebook","site","whatsapp","ligacao",
-  "indicacao","trafego_pago","placa","portal","tiktok","messenger","outros"
+  "indicacao","trafego_pago","placa","portal","tiktok","messenger",
+  "telegram","email","outros"
 ];
 
 export const CLIENT_TYPES: ClientType[] = [
@@ -825,4 +963,279 @@ export interface MarketingMedia {
   storage_path: string | null;
   ordem: number;
   created_at: string;
+}
+
+
+// =====================================================================
+// Onda G — participantes, templates, papéis, integrações (migration 0035)
+// =====================================================================
+
+export interface ConversationParticipant {
+  conversation_id: string;
+  profile_id: string;
+  created_at: string;
+}
+
+export type TemplateCategory = "MARKETING" | "UTILITY" | "AUTHENTICATION";
+export type TemplateStatus =
+  | "local" | "PENDING" | "APPROVED" | "REJECTED" | "PAUSED" | "DISABLED";
+
+export const TEMPLATE_CATEGORY_LABELS: Record<TemplateCategory, string> = {
+  MARKETING: "Marketing (promoção, novidade)",
+  UTILITY: "Utilidade (confirmação, atualização de pedido)",
+  AUTHENTICATION: "Autenticação (código de verificação)",
+};
+
+export const TEMPLATE_STATUS_LABELS: Record<TemplateStatus, string> = {
+  local: "Só aqui (não enviado à Meta)",
+  PENDING: "Em análise na Meta",
+  APPROVED: "Aprovado",
+  REJECTED: "Rejeitado",
+  PAUSED: "Pausado pela Meta",
+  DISABLED: "Desativado",
+};
+
+export interface WhatsappTemplate {
+  id: string;
+  channel_id: string | null;
+  nome: string;
+  idioma: string;
+  categoria: TemplateCategory;
+  status: TemplateStatus;
+  componentes: Record<string, unknown>[];
+  corpo: string | null;
+  variaveis: number;
+  meta_id: string | null;
+  motivo_rejeicao: string | null;
+  sincronizado_em: string | null;
+  criado_por: string | null;
+  created_at: string;
+}
+
+/** Catálogo de permissões oferecido na tela de papéis. */
+export const PERMISSOES: { chave: string; label: string; grupo: string }[] = [
+  { chave: "conversa:ver_todas", label: "Ver todas as conversas", grupo: "Conversas" },
+  { chave: "conversa:ver_proprias", label: "Ver apenas as próprias e as não atribuídas", grupo: "Conversas" },
+  { chave: "conversa:atribuir", label: "Atribuir conversa a outro agente", grupo: "Conversas" },
+  { chave: "conversa:excluir", label: "Excluir conversa", grupo: "Conversas" },
+  { chave: "contato:ver", label: "Ver contatos", grupo: "Contatos" },
+  { chave: "contato:editar", label: "Criar e editar contatos", grupo: "Contatos" },
+  { chave: "contato:excluir", label: "Excluir contatos", grupo: "Contatos" },
+  { chave: "relatorio:ver", label: "Ver relatórios", grupo: "Relatórios" },
+  { chave: "relatorio:exportar", label: "Exportar relatórios", grupo: "Relatórios" },
+  { chave: "config:ver", label: "Ver configurações", grupo: "Configurações" },
+  { chave: "config:editar", label: "Editar configurações", grupo: "Configurações" },
+  { chave: "canal:gerenciar", label: "Conectar e desconectar canais", grupo: "Configurações" },
+  { chave: "agente:gerenciar", label: "Gerenciar agentes e equipes", grupo: "Configurações" },
+];
+
+export interface AtendimentoRole {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  permissoes: string[];
+  sistema: boolean;
+  created_at: string;
+}
+
+export type IntegrationType =
+  | "slack" | "dialogflow" | "webhook_app" | "dashboard_app" | "google_translate";
+
+export const INTEGRATION_LABELS: Record<IntegrationType, string> = {
+  slack: "Slack — espelha as conversas num canal",
+  dialogflow: "Dialogflow — bot de triagem",
+  webhook_app: "Aplicativo via webhook",
+  dashboard_app: "Aplicativo do painel (iframe)",
+  google_translate: "Google Tradutor",
+};
+
+export interface AtendimentoIntegration {
+  id: string;
+  tipo: IntegrationType;
+  nome: string;
+  config: Record<string, string>;
+  ativo: boolean;
+  ultimo_erro: string | null;
+  created_at: string;
+}
+
+export interface DashboardApp {
+  id: string;
+  nome: string;
+  url: string;
+  ativo: boolean;
+  ordem: number;
+  created_at: string;
+}
+
+export interface AtendimentoSettings {
+  id: boolean;
+  nome_conta: string;
+  idioma: string;
+  fuso: string;
+  auto_resolver_dias: number;
+  ocultar_nome_agente: boolean;
+  notificacao_som: boolean;
+  logo_url: string | null;
+  updated_at: string;
+}
+
+export interface ArticleVote {
+  id: string;
+  article_id: string;
+  util: boolean;
+  comentario: string | null;
+  visitante_token: string | null;
+  created_at: string;
+}
+
+
+// =====================================================================
+// Agent Bots e onboarding (migration 0037)
+// =====================================================================
+
+export interface AgentBot {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  /** Para onde cada mensagem recebida na caixa do bot é POSTada. */
+  outgoing_url: string;
+  prefixo: string;
+  secret: string;
+  ativo: boolean;
+  ultimo_status: number | null;
+  ultimo_erro: string | null;
+  ultimo_envio_em: string | null;
+  falhas_seguidas: number;
+  criado_por: string | null;
+  created_at: string;
+}
+
+export interface BotDelivery {
+  id: string;
+  bot_id: string;
+  conversation_id: string | null;
+  payload: Record<string, unknown> | null;
+  status: number | null;
+  erro: string | null;
+  duracao_ms: number | null;
+  created_at: string;
+}
+
+/** Passos do assistente de primeiros passos. A ordem é a da tela. */
+export const ONBOARDING_PASSOS = [
+  { id: "conta", titulo: "Nome e fuso da operação" },
+  { id: "agentes", titulo: "Liberar acesso da equipe" },
+  { id: "canal", titulo: "Conectar um canal" },
+  { id: "horario", titulo: "Horário comercial" },
+  { id: "respostas", titulo: "Respostas rápidas" },
+  { id: "etiquetas", titulo: "Etiquetas" },
+] as const;
+
+export type OnboardingPassoId = (typeof ONBOARDING_PASSOS)[number]["id"];
+
+// =====================================================================
+// Agenda — visualizações (migration 0038)
+// =====================================================================
+
+export type AgendaVista = "kanban" | "timeline" | "mes" | "semana" | "lista";
+
+export const AGENDA_VISTA_LABELS: Record<AgendaVista, string> = {
+  kanban: "Quadro",
+  timeline: "Linha do tempo",
+  mes: "Mês",
+  semana: "Semana",
+  lista: "Lista",
+};
+
+export type AgendaTipo =
+  | "visita" | "reuniao" | "ligacao" | "retorno" | "assinatura" | "gravacao" | "outro";
+
+export const AGENDA_TIPO_LABELS: Record<AgendaTipo, string> = {
+  visita: "Visita",
+  reuniao: "Reunião",
+  ligacao: "Ligação",
+  retorno: "Retorno",
+  assinatura: "Assinatura",
+  gravacao: "Gravação",
+  outro: "Outro",
+};
+
+/** Cor de cada tipo. Hex porque o Tailwind não gera classe dinâmica. */
+export const AGENDA_TIPO_COR: Record<AgendaTipo, string> = {
+  visita: "#a855f7",
+  reuniao: "#3b82f6",
+  ligacao: "#f59e0b",
+  retorno: "#ec4899",
+  assinatura: "#10b981",
+  gravacao: "#6366f1",
+  outro: "#64748b",
+};
+
+export type AgendaStatus =
+  | "agendado" | "confirmado" | "concluido" | "cancelado" | "nao_compareceu";
+
+export const AGENDA_STATUS_LABELS: Record<AgendaStatus, string> = {
+  agendado: "Agendado",
+  confirmado: "Confirmado",
+  concluido: "Concluído",
+  cancelado: "Cancelado",
+  nao_compareceu: "Não compareceu",
+};
+
+/** Ordem das colunas quando o quadro agrupa por status. */
+export const AGENDA_STATUS_ORDEM: AgendaStatus[] = [
+  "agendado", "confirmado", "concluido", "nao_compareceu", "cancelado",
+];
+
+export const AGENDA_STATUS_CLASSES: Record<AgendaStatus, string> = {
+  agendado: "bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30",
+  confirmado: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+  concluido: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  cancelado: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
+  nao_compareceu: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+};
+
+/** Como o quadro agrupa as colunas. */
+export type AgendaAgrupamento = "dia" | "status" | "tipo" | "setor" | "responsavel";
+
+export const AGENDA_AGRUPAMENTO_LABELS: Record<AgendaAgrupamento, string> = {
+  dia: "Por dia",
+  status: "Por status",
+  tipo: "Por tipo",
+  setor: "Por setor",
+  responsavel: "Por responsável",
+};
+
+/**
+ * Item unificado da agenda. `agenda_events` e `lead_appointments` são
+ * tabelas diferentes, mas toda visualização trata as duas igual — só a
+ * gravação precisa saber de qual veio (por isso `origem`).
+ */
+export interface AgendaItem {
+  /** "evt:<uuid>" ou "apt:<uuid>" — o prefixo diz a tabela de origem. */
+  id: string;
+  origem: "evento" | "agendamento";
+  /** Id puro, sem prefixo — é o que vai no `.eq("id", ...)`. */
+  rawId: string;
+  titulo: string;
+  tipo: AgendaTipo;
+  status: AgendaStatus;
+  /** Nulo = ainda SEM data. Vive no painel lateral até alguém arrastar. */
+  data_hora: string | null;
+  duracao_min: number;
+  /** Ocupa o dia todo — o mês desenha barra, não pílula com hora. */
+  dia_inteiro: boolean;
+  observacoes: string | null;
+  local: string | null;
+  cor: string | null;
+  ordem: number;
+  responsavel_id: string | null;
+  setor_destino: Sector | null;
+  criado_por_sector: Sector | null;
+  /** Só em agendamento de lead. */
+  lead_id: string | null;
+  lead_nome: string | null;
+  property_id: string | null;
+  property_codigo: string | null;
 }

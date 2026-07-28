@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "node scripts/apply-migrations.js",
-    "db:seed-users": "node scripts/seed-users.js"
+    "db:seed-users": "node scripts/seed-users.js",
+    "agenda:demo": "node scripts/seed-agenda-demo.js",
+    "agenda:demo:undo": "node scripts/seed-agenda-demo.js --undo"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

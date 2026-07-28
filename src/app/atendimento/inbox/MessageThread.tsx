@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useMemo } from "react";
-import { StickyNote, CornerUpLeft, Bot, Settings2, AlertCircle, Check, CheckCheck } from "lucide-react";
+import { StickyNote, CornerUpLeft, Bot, Settings2, AlertCircle, Check, CheckCheck, Trash2 } from "lucide-react";
 import { formatDateTimeBR } from "@/lib/utils";
 import { MediaBubble } from "./MediaBubble";
 import type { Message, MessageStatus } from "@/lib/types";
@@ -26,6 +26,33 @@ function StatusIcon({ status }: { status: MessageStatus }) {
   return null;
 }
 
+/**
+ * Quebra o texto nos trechos que casam com o termo buscado, para destacar
+ * sem usar innerHTML (o conteúdo vem do cliente — nunca injetar como HTML).
+ */
+function destacar(texto: string, termo: string): React.ReactNode {
+  const t = termo.trim();
+  if (!t) return texto;
+  const partes: React.ReactNode[] = [];
+  const alvo = texto.toLowerCase();
+  const busca = t.toLowerCase();
+  let i = 0;
+  let achou = alvo.indexOf(busca);
+  let chave = 0;
+  while (achou !== -1) {
+    if (achou > i) partes.push(texto.slice(i, achou));
+    partes.push(
+      <mark key={chave++} className="bg-amber-400/40 text-inherit rounded-sm px-0.5">
+        {texto.slice(achou, achou + t.length)}
+      </mark>,
+    );
+    i = achou + t.length;
+    achou = alvo.indexOf(busca, i);
+  }
+  if (i < texto.length) partes.push(texto.slice(i));
+  return partes;
+}
+
 export const MessageThread = forwardRef<
   HTMLDivElement,
   {
@@ -33,8 +60,15 @@ export const MessageThread = forwardRef<
     carregando: boolean;
     autorNome: Map<string, string>;
     onResponder: (m: Message) => void;
+    /** Termo da busca na thread — destaca os trechos encontrados. */
+    termoBusca?: string;
+    /** Apagar é soft delete; só faz sentido no que a equipe escreveu. */
+    onApagar?: (m: Message) => void;
   }
->(function MessageThread({ mensagens, carregando, autorNome, onResponder }, ref) {
+>(function MessageThread(
+  { mensagens, carregando, autorNome, onResponder, termoBusca = "", onApagar },
+  ref,
+) {
   const porId = useMemo(() => {
     const m = new Map<string, Message>();
     for (const msg of mensagens) m.set(msg.id, msg);
@@ -73,7 +107,9 @@ export const MessageThread = forwardRef<
                   <div className="flex items-center gap-1 text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-400 mb-0.5">
                     <StickyNote size={11} /> Nota interna{autor ? ` · ${autor}` : ""}
                   </div>
-                  <div className="whitespace-pre-line break-words">{m.conteudo}</div>
+                  <div className="whitespace-pre-line break-words">
+                    {destacar(m.conteudo ?? "", termoBusca)}
+                  </div>
                   {m.media_url && <div className="mt-1.5"><MediaBubble m={m} saida={false} /></div>}
                   <div className="mt-1 text-[10px] opacity-70">{formatDateTimeBR(m.created_at)}</div>
                 </div>
@@ -91,7 +127,19 @@ export const MessageThread = forwardRef<
                   <div className={`flex group ${saida ? "justify-end" : "justify-start"}`}>
                     {/* Responder aparece no hover, do lado de fora do balão */}
                     {saida && (
-                      <BotaoResponder onClick={() => onResponder(m)} lado="esquerda" />
+                      <span className="self-center flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        {onApagar && !m.apagada_em && (
+                          <button
+                            type="button"
+                            onClick={() => onApagar(m)}
+                            title="Apagar mensagem"
+                            className="p-1 rounded text-muted-foreground hover:bg-muted hover:text-red-600"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                        <BotaoResponder onClick={() => onResponder(m)} lado="esquerda" />
+                      </span>
                     )}
                     <div
                       className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
@@ -112,17 +160,27 @@ export const MessageThread = forwardRef<
                         </div>
                       )}
 
-                      {m.media_url && (
-                        <div className={m.conteudo ? "mb-1.5" : ""}>
-                          <MediaBubble m={m} saida={saida} />
+                      {m.apagada_em ? (
+                        <div className="italic opacity-60 text-xs inline-flex items-center gap-1">
+                          <Trash2 size={11} /> mensagem apagada
                         </div>
-                      )}
+                      ) : (
+                        <>
+                          {m.media_url && (
+                            <div className={m.conteudo ? "mb-1.5" : ""}>
+                              <MediaBubble m={m} saida={saida} />
+                            </div>
+                          )}
 
-                      {m.conteudo ? (
-                        <div className="whitespace-pre-line break-words">{m.conteudo}</div>
-                      ) : !m.media_url ? (
-                        <div className="italic opacity-70">[{m.tipo}]</div>
-                      ) : null}
+                          {m.conteudo ? (
+                            <div className="whitespace-pre-line break-words">
+                              {destacar(m.conteudo, termoBusca)}
+                            </div>
+                          ) : !m.media_url ? (
+                            <div className="italic opacity-70">[{m.tipo}]</div>
+                          ) : null}
+                        </>
+                      )}
 
                       <div
                         className={`mt-1 flex items-center gap-1 text-[10px] ${

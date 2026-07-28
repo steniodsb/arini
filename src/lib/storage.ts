@@ -53,6 +53,28 @@ export async function presignUpload(key: string, contentType: string): Promise<s
   return getSignedUrl(r2(), cmd, { expiresIn: 600 });
 }
 
+/**
+ * Sobe um buffer direto do servidor para o R2 (sem passar pelo navegador).
+ * É o caminho usado pela mídia que CHEGA por webhook: o provedor entrega
+ * uma URL temporária — no Telegram ela ainda carrega o token do bot e
+ * morre em ~1 h — então copiamos o arquivo para o nosso storage na hora.
+ */
+export async function uploadBufferR2(
+  key: string,
+  corpo: Buffer | Uint8Array,
+  contentType: string,
+): Promise<string> {
+  await r2().send(
+    new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET!,
+      Key: key,
+      Body: corpo,
+      ContentType: contentType,
+    }),
+  );
+  return r2PublicUrl(key);
+}
+
 /** Remove um objeto do bucket R2. */
 export async function deleteR2Object(key: string): Promise<void> {
   await r2().send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET!, Key: key }));

@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { EmojiPicker } from "./EmojiPicker";
+import { AudioRecorder, audioPodeSerRecusadoPelaCloudApi } from "./AudioRecorder";
 import {
-  Send, StickyNote, Zap, Paperclip, X, AtSign, PenLine, CornerUpLeft, Workflow,
+  Send, StickyNote, Zap, Paperclip, X, AtSign, PenLine, CornerUpLeft, Workflow, Mic,
 } from "lucide-react";
 import type { AgentOption, CannedResponse, AtendimentoMacro, Message } from "@/lib/types";
 
@@ -26,6 +27,9 @@ export function Composer({
   onAplicarMacro,
   bloqueado,
   avisoBloqueio,
+  injetarTexto,
+  onTextoInjetado,
+  provedorCanal,
 }: {
   cannedResponses: CannedResponse[];
   macros: AtendimentoMacro[];
@@ -44,6 +48,16 @@ export function Composer({
   onAplicarMacro: (macroId: string) => void;
   bloqueado?: boolean;
   avisoBloqueio?: string;
+  /** Texto vindo de fora (sugestão do copiloto) para cair no campo. */
+  injetarTexto?: string | null;
+  onTextoInjetado?: () => void;
+  /**
+   * Provedor do canal desta conversa ("evolution", "cloud_api", …), quando
+   * quem monta o composer souber. Serve só para calibrar o aviso de formato
+   * do áudio gravado; sem ele avisamos de forma condicional ("se este canal
+   * for a API Oficial…") em vez de afirmar o que não sabemos.
+   */
+  provedorCanal?: string | null;
 }) {
   const [texto, setTexto] = useState("");
   const [modo, setModo] = useState<"resposta" | "nota">("resposta");
@@ -51,6 +65,8 @@ export function Composer({
   const [mentions, setMentions] = useState<string[]>([]);
   const [assinar, setAssinar] = useState(true);
   const [menu, setMenu] = useState<"canned" | "macros" | "mencao" | null>(null);
+  // Gravação em curso: trava o envio para não sair mensagem pela metade.
+  const [gravandoAudio, setGravandoAudio] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -58,6 +74,16 @@ export function Composer({
   useEffect(() => {
     return () => { arquivos.forEach((a) => a.preview && URL.revokeObjectURL(a.preview)); };
   }, [arquivos]);
+
+  // Sugestão do copiloto entra como resposta ao cliente, no fim do que já
+  // estiver escrito — nunca sobrescreve o que o atendente digitou.
+  useEffect(() => {
+    if (!injetarTexto) return;
+    setModo("resposta");
+    setTexto((t) => (t.trim() ? `${t.trimEnd()}\n\n${injetarTexto}` : injetarTexto));
+    requestAnimationFrame(() => taRef.current?.focus());
+    onTextoInjetado?.();
+  }, [injetarTexto, onTextoInjetado]);
 
   // Atalhos do composer: Alt+N alterna nota interna.
   useEffect(() => {
@@ -85,13 +111,30 @@ export function Composer({
     });
   }
 
+  // Áudio também ganha preview: é o mesmo blob URL, e assim o atendente
+  // consegue ouvir a nota de voz antes de mandar (o efeito de limpeza
+  // lá em cima já revoga todas as URLs).
+  function previewDe(file: File): string | null {
+    return file.type.startsWith("image/") || file.type.startsWith("audio/")
+      ? URL.createObjectURL(file)
+      : null;
+  }
+
   function addArquivos(lista: FileList | null) {
     if (!lista?.length) return;
     const novos: ArquivoPendente[] = Array.from(lista).map((file) => ({
       file,
-      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+      preview: previewDe(file),
     }));
     setArquivos((prev) => [...prev, ...novos]);
+  }
+
+  /**
+   * A gravação vira um File comum e entra na MESMA lista de anexos — não
+   * existe caminho de envio paralelo para áudio.
+   */
+  function addGravacao(file: File) {
+    setArquivos((prev) => [...prev, { file, preview: previewDe(file) }]);
   }
 
   function removerArquivo(i: number) {
@@ -111,7 +154,7 @@ export function Composer({
 
   async function enviar(tambemResolver = false) {
     const body = texto.trim();
-    if ((!body && arquivos.length === 0) || enviando || bloqueado) return;
+    if ((!body && arquivos.length === 0) || enviando || bloqueado || gravandoAudio) return;
     await onEnviar({
       texto: body,
       interna: modo === "nota",
@@ -138,6 +181,27 @@ export function Composer({
 
   const nota = modo === "nota";
 
+  /**
+   * Aviso honesto de entrega do áudio gravado.
+   *
+   * O que a gente sabe de fato:
+   *  - Evolution API: o envio de áudio usa /message/sendWhatsAppAudio, que
+   *    converte para nota de voz — webm/opus costuma passar sem problema.
+   *  - Cloud API da Meta (WhatsApp oficial): a lista de mídias de áudio
+   *    aceitas é audio/ogg (opus), audio/mpeg, audio/mp4 e audio/aac.
+   *    webm NÃO está nessa lista e o envio pode voltar com erro.
+   * Converter no navegador exigiria ffmpeg.wasm (dependência nova), então
+   * o que dá para fazer com honestidade é avisar antes de enviar.
+   */
+  const audioWebmPendente = arquivos.some((a) => audioPodeSerRecusadoPelaCloudApi(a.file.type));
+  const canalECloudApi = (provedorCanal ?? "").startsWith("cloud_api");
+  const avisoAudioWebm =
+    audioWebmPendente && !nota && (canalECloudApi || provedorCanal == null)
+      ? canalECloudApi
+        ? "Este canal é a API Oficial da Meta, que não aceita áudio em WebM — o WhatsApp pode recusar esta nota de voz."
+        : "Áudio gravado em WebM. A Evolution API converte para nota de voz normalmente, mas a API Oficial da Meta (Cloud API) não aceita WebM e pode recusar o envio."
+      : null;
+
   return (
     <div className="border-t bg-card shrink-0">
       {/* Citação */}
@@ -162,8 +226,8 @@ export function Composer({
         </div>
       )}
 
-      {/* Abas + ferramentas */}
-      <div className="flex items-center gap-1 px-3 pt-2">
+      {/* Abas + ferramentas (flex-wrap: o painel do gravador cai numa linha própria) */}
+      <div className="flex flex-wrap items-center gap-1 px-3 pt-2">
         <button
           type="button"
           onClick={() => setModo("resposta")}
@@ -307,14 +371,39 @@ export function Composer({
             </button>
           )}
         </div>
+
+        {/*
+          Gravador de áudio. Fica fora do grupo com `ml-auto` de propósito:
+          ele devolve um fragmento (botão + painel de largura total), e o
+          painel só consegue quebrar linha sendo filho direto desta fileira.
+          O botão do microfone cai colado no clipe/emoji, como pedido.
+        */}
+        <AudioRecorder
+          onGravado={addGravacao}
+          desabilitado={bloqueado || enviando}
+          onAtivoChange={setGravandoAudio}
+        />
       </div>
 
       {/* Anexos pendentes */}
       {arquivos.length > 0 && (
         <div className="px-3 pt-2 flex flex-wrap gap-2">
           {arquivos.map((a, i) => (
-            <div key={i} className="relative rounded-md border bg-muted/40 p-1.5 pr-6 max-w-[160px]">
-              {a.preview ? (
+            <div
+              key={i}
+              className={`relative rounded-md border bg-muted/40 p-1.5 pr-6 ${
+                a.file.type.startsWith("audio/") ? "max-w-[240px]" : "max-w-[160px]"
+              }`}
+            >
+              {a.file.type.startsWith("audio/") && a.preview ? (
+                // Áudio precisa ser CONFERIDO antes de ir, não só nomeado.
+                <div className="w-[210px]">
+                  <audio controls src={a.preview} className="h-8 w-full">
+                    Seu navegador não toca áudio.
+                  </audio>
+                  <div className="text-[10px] text-muted-foreground truncate mt-0.5">{a.file.name}</div>
+                </div>
+              ) : a.preview ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={a.preview} alt={a.file.name} className="h-14 w-full object-cover rounded" />
               ) : (
@@ -333,6 +422,12 @@ export function Composer({
         </div>
       )}
 
+      {avisoAudioWebm && (
+        <div className="mx-3 mt-2 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-1.5 text-[10px] text-amber-800 dark:text-amber-300">
+          {avisoAudioWebm}
+        </div>
+      )}
+
       {bloqueado && avisoBloqueio && (
         <div className="mx-3 mt-2 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
           {avisoBloqueio}
@@ -344,25 +439,37 @@ export function Composer({
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); addArquivos(e.dataTransfer.files); }}
       >
-        <textarea
-          ref={taRef}
-          rows={1}
-          value={texto}
-          disabled={bloqueado}
-          onChange={(e) => setTexto(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={
-            nota
-              ? "Nota interna — só a equipe vê. Use @ para avisar um colega."
-              : "Escreva uma resposta…  (Enter envia · Shift+Enter quebra linha · / respostas rápidas)"
-          }
-          className="flex-1 resize-none min-h-[42px] max-h-40 rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/40 disabled:opacity-60"
-        />
+        {gravandoAudio ? (
+          // Enquanto grava, o campo de texto sai de cena: o atendente
+          // resolve a nota de voz primeiro (usar ou descartar) e só depois
+          // volta a escrever — evita mandar mensagem pela metade.
+          <div className="flex-1 min-h-[42px] rounded-md border border-dashed bg-muted/30 px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
+            <Mic size={15} className="text-red-600 shrink-0" />
+            Gravando áudio… use os controles acima para parar, usar ou descartar.
+          </div>
+        ) : (
+          <textarea
+            ref={taRef}
+            rows={1}
+            value={texto}
+            disabled={bloqueado}
+            onChange={(e) => setTexto(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={
+              nota
+                ? "Nota interna — só a equipe vê. Use @ para avisar um colega."
+                : "Escreva uma resposta…  (Enter envia · Shift+Enter quebra linha · / respostas rápidas)"
+            }
+            className="flex-1 resize-none min-h-[42px] max-h-40 rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/40 disabled:opacity-60"
+          />
+        )}
         <Button
           type="button"
           variant={nota ? "outline" : "gold"}
           onClick={() => void enviar()}
-          disabled={enviando || bloqueado || (!texto.trim() && arquivos.length === 0)}
+          disabled={
+            enviando || bloqueado || gravandoAudio || (!texto.trim() && arquivos.length === 0)
+          }
         >
           {nota ? <StickyNote size={15} /> : <Send size={15} />}
           {enviando ? "…" : nota ? "Nota" : "Enviar"}

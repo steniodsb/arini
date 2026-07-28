@@ -13,6 +13,11 @@ const CHANNEL_DOT: Record<string, string> = {
   instagram: "bg-pink-500",
   facebook: "bg-blue-600",
   messenger: "bg-sky-500",
+  telegram: "bg-cyan-500",
+  email: "bg-violet-500",
+  sms: "bg-orange-500",
+  site: "bg-amber-500",
+  api: "bg-slate-500",
 };
 
 function contactName(c: Conversation) {

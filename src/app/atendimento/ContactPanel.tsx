@@ -10,7 +10,7 @@ import {
 import { formatDateTimeBR } from "@/lib/utils";
 import {
   User, Phone, Mail, Home, GitBranch, ChevronDown, ChevronRight,
-  MessageSquare, StickyNote, Plus, Trash2, Building2, Timer, ExternalLink,
+  MessageSquare, StickyNote, Plus, Trash2, Building2, Timer, ExternalLink, Paperclip,
 } from "lucide-react";
 
 type LeadCtx = {
@@ -111,6 +111,37 @@ export function ContactPanel({
 
     return () => { cancelado = true; };
   }, [leadId, carregarNotas]);
+
+  // Anexos trocados nesta conversa — o atendente costuma procurar "aquele
+  // PDF que o cliente mandou", e rolar a thread inteira é péssimo.
+  const [anexos, setAnexos] = useState<
+    { id: string; media_url: string; media_nome: string | null; tipo: string; created_at: string }[]
+  >([]);
+  useEffect(() => {
+    let cancelado = false;
+    const supabase = createSupabaseBrowser();
+    void supabase
+      .from("messages")
+      .select("id, media_url, media_nome, tipo, created_at")
+      .eq("conversation_id", conversation.id)
+      .not("media_url", "is", null)
+      .is("apagada_em", null)
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        if (cancelado) return;
+        setAnexos(
+          (data ?? []).map((m) => ({
+            id: m.id as string,
+            media_url: m.media_url as string,
+            media_nome: (m.media_nome as string) ?? null,
+            tipo: m.tipo as string,
+            created_at: m.created_at as string,
+          })),
+        );
+      });
+    return () => { cancelado = true; };
+  }, [conversation.id]);
 
   const [anteriores, setAnteriores] = useState<ConvResumo[]>([]);
   useEffect(() => {
@@ -239,6 +270,42 @@ export function ContactPanel({
               </div>
             );
           })}
+        </Bloco>
+      )}
+
+      {anexos.length > 0 && (
+        <Bloco titulo={`Anexos desta conversa (${anexos.length})`}>
+          <div className="grid grid-cols-3 gap-1.5">
+            {anexos.map((a) =>
+              a.tipo === "imagem" ? (
+                <a
+                  key={a.id}
+                  href={a.media_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={a.media_nome ?? "imagem"}
+                  className="block aspect-square overflow-hidden rounded-md border hover:opacity-80"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={a.media_url} alt={a.media_nome ?? "anexo"} className="h-full w-full object-cover" loading="lazy" />
+                </a>
+              ) : (
+                <a
+                  key={a.id}
+                  href={a.media_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={a.media_nome ?? a.tipo}
+                  className="flex aspect-square flex-col items-center justify-center gap-1 rounded-md border bg-muted/40 p-1 hover:bg-muted"
+                >
+                  <Paperclip size={14} className="text-muted-foreground" />
+                  <span className="text-[9px] text-center leading-tight line-clamp-2 break-all">
+                    {a.media_nome ?? a.tipo}
+                  </span>
+                </a>
+              ),
+            )}
+          </div>
         </Bloco>
       )}
 

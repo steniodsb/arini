@@ -62,6 +62,11 @@ export function MediaBubble({ m, saida }: { m: Message; saida: boolean }) {
   }
 
   if (m.tipo === "audio") {
+    // O <audio> do navegador toca o que ele mesmo gravou (webm/opus, mp4).
+    // Tocar aqui NÃO significa que o canal aceitou: a Evolution converte o
+    // áudio para nota de voz e engole webm, mas a Cloud API da Meta só
+    // aceita audio/ogg (opus), audio/mpeg, audio/mp4 e audio/aac. O aviso
+    // de formato fica no Composer, antes do envio.
     return (
       <audio controls src={m.media_url} className="max-w-[260px] w-[260px]">
         Seu navegador não toca áudio.

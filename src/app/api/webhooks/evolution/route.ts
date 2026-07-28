@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { toChannelStatus, type EvolutionState } from "@/lib/evolution";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
+import {
+  emitirContatoCriado,
+  emitirConversaCriada,
+  emitirMensagemCriada,
+} from "@/lib/atendimento/webhook-eventos";
 import type { MessageTipo } from "@/lib/types";
 
 type Admin = ReturnType<typeof createSupabaseAdmin>;
@@ -227,10 +233,11 @@ export async function POST(req: Request) {
     leadId = (lead?.id as string) ?? null;
 
     if (!leadId) {
+      const nomeLead = nome || `Contato ${telefone}`;
       const { data: novoLead } = await admin
         .from("leads")
         .insert({
-          nome: nome || `Contato ${telefone}`,
+          nome: nomeLead,
           telefone,
           whatsapp: telefone,
           origem: "whatsapp",
@@ -239,6 +246,17 @@ export async function POST(req: Request) {
         .select("id")
         .single();
       leadId = (novoLead?.id as string) ?? null;
+
+      // Webhook `contato_criado` — só quando o dedupe por telefone não
+      // achou ninguém, isto é, quando a pessoa é nova no CRM.
+      if (leadId) {
+        emitirContatoCriado(admin, {
+          id: leadId,
+          nome: nomeLead,
+          telefone,
+          origem: "whatsapp",
+        });
+      }
     }
 
     const { data: novaConv, error: convErr } = await admin
@@ -259,24 +277,69 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: convErr?.message ?? "falha ao abrir conversa" }, { status: 500 });
     }
     conversationId = novaConv.id as string;
+
+    // Webhook `conversa_criada` — este ramo É o nascimento da conversa.
+    emitirConversaCriada(admin, {
+      id: conversationId,
+      canal: "whatsapp",
+      status: "aberta",
+      contato_nome: nome,
+      contato_telefone: telefone,
+      lead_id: leadId,
+    });
+
+    // Agent bot: a conversa nasceu numa caixa com bot? Então ela já nasce
+    // conduzida por ele. Awaitado (diferente dos `emitir*`) porque é este
+    // passo que grava `bot_status='ativo'` — sem ele a entrega lá embaixo
+    // veria 'sem_bot' e não mandaria nada. São updates locais, não rede.
+    await ativarBotNaConversa(admin, conversationId);
   }
 
   // 3) Grava a mensagem.
   const preview = conteudo.texto?.slice(0, 140) ?? `[${conteudo.tipo}]`;
-  await admin.from("messages").insert({
-    conversation_id: conversationId,
-    direcao: fromMe ? "out" : "in",
-    // fromMe sem autor = respondido pelo celular (coexistence do Baileys).
-    remetente: fromMe ? "atendente" : "cliente",
-    tipo: conteudo.tipo,
-    conteudo: conteudo.texto,
-    media_url: conteudo.mediaUrl,
-    media_nome: conteudo.mediaNome,
-    media_mime: conteudo.mediaMime,
-    external_id: externalId,
-    raw_payload: payload as unknown as Record<string, unknown>,
-    status: fromMe ? "enviada" : "recebida",
-  });
+  const { data: msgCriada } = await admin
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      direcao: fromMe ? "out" : "in",
+      // fromMe sem autor = respondido pelo celular (coexistence do Baileys).
+      remetente: fromMe ? "atendente" : "cliente",
+      tipo: conteudo.tipo,
+      conteudo: conteudo.texto,
+      media_url: conteudo.mediaUrl,
+      media_nome: conteudo.mediaNome,
+      media_mime: conteudo.mediaMime,
+      external_id: externalId,
+      raw_payload: payload as unknown as Record<string, unknown>,
+      status: fromMe ? "enviada" : "recebida",
+    })
+    // id/created_at servem só para identificar a mensagem no payload.
+    .select("id, created_at")
+    .maybeSingle();
+
+  // Webhook `mensagem_criada`. Vale para os dois sentidos: o eco de
+  // `fromMe` é uma resposta real dada pelo celular e o integrador
+  // precisa vê-la para não achar que o cliente ficou sem resposta.
+  // `raw_payload` nunca entra no corpo — é o pacote cru da Evolution.
+  emitirMensagemCriada(
+    admin,
+    {
+      id: conversationId,
+      canal: "whatsapp",
+      status: "aberta",
+      contato_nome: nome,
+      contato_telefone: telefone,
+      lead_id: leadId,
+    },
+    {
+      id: (msgCriada?.id as string) ?? null,
+      direcao: fromMe ? "out" : "in",
+      remetente: fromMe ? "atendente" : "cliente",
+      tipo: conteudo.tipo,
+      texto: conteudo.texto,
+      criada_em: (msgCriada?.created_at as string) ?? null,
+    },
+  );
 
   // 4) Denormaliza o inbox. Só mensagem do cliente conta como não lida, e
   //    a chegada dela reabre a conversa adiada (o cliente respondeu).
@@ -311,6 +374,23 @@ export async function POST(req: Request) {
       conteudo: conteudo.texto,
       direcao: "in",
       interna: false,
+    });
+
+    // 6) Agent bot — mesma regra das automações: só mensagem do CLIENTE
+    //    vai para o bot. O eco de `fromMe` é resposta dada pelo celular
+    //    pelo próprio time; mandá-la ao bot o faria responder a si mesmo.
+    //    `entregarAoBot` nunca lança e sai na primeira linha quando a
+    //    caixa não tem bot ou quando um humano já assumiu.
+    await entregarAoBot(admin, conversationId, {
+      id: (msgCriada?.id as string) ?? null,
+      direcao: "in",
+      remetente: "cliente",
+      tipo: conteudo.tipo,
+      texto: conteudo.texto,
+      mediaUrl: conteudo.mediaUrl,
+      mediaNome: conteudo.mediaNome,
+      mediaMime: conteudo.mediaMime,
+      criadaEm: (msgCriada?.created_at as string) ?? null,
     });
   }
 

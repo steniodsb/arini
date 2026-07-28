@@ -55,6 +55,19 @@ export default async function AtendimentoPage() {
       .order("nome"),
   ]);
 
+  // Provedor de cada canal, para o composer saber avisar quando o áudio
+  // gravado (WebM) puder ser recusado — a Cloud API da Meta não aceita
+  // WebM, a Evolution converte. Sem isso o aviso teria que ser genérico.
+  // Vai pela view saneada: `atendimento_channels` guarda token e a RLS
+  // restringe a leitura à diretoria.
+  const { data: canais } = await supabase
+    .from("atendimento_channels_safe")
+    .select("id, provedor");
+  const provedorPorCanal: Record<string, string> = {};
+  for (const c of canais ?? []) {
+    provedorPorCanal[c.id as string] = c.provedor as string;
+  }
+
   return (
     <div className="h-full min-h-0">
       {/* useSearchParams no cliente exige Suspense no App Router. */}
@@ -66,6 +79,7 @@ export default async function AtendimentoPage() {
           teams={(teams ?? []) as AtendimentoTeam[]}
           labels={(labels ?? []) as AtendimentoLabel[]}
           macros={(macros ?? []) as AtendimentoMacro[]}
+          provedorPorCanal={provedorPorCanal}
           currentUser={{
             id: profile.id,
             nome: profile.nome,

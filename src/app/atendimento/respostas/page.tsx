@@ -1,24 +1,28 @@
 import { requireAtendimentoUser } from "@/lib/atendimento-auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
-import type { CannedResponse } from "@/lib/types";
-import { CannedManager } from "./CannedManager";
+import { PageShell, PageHeader } from "@/components/atendimento/ui";
+import { CannedManager, type RespostaRapida } from "./CannedManager";
 
 export const dynamic = "force-dynamic";
 
 export default async function RespostasPage() {
   await requireAtendimentoUser();
   const supabase = createSupabaseServer();
-  const { data } = await supabase.from("canned_responses").select("*").order("titulo");
+  // Ordena por categoria e depois por título: o agrupamento da tela é feito no
+  // cliente, mas chegar já ordenado deixa cada grupo pronto sem re-sort caro.
+  const { data } = await supabase
+    .from("canned_responses")
+    .select("*")
+    .order("categoria", { ascending: true, nullsFirst: false })
+    .order("titulo");
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6 overflow-y-auto h-full">
-      <div>
-        <h1 className="font-display text-2xl text-arini dark:text-gold">Respostas rápidas</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Mensagens prontas que os atendentes inserem na conversa com um clique.
-        </p>
-      </div>
-      <CannedManager initial={(data ?? []) as CannedResponse[]} />
-    </div>
+    <PageShell>
+      <PageHeader
+        titulo="Respostas rápidas"
+        descricao="Mensagens prontas que os atendentes inserem na conversa com um clique. Organize por categoria para achar rápido."
+      />
+      <CannedManager initial={(data ?? []) as RespostaRapida[]} />
+    </PageShell>
   );
 }

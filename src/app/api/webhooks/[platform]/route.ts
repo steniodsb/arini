@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { verifyMetaSignature } from "@/lib/whatsapp";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import {
+  emitirContatoCriado,
+  emitirConversaCriada,
+  emitirMensagemCriada,
+} from "@/lib/atendimento/webhook-eventos";
 import type { ConversationChannel, MessageTipo } from "@/lib/types";
 
 // Plataformas suportadas e a origem de lead correspondente.
@@ -136,10 +141,11 @@ export async function POST(req: Request, { params }: { params: { platform: strin
       leadId = lead?.id ?? null;
     }
     if (!leadId) {
+      const nomeLead = extracted.nome || `Contato ${origem}`;
       const { data: novoLead } = await admin
         .from("leads")
         .insert({
-          nome: extracted.nome || `Contato ${origem}`,
+          nome: nomeLead,
           telefone: extracted.telefone,
           whatsapp: canal === "whatsapp" ? extracted.telefone : null,
           origem,
@@ -151,6 +157,16 @@ export async function POST(req: Request, { params }: { params: { platform: strin
         .select("id")
         .single();
       leadId = novoLead?.id ?? null;
+
+      // Webhook `contato_criado` — o dedupe não achou ninguém, é gente nova.
+      if (leadId) {
+        emitirContatoCriado(admin, {
+          id: leadId,
+          nome: nomeLead,
+          telefone: extracted.telefone,
+          origem,
+        });
+      }
     }
 
     const { data: novaConv } = await admin
@@ -167,6 +183,18 @@ export async function POST(req: Request, { params }: { params: { platform: strin
       .select("id")
       .single();
     conversationId = novaConv?.id ?? null;
+
+    // Webhook `conversa_criada` — só neste ramo, que é o nascimento.
+    if (conversationId) {
+      emitirConversaCriada(admin, {
+        id: conversationId,
+        canal,
+        status: "aberta",
+        contato_nome: extracted.nome,
+        contato_telefone: extracted.telefone,
+        lead_id: leadId,
+      });
+    }
   }
 
   if (!conversationId) {
@@ -183,17 +211,44 @@ export async function POST(req: Request, { params }: { params: { platform: strin
     if (dup) return NextResponse.json({ ok: true, duplicate: true });
   }
 
-  await admin.from("messages").insert({
-    conversation_id: conversationId,
-    direcao: "in",
-    remetente: "cliente",
-    tipo: extracted.tipo,
-    conteudo: extracted.mensagem,
-    media_url: extracted.mediaUrl,
-    external_id: extracted.messageId,
-    raw_payload: payload,
-    status: "recebida",
-  });
+  const { data: msgCriada } = await admin
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      direcao: "in",
+      remetente: "cliente",
+      tipo: extracted.tipo,
+      conteudo: extracted.mensagem,
+      media_url: extracted.mediaUrl,
+      external_id: extracted.messageId,
+      raw_payload: payload,
+      status: "recebida",
+    })
+    // id/created_at servem só para identificar a mensagem no payload.
+    .select("id, created_at")
+    .maybeSingle();
+
+  // Webhook `mensagem_criada`. `raw_payload` (o envelope cru da Meta) e a
+  // assinatura HMAC ficam de fora — nada disso é assunto do integrador.
+  emitirMensagemCriada(
+    admin,
+    {
+      id: conversationId,
+      canal,
+      status: "aberta",
+      contato_nome: extracted.nome,
+      contato_telefone: extracted.telefone,
+      lead_id: leadId,
+    },
+    {
+      id: (msgCriada?.id as string) ?? null,
+      direcao: "in",
+      remetente: "cliente",
+      tipo: extracted.tipo,
+      texto: extracted.mensagem,
+      criada_em: (msgCriada?.created_at as string) ?? null,
+    },
+  );
 
   // Mantém o lead "vivo" no funil.
   if (leadId) {

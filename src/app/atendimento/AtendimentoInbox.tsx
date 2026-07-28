@@ -17,11 +17,15 @@ import { ConversationList } from "./inbox/ConversationList";
 import { MessageThread } from "./inbox/MessageThread";
 import { Composer } from "./inbox/Composer";
 import { SnoozeMenu } from "./inbox/SnoozeMenu";
+import { ParticipantsMenu } from "./inbox/ParticipantsMenu";
+import { CopilotPanel } from "./inbox/CopilotPanel";
+import { BotBadge } from "./inbox/BotBadge";
+import { useNotificacoes } from "./inbox/useNotificacoes";
 import { Modal } from "@/components/atendimento/ui";
 import {
   RefreshCw, Check, X, RotateCcw, Clock, Search, SlidersHorizontal, ArrowDownUp,
   CheckSquare, Users2, Flag, Tag as TagIcon, PanelRightClose, PanelRightOpen,
-  AlarmClock, Trash2, MessageSquareDot,
+  AlarmClock, Trash2, MessageSquareDot, MailOpen, Volume2, VolumeX, Sparkles,
 } from "lucide-react";
 
 type StatusFilter = "todas" | ConversationStatus;
@@ -46,6 +50,7 @@ export function AtendimentoInbox({
   teams,
   labels,
   macros,
+  provedorPorCanal,
   currentUser,
 }: {
   initialConversations: Conversation[];
@@ -54,6 +59,8 @@ export function AtendimentoInbox({
   teams: AtendimentoTeam[];
   labels: AtendimentoLabel[];
   macros: AtendimentoMacro[];
+  /** channel_id -> provedor, para o composer avisar sobre formato de áudio. */
+  provedorPorCanal?: Record<string, string>;
   currentUser: Pick<Profile, "id" | "nome" | "assinatura">;
 }) {
   const params = useSearchParams();
@@ -92,7 +99,15 @@ export function AtendimentoInbox({
   const [painelAberto, setPainelAberto] = useState(true);
   const [novaTag, setNovaTag] = useState("");
 
+  // Busca dentro da thread + copiloto de IA
+  const [buscaThread, setBuscaThread] = useState("");
+  const [buscaThreadAberta, setBuscaThreadAberta] = useState(false);
+  const [copilotoAberto, setCopilotoAberto] = useState(false);
+  const [textoSugerido, setTextoSugerido] = useState<string | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
+  const notif = useNotificacoes();
+  const { avisar } = notif;
 
   const agentName = useMemo(() => {
     const m = new Map<string, string>();
@@ -107,6 +122,14 @@ export function AtendimentoInbox({
   }, [labels]);
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
+
+  // Busca dentro da thread: filtra as mensagens visíveis (o destaque do
+  // trecho quem faz é o MessageThread).
+  const mensagensFiltradas = useMemo(() => {
+    const q = buscaThread.trim().toLowerCase();
+    if (!q) return messages;
+    return messages.filter((m) => (m.conteudo ?? "").toLowerCase().includes(q));
+  }, [messages, buscaThread]);
 
   // ------------------------------------------------------------------
   // Carregamento
@@ -154,10 +177,18 @@ export function AtendimentoInbox({
     setRespondendoA(null);
     setLoadingMsgs(true);
     loadMessages(selectedId).finally(() => setLoadingMsgs(false));
+    setBuscaThread("");
+    setBuscaThreadAberta(false);
     const supabase = createSupabaseBrowser();
-    void supabase.from("conversations").update({ unread_count: 0 }).eq("id", selectedId).then(() => {
-      patchLocal(selectedId, { unread_count: 0 });
-    });
+    // Abrir a conversa limpa o não-lidas E o "marcada como não lida" — se
+    // o agente marcou e voltou, a marcação já cumpriu o papel dela.
+    void supabase
+      .from("conversations")
+      .update({ unread_count: 0, marcada_nao_lida: false })
+      .eq("id", selectedId)
+      .then(() => {
+        patchLocal(selectedId, { unread_count: 0, marcada_nao_lida: false });
+      });
   }, [selectedId, loadMessages]);
 
   // Tempo real + fallback por polling.
@@ -173,6 +204,15 @@ export function AtendimentoInbox({
         if (m.mentions?.includes(currentUser.id)) {
           setMinhasMencoes((prev) => new Set(prev).add(m.conversation_id));
         }
+        // Só mensagem do cliente merece som/notificação — o eco da nossa
+        // própria resposta tocando um "blim" seria irritante.
+        if (m.direcao === "in" && !m.interna) {
+          avisar(
+            "Nova mensagem no atendimento",
+            m.conteudo?.slice(0, 120) ?? `[${m.tipo}]`,
+            () => setSelectedId(m.conversation_id),
+          );
+        }
         void refreshConversations();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
@@ -187,7 +227,7 @@ export function AtendimentoInbox({
       clearInterval(t);
       void supabase.removeChannel(channel);
     };
-  }, [selectedId, loadMessages, refreshConversations, currentUser.id]);
+  }, [selectedId, loadMessages, refreshConversations, currentUser.id, avisar]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -280,26 +320,49 @@ export function AtendimentoInbox({
   const setPrioridade = (p: ConversationPriority | null) =>
     selected && atualizar(selected.id, { prioridade: p }, { prioridade: p });
 
-  async function mudarStatus(status: ConversationStatus, conv = selected) {
+  /**
+   * Mudança de status vai pela rota de API, não pelo Supabase direto. Do
+   * navegador não dá para gravar auditoria (o log não tem policy de
+   * escrita, de propósito) nem assinar o webhook de saída (o segredo não
+   * pode ir para o cliente) — e as automações de "conversa_resolvida"
+   * ficariam órfãs. A UI atualiza otimista e volta atrás se der erro.
+   */
+  async function mudarStatus(
+    status: ConversationStatus,
+    conv = selected,
+    snoozedUntil: string | null = null,
+  ) {
     if (!conv) return;
-    const patch: Partial<Conversation> = { status, snoozed_until: null };
-    const update: Record<string, unknown> = { status, snoozed_until: null };
+    const anterior = { status: conv.status, snoozed_until: conv.snoozed_until };
+    const patch: Partial<Conversation> = { status, snoozed_until: snoozedUntil };
     if (status === "resolvida") {
-      const now = new Date().toISOString();
-      patch.resolvida_em = now; patch.resolvida_por = currentUser.id;
-      update.resolvida_em = now; update.resolvida_por = currentUser.id;
+      patch.resolvida_em = new Date().toISOString();
+      patch.resolvida_por = currentUser.id;
     }
-    await atualizar(conv.id, patch, update);
+    patchLocal(conv.id, patch);
+
+    try {
+      const res = await fetch(`/api/atendimento/conversas/${conv.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, snoozedUntil }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        patchLocal(conv.id, anterior);
+        setNotice({ tipo: "erro", texto: json.error ?? "Não deu para mudar o status." });
+        return;
+      }
+      void refreshConversations();
+    } catch {
+      patchLocal(conv.id, anterior);
+      setNotice({ tipo: "erro", texto: "Erro de rede ao mudar o status." });
+    }
   }
 
   async function adiar(ate: Date | null) {
     if (!selected) return;
-    const iso = ate?.toISOString() ?? null;
-    await atualizar(
-      selected.id,
-      { status: "adiada", snoozed_until: iso },
-      { status: "adiada", snoozed_until: iso },
-    );
+    await mudarStatus("adiada", selected, ate?.toISOString() ?? null);
     setNotice({
       tipo: "info",
       texto: ate
@@ -321,6 +384,37 @@ export function AtendimentoInbox({
   function removeTag(t: string) {
     if (!selected) return;
     void saveTags(selected.tags.filter((x) => x !== t));
+  }
+
+  /**
+   * Marcar como não lida. O `unread_count` zera assim que o agente abre a
+   * conversa, então ele não serve de lembrete — daí a flag própria. Sai da
+   * conversa em seguida, senão o efeito de seleção zeraria tudo de novo.
+   */
+  async function marcarNaoLida() {
+    if (!selected) return;
+    await atualizar(selected.id, { marcada_nao_lida: true }, { marcada_nao_lida: true });
+    setSelectedId(null);
+  }
+
+  /** Apagar é soft delete: some o conteúdo, fica o rastro (ver 0035). */
+  async function apagarMensagem(m: Message) {
+    const agora = new Date().toISOString();
+    setMessages((prev) =>
+      prev.map((x) =>
+        x.id === m.id
+          ? { ...x, apagada_em: agora, apagada_por: currentUser.id, conteudo: null, media_url: null }
+          : x,
+      ),
+    );
+    const { error } = await supa()
+      .from("messages")
+      .update({ apagada_em: agora, apagada_por: currentUser.id, conteudo: null, media_url: null })
+      .eq("id", m.id);
+    if (error) {
+      setNotice({ tipo: "erro", texto: `Não deu para apagar: ${error.message}` });
+      if (selectedId) void loadMessages(selectedId);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -495,10 +589,25 @@ export function AtendimentoInbox({
     void refreshConversations();
   }
 
+  /** Excluir é a ação mais destrutiva do inbox — vai pela rota, que grava
+   *  quem apagou o quê. A RLS continua decidindo o que o agente pode. */
   async function massaExcluir() {
-    const { error } = await supa().from("conversations").delete().in("id", idsSelecionados);
-    if (error) { setNotice({ tipo: "erro", texto: error.message }); return; }
-    setNotice({ tipo: "info", texto: `${idsSelecionados.length} conversa(s) excluída(s).` });
+    try {
+      const res = await fetch("/api/atendimento/conversas", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: idsSelecionados }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotice({ tipo: "erro", texto: json.error ?? "Não deu para excluir." });
+        return;
+      }
+      setNotice({ tipo: "info", texto: `${idsSelecionados.length} conversa(s) excluída(s).` });
+    } catch {
+      setNotice({ tipo: "erro", texto: "Erro de rede ao excluir." });
+      return;
+    }
     setSelecionadas(new Set());
     setModalMassa(null);
     setSelectedId(null);
@@ -785,6 +894,52 @@ export function AtendimentoInbox({
                   {agents.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
                 </select>
 
+                <ParticipantsMenu
+                  conversationId={selected.id}
+                  agents={agents}
+                  currentUserId={currentUser.id}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setCopilotoAberto((v) => !v)}
+                  title="Copiloto de IA"
+                  className={`p-1.5 rounded-md hover:bg-muted ${
+                    copilotoAberto ? "text-arini dark:text-gold" : "text-muted-foreground"
+                  }`}
+                >
+                  <Sparkles size={15} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setBuscaThreadAberta((v) => !v); setBuscaThread(""); }}
+                  title="Buscar nesta conversa"
+                  className={`p-1.5 rounded-md hover:bg-muted ${
+                    buscaThreadAberta ? "text-arini dark:text-gold" : "text-muted-foreground"
+                  }`}
+                >
+                  <Search size={15} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void marcarNaoLida()}
+                  title="Marcar como não lida"
+                  className="p-1.5 rounded-md text-muted-foreground hover:bg-muted"
+                >
+                  <MailOpen size={15} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => notif.setSom(!notif.prefs.som)}
+                  title={notif.prefs.som ? "Silenciar avisos" : "Ligar o som dos avisos"}
+                  className="p-1.5 rounded-md text-muted-foreground hover:bg-muted"
+                >
+                  {notif.prefs.som ? <Volume2 size={15} /> : <VolumeX size={15} />}
+                </button>
+
                 <SnoozeMenu onAdiar={(ate) => void adiar(ate)} compacto />
 
                 {selected.status !== "resolvida" ? (
@@ -817,6 +972,14 @@ export function AtendimentoInbox({
               </div>
             </header>
 
+            {/* Estado do agent bot — só aparece quando a caixa tem bot. */}
+            <BotBadge
+              conversation={selected}
+              onAssumida={(id) =>
+                patchLocal(id, { bot_status: "transferida", bot_transferida_em: new Date().toISOString() })
+              }
+            />
+
             {/* Etiquetas */}
             <div className="px-3 py-1.5 border-b bg-card/60 flex items-center gap-1.5 flex-wrap shrink-0">
               {selected.tags.map((t) => {
@@ -848,12 +1011,49 @@ export function AtendimentoInbox({
               </datalist>
             </div>
 
+            {/* Busca dentro da thread */}
+            {buscaThreadAberta && (
+              <div className="px-3 py-2 border-b bg-card flex items-center gap-2 shrink-0">
+                <Search size={13} className="text-muted-foreground shrink-0" />
+                <input
+                  autoFocus
+                  value={buscaThread}
+                  onChange={(e) => setBuscaThread(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Escape") { setBuscaThreadAberta(false); setBuscaThread(""); } }}
+                  placeholder="Buscar nesta conversa…"
+                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
+                <span className="text-[11px] text-muted-foreground shrink-0">
+                  {buscaThread.trim() ? `${mensagensFiltradas.length} de ${messages.length}` : `${messages.length} mensagens`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setBuscaThreadAberta(false); setBuscaThread(""); }}
+                  className="p-1 text-muted-foreground hover:text-foreground"
+                  aria-label="Fechar busca"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+
+            {copilotoAberto && (
+              <div className="px-3 py-2 border-b bg-card shrink-0">
+                <CopilotPanel
+                  conversationId={selected.id}
+                  onUsarSugestao={(texto) => setTextoSugerido(texto)}
+                />
+              </div>
+            )}
+
             <MessageThread
               ref={scrollRef}
-              mensagens={messages}
+              mensagens={mensagensFiltradas}
               carregando={loadingMsgs}
               autorNome={agentName}
               onResponder={setRespondendoA}
+              termoBusca={buscaThread}
+              onApagar={(m) => void apagarMensagem(m)}
             />
 
             {notice && (
@@ -879,6 +1079,11 @@ export function AtendimentoInbox({
               enviando={sending}
               onEnviar={enviar}
               onAplicarMacro={(id) => void aplicarMacro(id)}
+              provedorCanal={
+                selected.channel_id ? (provedorPorCanal?.[selected.channel_id] ?? null) : null
+              }
+              injetarTexto={textoSugerido}
+              onTextoInjetado={() => setTextoSugerido(null)}
             />
           </>
         )}

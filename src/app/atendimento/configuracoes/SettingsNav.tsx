@@ -4,10 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Users, UsersRound, Tag, Zap, Radio, Inbox, Clock, Timer, Star,
-  SlidersHorizontal, Workflow, Webhook, KeyRound, ScrollText,
+  SlidersHorizontal, Workflow, Webhook, KeyRound, ScrollText, MessageCircle, Filter, Building2, FileText, Code2, Bot, Rocket,
 } from "lucide-react";
 
 const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: typeof Users }[] }[] = [
+  {
+    titulo: "Geral",
+    itens: [
+      { href: "/atendimento/comecar", label: "Primeiros passos", icon: Rocket },
+      { href: "/atendimento/configuracoes/conta", label: "Conta e plataforma", icon: Building2 },
+    ],
+  },
   {
     titulo: "Equipe",
     itens: [
@@ -20,6 +27,9 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: type
     itens: [
       { href: "/atendimento/configuracoes/caixas", label: "Caixas de entrada", icon: Inbox },
       { href: "/atendimento/canais", label: "Conexões", icon: Radio },
+      { href: "/atendimento/configuracoes/widget", label: "Chat do site", icon: MessageCircle },
+      { href: "/atendimento/configuracoes/templates", label: "Templates do WhatsApp", icon: FileText },
+      { href: "/atendimento/configuracoes/api-canal", label: "Canal via API", icon: Code2 },
     ],
   },
   {
@@ -31,6 +41,7 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: type
       { href: "/atendimento/configuracoes/horarios", label: "Horário comercial", icon: Clock },
       { href: "/atendimento/configuracoes/sla", label: "SLA", icon: Timer },
       { href: "/atendimento/configuracoes/csat", label: "Satisfação (CSAT)", icon: Star },
+      { href: "/atendimento/configuracoes/segmentos", label: "Segmentos salvos", icon: Filter },
     ],
   },
   {
@@ -38,6 +49,7 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: type
     itens: [
       { href: "/atendimento/macros", label: "Macros", icon: Workflow },
       { href: "/atendimento/configuracoes/automacoes", label: "Regras de automação", icon: Zap },
+      { href: "/atendimento/configuracoes/bots", label: "Agent Bots", icon: Bot },
     ],
   },
   {

@@ -1,174 +1,169 @@
-import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Calendar as CalendarIcon } from "lucide-react";
-import { formatDateTimeBR } from "@/lib/utils";
-import { SECTOR_LABELS, type Sector } from "@/lib/types";
-import { NewEventDialog } from "./NewEventDialog";
-import { AgendaKanban } from "./AgendaKanban";
+import type { AgendaAgrupamento, AgendaVista, Sector } from "@/lib/types";
+import { AgendaShell } from "./AgendaShell";
+import {
+  DIA_MS,
+  chaveDia,
+  inicioDaSemana,
+  inicioDoDia,
+  inicioDoMes,
+  normalizarItens,
+  somarDias,
+  type Agente,
+  type AgendamentoRow,
+  type EventoRow,
+} from "./shared";
 
-interface Appt {
-  id: string;
-  lead_id: string;
-  tipo: string;
-  data_hora: string;
-  confirmado: boolean;
-  observacoes: string | null;
-  leads: { nome: string; whatsapp: string | null; telefone: string | null } | null;
+const VISTAS: AgendaVista[] = ["kanban", "timeline", "mes", "semana", "lista"];
+const AGRUPAMENTOS: AgendaAgrupamento[] = ["dia", "status", "tipo", "setor", "responsavel"];
+
+/** Colunas lidas de `agenda_events`. Espelha `EventoRow`. */
+const COLUNAS_EVENTO =
+  "id, titulo, tipo, data_hora, duracao_min, dia_inteiro, status, ordem, cor, local, observacoes, responsavel_id, setor_destino, criado_por_sector, property_id, properties(codigo)";
+
+/** Colunas lidas de `lead_appointments`. Espelha `AgendamentoRow`. */
+const COLUNAS_AGENDAMENTO =
+  "id, lead_id, tipo, data_hora, duracao_min, dia_inteiro, status, ordem, local, observacoes, responsavel_id, property_id, leads(nome), properties(codigo)";
+
+/**
+ * Quantos dias cada vista precisa ter em mãos.
+ * O servidor carrega o período INTEIRO da vista (com uma folga de um dia
+ * em cada ponta) e deixa a vista recortar. Fazer o recorte no cliente é o
+ * que permite trocar de filtro sem refazer a consulta, e a folga evita que
+ * um compromisso das 23h suma da borda por diferença de fuso entre o
+ * filtro (UTC, no banco) e o agrupamento (local, na tela).
+ */
+function periodoDaVista(vista: AgendaVista, base: Date): { inicio: Date; dias: number } {
+  switch (vista) {
+    case "kanban":
+    case "semana":
+      return { inicio: inicioDaSemana(base), dias: 7 };
+    case "mes":
+      // 6 semanas: um mês nunca ocupa mais que isso numa grade dominical.
+      return { inicio: inicioDaSemana(inicioDoMes(base)), dias: 42 };
+    case "timeline":
+      return { inicio: inicioDoDia(base), dias: 14 };
+    case "lista":
+      return { inicio: inicioDoDia(base), dias: 30 };
+  }
 }
 
-interface AgendaEvent {
-  id: string;
-  titulo: string;
-  tipo: string;
-  data_hora: string;
-  setor_destino: Sector | null;
-  criado_por_sector: Sector | null;
-  observacoes: string | null;
-  confirmado: boolean;
+/**
+ * "2026-07-26" → Date local ao MEIO-DIA.
+ * Meio-dia (e não meia-noite) porque essa data só serve de âncora para
+ * calcular períodos; ancorar no meio do dia deixa qualquer soma/subtração
+ * imune a horário de verão, caso ele volte algum dia.
+ */
+function lerDataBase(valor: string | undefined): Date {
+  if (!valor) return new Date();
+  const partes = valor.split("-").map(Number);
+  if (partes.length !== 3 || partes.some((n) => Number.isNaN(n))) return new Date();
+  return new Date(partes[0], partes[1] - 1, partes[2], 12, 0, 0, 0);
 }
 
-function startOfWeek(d: Date) {
-  const date = new Date(d);
-  date.setHours(0, 0, 0, 0);
-  const day = date.getDay();
-  date.setDate(date.getDate() - day);
-  return date;
-}
-
-export default async function AgendaPage({ searchParams }: { searchParams: { date?: string } }) {
+export default async function AgendaPage({
+  searchParams,
+}: {
+  searchParams: { vista?: string; data?: string; agrupar?: string };
+}) {
   // Agenda aberta a todos os setores: cada um vê a sua + o que foi delegado.
   const { user, profile } = await requireUser();
   const sector = (profile?.sector ?? "recepcao") as Sector;
-  const isLeadSector = ["recepcao", "administrativo", "admin_central"].includes(sector) || profile?.is_admin_central;
-  const baseDate = searchParams.date ? new Date(searchParams.date) : new Date();
-  const weekStart = startOfWeek(baseDate);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 7);
+  const isLeadSector =
+    ["recepcao", "administrativo", "admin_central"].includes(sector) || !!profile?.is_admin_central;
+
+  // A vista da URL vence; sem ela, abre na última que o usuário usou
+  // (`profiles.agenda_vista`), que é o motivo dessa coluna existir.
+  const vistaPreferida = (profile as { agenda_vista?: string } | null)?.agenda_vista;
+  const vista: AgendaVista = VISTAS.includes(searchParams.vista as AgendaVista)
+    ? (searchParams.vista as AgendaVista)
+    : VISTAS.includes(vistaPreferida as AgendaVista)
+      ? (vistaPreferida as AgendaVista)
+      : "kanban";
+
+  const agrupamento: AgendaAgrupamento = AGRUPAMENTOS.includes(
+    searchParams.agrupar as AgendaAgrupamento,
+  )
+    ? (searchParams.agrupar as AgendaAgrupamento)
+    : "dia";
+
+  const base = lerDataBase(searchParams.data);
+  const { inicio, dias } = periodoDaVista(vista, base);
+  const fim = somarDias(inicio, dias);
+
+  // Folga de um dia em cada ponta (ver comentário de `periodoDaVista`).
+  const consultaDe = new Date(inicio.getTime() - DIA_MS).toISOString();
+  const consultaAte = new Date(fim.getTime() + DIA_MS).toISOString();
 
   const supabase = createSupabaseServer();
-  // Agendamentos de leads (setores com acesso a leads) — RLS também filtra.
-  const { data } = isLeadSector
-    ? await supabase
-        .from("lead_appointments")
-        .select("*, leads(nome, whatsapp, telefone)")
-        .gte("data_hora", weekStart.toISOString())
-        .lt("data_hora", weekEnd.toISOString())
-        .order("data_hora", { ascending: true })
-    : { data: [] };
-  const appointments = (data ?? []) as Appt[];
+  const semAgendamentos = Promise.resolve({ data: [] });
 
-  // Compromissos próprios e delegados (RLS: criador, setor destino, diretoria).
-  const { data: eventsData } = await supabase
-    .from("agenda_events")
-    .select("*")
-    .gte("data_hora", weekStart.toISOString())
-    .lt("data_hora", weekEnd.toISOString())
-    .order("data_hora", { ascending: true });
-  const events = (eventsData ?? []) as AgendaEvent[];
+  const [eventosRes, agendamentosRes, eventosSemDataRes, agendamentosSemDataRes, agentesRes] =
+    await Promise.all([
+      // Compromissos próprios e delegados (RLS: criador, setor destino, diretoria).
+      supabase
+        .from("agenda_events")
+        .select(COLUNAS_EVENTO)
+        .gte("data_hora", consultaDe)
+        .lt("data_hora", consultaAte)
+        .order("data_hora", { ascending: true }),
+      // Agendamentos de leads — só setores com acesso a leads (RLS também filtra).
+      isLeadSector
+        ? supabase
+            .from("lead_appointments")
+            .select(COLUNAS_AGENDAMENTO)
+            .gte("data_hora", consultaDe)
+            .lt("data_hora", consultaAte)
+            .order("data_hora", { ascending: true })
+        : semAgendamentos,
+      // Backlog: `data_hora is null` NÃO entra num filtro por intervalo
+      // (comparação com null é sempre "unknown" em SQL), então precisa de
+      // consulta própria. O índice parcial de 0039 atende exatamente isto.
+      supabase
+        .from("agenda_events")
+        .select(COLUNAS_EVENTO)
+        .is("data_hora", null)
+        .order("ordem", { ascending: true })
+        .limit(300),
+      isLeadSector
+        ? supabase
+            .from("lead_appointments")
+            .select(COLUNAS_AGENDAMENTO)
+            .is("data_hora", null)
+            .order("ordem", { ascending: true })
+            .limit(300)
+        : semAgendamentos,
+      // Perfis ativos: alimentam o filtro de responsável e os avatares.
+      supabase.from("profiles").select("id, nome, avatar_url").eq("ativo", true).order("nome"),
+    ]);
 
-  // Agrupa por dia
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
-    return d;
-  });
+  const itens = normalizarItens(
+    (eventosRes.data ?? []) as unknown as EventoRow[],
+    (agendamentosRes.data ?? []) as unknown as AgendamentoRow[],
+  );
 
-  const prevWeek = new Date(weekStart);
-  prevWeek.setDate(weekStart.getDate() - 7);
-  const nextWeek = new Date(weekStart);
-  nextWeek.setDate(weekStart.getDate() + 7);
+  const semData = normalizarItens(
+    (eventosSemDataRes.data ?? []) as unknown as EventoRow[],
+    (agendamentosSemDataRes.data ?? []) as unknown as AgendamentoRow[],
+  );
+
+  const agentes: Agente[] = (
+    (agentesRes.data ?? []) as { id: string; nome: string; avatar_url: string | null }[]
+  ).map((a) => ({ id: a.id, nome: a.nome, avatarUrl: a.avatar_url }));
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-arini">Agenda</h1>
-          <p className="text-muted-foreground mt-1">
-            Visitas, reuniões, ligações, retornos e assinaturas agendadas.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href={`/admin/agenda?date=${prevWeek.toISOString().slice(0, 10)}`}
-                className="px-3 py-2 rounded-md border hover:bg-muted text-sm">← Semana anterior</Link>
-          <Link href={`/admin/agenda?date=${new Date().toISOString().slice(0, 10)}`}
-                className="px-3 py-2 rounded-md border hover:bg-muted text-sm">Hoje</Link>
-          <Link href={`/admin/agenda?date=${nextWeek.toISOString().slice(0, 10)}`}
-                className="px-3 py-2 rounded-md border hover:bg-muted text-sm">Próxima semana →</Link>
-          <NewEventDialog userId={user.id} sector={sector} />
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarIcon size={18} />
-            Semana de {weekStart.toLocaleDateString("pt-BR")} a {new Date(weekEnd.getTime() - 1).toLocaleDateString("pt-BR")}
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">Arraste um cartão para outro dia para reagendar.</p>
-        </CardHeader>
-        <CardContent>
-          <AgendaKanban
-            weekStart={weekStart.toISOString()}
-            dayLabels={days.map((d) => ({ label: d.toLocaleDateString("pt-BR", { weekday: "short" }), dayNum: d.getDate() }))}
-            initialAppointments={appointments}
-            initialEvents={events}
-          />
-        </CardContent>
-      </Card>
-
-      {events.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Compromissos da semana ({events.length})</CardTitle></CardHeader>
-          <CardContent>
-            <ul className="divide-y">
-              {events.map((e) => (
-                <li key={e.id} className="py-3 flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="text-arini font-medium">{e.titulo}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {e.criado_por_sector && `De ${SECTOR_LABELS[e.criado_por_sector]}`}
-                      {e.setor_destino && ` → para ${SECTOR_LABELS[e.setor_destino]}`}
-                      {e.observacoes && ` · ${e.observacoes}`}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline">{e.tipo}</Badge>
-                    <span className="text-sm text-arini font-mono">{formatDateTimeBR(e.data_hora)}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader><CardTitle>Próximos agendamentos da semana ({appointments.length})</CardTitle></CardHeader>
-        <CardContent>
-          {appointments.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Nenhum agendamento esta semana.</p>
-          ) : (
-            <ul className="divide-y">
-              {appointments.map((a) => (
-                <li key={a.id} className="py-3 flex items-center justify-between">
-                  <Link href={`/admin/leads/${a.lead_id}`} className="flex-1 hover:text-gold-dark">
-                    <div className="text-arini font-medium">{a.leads?.nome ?? "—"}</div>
-                    <div className="text-xs text-muted-foreground">{a.observacoes ?? "Sem observações"}</div>
-                  </Link>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline">{a.tipo}</Badge>
-                    {a.confirmado ? <Badge variant="success">Confirmado</Badge> : <Badge variant="warning">A confirmar</Badge>}
-                    <span className="text-sm text-arini font-mono">{formatDateTimeBR(a.data_hora)}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <AgendaShell
+      vista={vista}
+      agrupamento={agrupamento}
+      dataBase={chaveDia(base)}
+      inicio={inicio.toISOString()}
+      fim={fim.toISOString()}
+      itens={itens}
+      semData={semData}
+      agentes={agentes}
+      userId={user.id}
+      sector={sector}
+    />
   );
 }

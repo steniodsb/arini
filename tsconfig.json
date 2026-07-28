@@ -1,5 +1,9 @@
 {
   "compilerOptions": {
+    // Sem "target" o tsc assume ES5 e recusa iterar Map/Set com spread ou
+    // for..of — erro que não existe no build real, porque o Next transpila
+    // com SWC para um alvo moderno. es2017 alinha o type-check ao que roda.
+    "target": "es2017",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,

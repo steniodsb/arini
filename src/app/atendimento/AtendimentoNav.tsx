@@ -48,10 +48,12 @@ export function AtendimentoNav({
   nome,
   email,
   disponibilidade,
+  avatarUrl,
 }: {
   nome: string;
   email: string;
   disponibilidade: AgentAvailability;
+  avatarUrl?: string | null;
 }) {
   const pathname = usePathname();
   const [colapsada, setColapsada] = useState(false);
@@ -163,7 +165,7 @@ export function AtendimentoNav({
 
       {/* Rodapé: agente + tema */}
       <div className="border-t p-2 flex items-center gap-2">
-        <AgentStatusMenu nome={nome} email={email} inicial={disponibilidade} />
+        <AgentStatusMenu nome={nome} email={email} inicial={disponibilidade} avatarUrl={avatarUrl} />
         <ThemeToggle />
       </div>
 

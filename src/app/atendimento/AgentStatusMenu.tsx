@@ -14,10 +14,13 @@ export function AgentStatusMenu({
   nome,
   email,
   inicial,
+  avatarUrl,
 }: {
   nome: string;
   email: string;
   inicial: AgentAvailability;
+  /** Foto do perfil. Sem ela, cai no círculo com a inicial do nome. */
+  avatarUrl?: string | null;
 }) {
   const [status, setStatus] = useState<AgentAvailability>(inicial);
   const [open, setOpen] = useState(false);
@@ -60,9 +63,18 @@ export function AgentStatusMenu({
         className="w-full flex items-center gap-2 px-1.5 py-1.5 rounded-lg hover:bg-muted text-left min-w-0"
       >
         <span className="relative shrink-0">
-          <span className="h-7 w-7 rounded-full bg-arini text-white dark:bg-gold dark:text-arini flex items-center justify-center text-[11px] font-semibold">
-            {(nome || "?").charAt(0).toUpperCase()}
-          </span>
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- URL de storage externo; next/image exigiria allowlist de domínios
+            <img
+              src={avatarUrl}
+              alt=""
+              className="h-7 w-7 rounded-full object-cover border"
+            />
+          ) : (
+            <span className="h-7 w-7 rounded-full bg-arini text-white dark:bg-gold dark:text-arini flex items-center justify-center text-[11px] font-semibold">
+              {(nome || "?").charAt(0).toUpperCase()}
+            </span>
+          )}
           <span
             className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-card ${AVAILABILITY_DOT[status]}`}
           />

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
+import { ipDaRequisicao, registrarAuditoria } from "@/lib/atendimento/audit";
 import type { ChannelProvider } from "@/lib/types";
 
 /**
@@ -23,9 +24,49 @@ const REQUIRED: Record<ChannelProvider, string[]> = {
     "verify_token",
     "app_secret",
   ],
+  // Telegram: o token do BotFather basta — o resto vem do getMe.
+  telegram_bot: ["bot_token"],
+  // E-mail: o provedor é a RESEND (API HTTP), não SMTP puro.
+  // Trocamos os campos smtp_host/port/user/pass porque SMTP exige
+  // biblioteca com socket para enviar e IMAP para ler a caixa — nada
+  // disso roda bem em serverless e nenhuma das duas está no projeto.
+  // A Resend é REST: `fetch` para enviar, webhook para receber.
+  // Ver src/lib/email.ts e src/app/api/webhooks/email/route.ts.
+  email_smtp: ["api_key", "remetente", "nome_remetente"],
+  sms_generico: ["api_url", "api_key", "remetente"],
+  // Widget e API não têm credencial de terceiro: o token nasce no sistema.
+  widget: [],
+  api_generica: [],
 };
 
 const PROVIDERS = Object.keys(REQUIRED) as ChannelProvider[];
+
+/**
+ * Qual valor de `atendimento_channels.canal` cada provedor produz.
+ *
+ * A coluna tem default 'whatsapp' e antes todo canal era WhatsApp mesmo.
+ * Com e-mail, SMS e API genérica isso deixou de valer: um canal de e-mail
+ * gravado como 'whatsapp' faz a resolução de saída e os filtros de inbox
+ * apontarem para o lugar errado.
+ */
+const CANAL_DO_PROVEDOR: Record<ChannelProvider, string> = {
+  evolution: "whatsapp",
+  cloud_api: "whatsapp",
+  cloud_api_coexistence: "whatsapp",
+  telegram_bot: "telegram",
+  email_smtp: "email",
+  sms_generico: "sms",
+  widget: "site",
+  api_generica: "api",
+};
+
+/**
+ * Provedores SEM handshake: não há QR para ler nem token de terceiro para
+ * validar — basta a credencial estar cadastrada. Se nascessem
+ * "desconectado", o despacho de saída recusaria o envio para sempre,
+ * porque nenhuma tela sabe "conectar" esses canais.
+ */
+const SEM_HANDSHAKE: ChannelProvider[] = ["email_smtp", "sms_generico", "api_generica", "widget"];
 
 export async function POST(req: Request) {
   const supabase = createSupabaseServer();
@@ -37,7 +78,9 @@ export async function POST(req: Request) {
   // Só a diretoria cadastra canal (a config carrega token de acesso).
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin_central, sector, ativo")
+    // `nome` entra só para desnormalizar o autor no log de auditoria — o
+    // log tem que continuar legível se o perfil for apagado depois.
+    .select("nome, is_admin_central, sector, ativo")
     .eq("id", user.id)
     .maybeSingle();
   const isDiretoria = !!profile?.ativo && (profile.is_admin_central || profile.sector === "admin_central");
@@ -101,9 +144,11 @@ export async function POST(req: Request) {
     .from("atendimento_channels")
     .insert({
       nome,
-      canal: "whatsapp",
+      canal: CANAL_DO_PROVEDOR[provedor],
       provedor,
-      status: "desconectado",
+      // Canal sem handshake já nasce pronto para enviar (ver SEM_HANDSHAKE).
+      status: SEM_HANDSHAKE.includes(provedor) ? "conectado" : "desconectado",
+      ...(SEM_HANDSHAKE.includes(provedor) ? { conectado_em: new Date().toISOString() } : {}),
       config,
       criado_por: user.id,
     })
@@ -122,6 +167,26 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  // Auditoria: canal guarda credencial de terceiro, então "quem cadastrou
+  // este canal" é pergunta de segurança, não de curiosidade.
+  // `config` NUNCA entra em `detalhes` — ela carrega api_key, access_token
+  // e app_secret, e a tela de auditoria é lida por todo o atendimento.
+  await registrarAuditoria(admin, {
+    atorId: user.id,
+    atorNome: profile?.nome ?? user.email ?? null,
+    acao: "criou",
+    entidade: "atendimento_channels",
+    entidadeId: data.id as string,
+    detalhes: {
+      nome,
+      provedor,
+      canal: CANAL_DO_PROVEDOR[provedor],
+      // Só os NOMES das chaves preenchidas, jamais os valores.
+      campos_config: Object.keys(config),
+    },
+    ip: ipDaRequisicao(req),
+  });
 
   return NextResponse.json({ ok: true, id: data.id });
 }
