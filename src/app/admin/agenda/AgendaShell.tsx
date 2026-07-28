@@ -50,6 +50,7 @@ import {
   type Sector,
 } from "@/lib/types";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
+import { itensDeExemplo, ehExemplo } from "./exemplo";
 import { errMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +71,7 @@ import {
   Trello,
   X,
   type LucideIcon,
+  FlaskConical,
 } from "lucide-react";
 import {
   ID_BACKLOG,
@@ -242,6 +244,15 @@ export function AgendaShell({
     setTodos([...itens, ...semData]);
   }, [itens, semData]);
 
+  // Modo exemplo: injeta compromissos fictícios SÓ no navegador, para dar
+  // para julgar as vistas enquanto a agenda real está vazia. Nada é gravado
+  // — por isso a escrita fica bloqueada enquanto ele está ligado.
+  const [modoExemplo, setModoExemplo] = useState(false);
+  const exemplos = useMemo(
+    () => (modoExemplo ? itensDeExemplo(dataDaChave(dataBase), agentes) : []),
+    [modoExemplo, dataBase, agentes],
+  );
+
   const [aviso, setAviso] = useState<string | null>(null);
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VAZIOS);
   const [painel, setPainel] = useState<"filtros" | "exibicao" | null>(null);
@@ -270,6 +281,14 @@ export function AgendaShell({
   const aplicarMudancas = useCallback(
     async (mudancas: Mudanca[]) => {
       if (mudancas.length === 0) return;
+      // Item de exemplo não existe no banco: gravar devolveria erro do
+      // Postgres com um id inválido. Melhor dizer o que está acontecendo.
+      if (mudancas.some((m) => ehExemplo(m.item))) {
+        setAviso(
+          "Estes são dados de exemplo — eles não são salvos. Desligue o modo exemplo para mexer na agenda de verdade.",
+        );
+        return;
+      }
       const anterior = todos;
       const porId = new Map(mudancas.map((m) => [m.item.id, m.patch]));
 
@@ -417,7 +436,9 @@ export function AgendaShell({
 
   const filtrados = useMemo(() => {
     const busca = filtros.busca.trim().toLowerCase();
-    return todos.filter((i) => {
+    // Os exemplos passam pelos mesmos filtros dos itens reais — senão o modo
+    // exemplo mentiria sobre como os filtros se comportam.
+    return [...todos, ...exemplos].filter((i) => {
       if (filtros.tipo && i.tipo !== filtros.tipo) return false;
       if (filtros.status && i.status !== filtros.status) return false;
       if (filtros.setor) {
@@ -445,7 +466,7 @@ export function AgendaShell({
       }
       return true;
     });
-  }, [todos, filtros]);
+  }, [todos, exemplos, filtros]);
 
   const comData = useMemo(() => filtrados.filter(temData), [filtrados]);
   const semDataFiltrados = useMemo(() => filtrados.filter((i) => !temData(i)), [filtrados]);
@@ -712,6 +733,43 @@ export function AgendaShell({
             />
             Mostrar painel de não agendados
           </label>
+
+          {/* A agenda nasce vazia. Sem um jeito de ver as vistas com conteúdo,
+              não dá para julgar se elas funcionam — e semear o banco com
+              compromisso falso num CRM em uso é pedir para alguém ir a uma
+              visita que não existe. Este modo vive só no navegador. */}
+          <label className="flex items-center gap-2 text-sm text-arini cursor-pointer">
+            <input
+              type="checkbox"
+              checked={modoExemplo}
+              onChange={(e) => setModoExemplo(e.target.checked)}
+              className="rounded border-input"
+            />
+            Ver com dados de exemplo
+          </label>
+          <p className="pl-6 text-xs text-muted-foreground">
+            Preenche o calendário com compromissos fictícios só para você
+            conhecer as visualizações. Nada é salvo e ninguém mais vê.
+          </p>
+        </div>
+      )}
+
+      {/* ---------- Faixa do modo exemplo ---------- */}
+      {modoExemplo && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5">
+          <FlaskConical size={16} className="shrink-0 text-amber-600" />
+          <p className="flex-1 text-sm text-amber-900">
+            <strong>Dados de exemplo.</strong> Estes compromissos existem só
+            nesta tela, para você ver as visualizações funcionando — nada foi
+            gravado e a equipe não os enxerga.
+          </p>
+          <button
+            type="button"
+            onClick={() => setModoExemplo(false)}
+            className="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+          >
+            Sair do modo exemplo
+          </button>
         </div>
       )}
 
