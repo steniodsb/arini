@@ -68,6 +68,47 @@ export interface VistaProps {
   onAbrir?: (item: AgendaItem) => void;
 }
 
+// ---------------------------------------------------------------------
+// Estilo visual do calendário mensal
+// ---------------------------------------------------------------------
+
+/**
+ * O mês tem DOIS visuais, e o usuário escolhe:
+ *
+ * - `compacto`: pílulas pastel de uma linha (referência ClickUp/Wrike). Cabe
+ *   mais compromisso por célula — é o melhor para quem tem a agenda cheia.
+ * - `cartoes`: cartão branco com chip de etiqueta e avatar (referência do
+ *   Calendar Power-Up do Trello). Ocupa mais espaço vertical, mas o título é
+ *   muito mais legível e a leitura fica próxima da do quadro.
+ *
+ * Mora aqui (e não em `@/lib/types`) de propósito: é preferência de
+ * APRESENTAÇÃO de uma única vista, não um conceito do domínio da agenda.
+ * `types.ts` descreve o que o banco guarda; isto só descreve como a tela
+ * desenha.
+ */
+export type EstiloMes = "compacto" | "cartoes";
+
+export const ESTILO_MES_LABELS: Record<EstiloMes, string> = {
+  compacto: "Compacto (pílulas)",
+  cartoes: "Cartões (estilo Trello)",
+};
+
+/**
+ * Chave do `localStorage` onde a casca guarda a escolha.
+ *
+ * Não vira coluna em `profiles`: é preferência de visual do navegador, não
+ * dado de negócio — ninguém mais precisa dela, ela não entra em relatório e
+ * criar migration (mais RLS, mais round-trip a cada troca) para guardar um
+ * enum de duas opções custa mais do que vale. Se um dia o cliente pedir "meu
+ * estilo me acompanha em qualquer computador", aí sim vira coluna.
+ */
+export const CHAVE_ESTILO_MES = "arini-agenda-estilo-mes";
+
+/** Valida o que veio do `localStorage` — lá qualquer string é possível. */
+export function ehEstiloMes(valor: unknown): valor is EstiloMes {
+  return valor === "compacto" || valor === "cartoes";
+}
+
 /**
  * Valores que o "+ Adicionar cartão" de uma coluna já leva prontos para o
  * diálogo de criação. Quem clica em "+" na coluna de sexta espera que o

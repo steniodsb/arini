@@ -74,11 +74,14 @@ import {
   FlaskConical,
 } from "lucide-react";
 import {
+  CHAVE_ESTILO_MES,
+  ESTILO_MES_LABELS,
   ID_BACKLOG,
   TIPOS_DE_AGENDAMENTO,
   chaveDia,
   corDoItem,
   dataDaChave,
+  ehEstiloMes,
   formatarDiaCurto,
   formatarDiaLongo,
   formatarIntervalo,
@@ -87,6 +90,7 @@ import {
   somarDias,
   temData,
   type Agente,
+  type EstiloMes,
   type PrefillCartao,
   type VistaProps,
 } from "./shared";
@@ -260,6 +264,39 @@ export function AgendaShell({
   const [arrastando, setArrastando] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<AgendaItem | null>(null);
   const [novo, setNovo] = useState<PrefillCartao | null>(null);
+
+  /**
+   * Estilo do calendário mensal (pílulas x cartões estilo Trello).
+   *
+   * Fica em `localStorage`, e NÃO em `profiles`: é preferência de visual do
+   * navegador, não dado de negócio — não entra em relatório, ninguém mais
+   * precisa dela, e uma migration + RLS + round-trip a cada troca custaria
+   * mais do que vale um enum de duas opções. (A vista em si é diferente:
+   * aquela vai para o banco porque define em que tela o usuário ABRE o CRM.)
+   *
+   * O estado nasce sempre no padrão e só é corrigido no `useEffect`: ler
+   * `localStorage` durante o render faria o HTML do servidor e o primeiro
+   * render do cliente divergirem, e o React descartaria a árvore inteira.
+   */
+  const [estiloMes, setEstiloMes] = useState<EstiloMes>("compacto");
+  useEffect(() => {
+    try {
+      const salvo = window.localStorage.getItem(CHAVE_ESTILO_MES);
+      if (ehEstiloMes(salvo)) setEstiloMes(salvo);
+    } catch {
+      // Navegação privada / storage bloqueado: seguir no padrão é suficiente.
+    }
+  }, []);
+
+  const trocarEstiloMes = useCallback((novoEstilo: EstiloMes) => {
+    setEstiloMes(novoEstilo);
+    try {
+      window.localStorage.setItem(CHAVE_ESTILO_MES, novoEstilo);
+    } catch {
+      // Não gravou: a escolha vale para esta sessão e pronto. Não é erro que
+      // mereça ocupar a faixa de aviso da tela.
+    }
+  }, []);
 
   // Ponteiro para mouse (arrasta após 6px) e toque com long-press (200ms):
   // sem isso o arraste engole o scroll horizontal do quadro e o clique no
@@ -601,7 +638,14 @@ export function AgendaShell({
                 }`}
               >
                 <Icone size={14} />
-                <span className="hidden lg:inline">{AGENDA_VISTA_LABELS[v]}</span>
+                {/* O rótulo da vista ATIVA aparece sempre; os demais só a
+                    partir de `md`. Antes todos ficavam escondidos abaixo de
+                    1024px e a barra virava cinco ícones sem texto — quem
+                    abria num notebook não descobria que dava para trocar de
+                    visualização. */}
+                <span className={ativa ? "inline" : "hidden md:inline"}>
+                  {AGENDA_VISTA_LABELS[v]}
+                </span>
               </button>
             );
           })}
@@ -724,6 +768,25 @@ export function AgendaShell({
               ))}
             </Select>
           </label>
+          {/* Só aparece na vista de mês: é a única que tem dois estilos, e um
+              seletor que não muda nada na tela atual é ruído. */}
+          {vista === "mes" && (
+            <label className="flex items-center gap-2 text-sm text-arini">
+              <span className="text-muted-foreground">Estilo do mês:</span>
+              <Select
+                value={estiloMes}
+                onChange={(e) => trocarEstiloMes(e.target.value as EstiloMes)}
+                className="h-9 w-52"
+              >
+                {(Object.keys(ESTILO_MES_LABELS) as EstiloMes[]).map((e) => (
+                  <option key={e} value={e}>
+                    {ESTILO_MES_LABELS[e]}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
+
           <label className="flex items-center gap-2 text-sm text-arini cursor-pointer">
             <input
               type="checkbox"
@@ -843,7 +906,7 @@ export function AgendaShell({
             )}
             {vista === "lista" && <AgendaLista {...vistaProps} onAplicar={aplicarMudancas} />}
             {vista === "timeline" && <AgendaTimeline {...vistaProps} />}
-            {vista === "mes" && <AgendaMes {...vistaProps} />}
+            {vista === "mes" && <AgendaMes {...vistaProps} estilo={estiloMes} />}
             {vista === "semana" && <AgendaSemana {...vistaProps} />}
           </div>
 
