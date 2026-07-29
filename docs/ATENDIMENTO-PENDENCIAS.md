@@ -1,7 +1,8 @@
 # Atendimento — o que depende de VOCÊ (Stenio)
 
-Tudo aqui é ação **fora do código**. As ondas **A a I** estão entregues:
-`npm run build` verde com **128 rotas**, migrações **0031–0037 já aplicadas**
+Tudo aqui é ação **fora do código**. As ondas **A a I** estão entregues, mais
+o fluxo de caixa central e triagem (ver `ATENDIMENTO-FLUXO.md`):
+`npm run build` verde com **129 rotas**, migrações **0031–0042 já aplicadas**
 em produção.
 
 Ordem sugerida: 1 → 2 → 3. Sem os itens 1 e 2 o sistema abre mas não recebe
@@ -43,15 +44,12 @@ Em **Configurações › Agentes**, para cada pessoa:
 Hoje só o `admin@arininegociosimobiliarios.com.br` é administrador; os
 outros 6 perfis nasceram como atendente **sem fila nenhuma**.
 
-**Tem tela para isso**: entre em **Configurações › Agentes** e ligue o
-interruptor de cada atendente. (Uma versão anterior deste documento dizia que
-só dava por SQL — estava errado.)
-
-Se preferir pelo banco, ou se ainda não conseguir entrar:
+Se ainda não conseguir entrar para usar a tela:
 
 ```sql
-update public.profiles set atendimento_access = true
-where email = 'pessoa@arininegociosimobiliarios.com.br';
+update public.profiles
+   set atendimento_access = true, atendimento_papel = 'administrador'
+ where email = 'seu@email.com';
 ```
 
 ## 2. Deploy e domínio ⚠️ BLOQUEANTE
