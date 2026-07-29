@@ -6,6 +6,7 @@ import type {
   AtendimentoLabel, AtendimentoMacro,
 } from "@/lib/types";
 import { AtendimentoInbox } from "./AtendimentoInbox";
+import { papelDoPerfil } from "@/lib/atendimento/papel";
 
 // A caixa é sempre dinâmica (conversas chegam a todo momento).
 export const dynamic = "force-dynamic";
@@ -68,6 +69,33 @@ export default async function AtendimentoPage() {
     provedorPorCanal[c.id as string] = c.provedor as string;
   }
 
+  // ------------------------------------------------------------------
+  // Papel e filas (migration 0040)
+  //
+  // O painel de triagem precisa saber quem está em CADA fila para
+  // oferecer o atendente certo — sem isso o select viria vazio e a
+  // recepcionista concluiria, com razão, que "o sistema está quebrado".
+  // Vai pelo client ADMIN por consistência com a lista de `agents` acima
+  // (montada assim porque a RLS de `profiles` esconde os perfis dos
+  // não-admins): os dois lados do par precisam vir da mesma fonte, senão
+  // sobra id de membro sem nome correspondente. A tabela em si é legível
+  // por qualquer agente (policy de 0030) e guarda só a ligação
+  // equipe ↔ perfil — nada sensível.
+  // ------------------------------------------------------------------
+  const papel = papelDoPerfil(profile);
+  const { data: membros } = await admin
+    .from("atendimento_team_members")
+    .select("team_id, profile_id");
+
+  const membrosPorEquipe: Record<string, string[]> = {};
+  const minhasEquipes: string[] = [];
+  for (const m of membros ?? []) {
+    const teamId = m.team_id as string;
+    const profileId = m.profile_id as string;
+    (membrosPorEquipe[teamId] ??= []).push(profileId);
+    if (profileId === profile.id) minhasEquipes.push(teamId);
+  }
+
   return (
     <div className="h-full min-h-0">
       {/* useSearchParams no cliente exige Suspense no App Router. */}
@@ -80,6 +108,9 @@ export default async function AtendimentoPage() {
           labels={(labels ?? []) as AtendimentoLabel[]}
           macros={(macros ?? []) as AtendimentoMacro[]}
           provedorPorCanal={provedorPorCanal}
+          papel={papel}
+          membrosPorEquipe={membrosPorEquipe}
+          minhasEquipes={minhasEquipes}
           currentUser={{
             id: profile.id,
             nome: profile.nome,

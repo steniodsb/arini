@@ -1,5 +1,40 @@
 "use client";
 
+// =====================================================================
+// MENU DO ATENDIMENTO — os itens mudam conforme o PAPEL (migration 0040).
+//
+// ⚠️ O QUE O LAYOUT PRECISA PASSAR
+// --------------------------------
+// Esta nav aceita a prop opcional `papel: AtendimentoPapel`. Ela AINDA
+// NÃO É PASSADA pelo `src/app/atendimento/layout.tsx`. Para ligar:
+//
+//   import { papelDoPerfil } from "@/lib/atendimento/papel";
+//   ...
+//   <AtendimentoNav
+//     nome={...} email={...} disponibilidade={...} avatarUrl={...}
+//     papel={papelDoPerfil(profile)}     // ← a linha que falta
+//   />
+//
+// `papelDoPerfil` já trata a regra de que `is_admin_central` conta como
+// administrador — não leia `profile.atendimento_papel` cru aqui.
+//
+// SEM a prop, a nav cai no menu COMPLETO (o comportamento de hoje). É a
+// escolha deliberada: menu de administrador para todo mundo é um
+// incômodo (links que a RLS recusa), enquanto o contrário — esconder a
+// Caixa central da recepção porque a prop não chegou — deixaria a pessoa
+// sem o caminho para o trabalho dela.
+//
+// MAPA DE ITENS POR PAPEL
+// -----------------------
+//   recepcao      Caixa central (destaque) · Conversas · Contatos ·
+//                 Empresas · Central de Ajuda
+//                 → sem Relatórios, Campanhas, Configurações, Canais, IA.
+//   atendente     Conversas (as filas dele) · Contatos · Empresas ·
+//                 Macros · Central de Ajuda
+//                 → sem Configurações e sem as telas de gestão.
+//   administrador tudo o que já existia + Caixa central no topo.
+// =====================================================================
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -11,7 +46,7 @@ import {
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { AgentStatusMenu } from "./AgentStatusMenu";
-import type { AgentAvailability } from "@/lib/types";
+import { PAPEL_LABELS, type AgentAvailability, type AtendimentoPapel } from "@/lib/types";
 
 type Item = {
   href: string;
@@ -19,47 +54,86 @@ type Item = {
   icon: typeof Inbox;
   /** Ativo só quando o caminho for exatamente este. */
   exact?: boolean;
+  /** Item de trabalho principal do papel — ganha cor e fica no topo. */
+  destaque?: boolean;
   children?: { href: string; label: string; icon: typeof Inbox }[];
 };
 
-const ITEMS: Item[] = [
-  {
-    href: "/atendimento",
-    label: "Conversas",
-    icon: MessageSquare,
-    children: [
-      { href: "/atendimento", label: "Todas as conversas", icon: Inbox },
-      { href: "/atendimento?vista=mencoes", label: "Menções", icon: AtSign },
-      { href: "/atendimento?vista=nao_atendidas", label: "Não atendidas", icon: AlarmClock },
-    ],
-  },
+const CAIXA_CENTRAL: Item = {
+  href: "/atendimento?vista=central",
+  label: "Caixa central",
+  icon: Inbox,
+  destaque: true,
+};
+
+const CONVERSAS: Item = {
+  href: "/atendimento",
+  label: "Conversas",
+  icon: MessageSquare,
+  children: [
+    { href: "/atendimento", label: "Todas as conversas", icon: Inbox },
+    { href: "/atendimento?vista=mencoes", label: "Menções", icon: AtSign },
+    { href: "/atendimento?vista=nao_atendidas", label: "Não atendidas", icon: AlarmClock },
+  ],
+};
+
+const CONTATOS: Item = { href: "/atendimento/contatos", label: "Contatos", icon: Users };
+const EMPRESAS: Item = { href: "/atendimento/empresas", label: "Empresas", icon: Building2 };
+const MACROS: Item = { href: "/atendimento/macros", label: "Macros", icon: Zap };
+const AJUDA: Item = { href: "/atendimento/ajuda", label: "Central de Ajuda", icon: LifeBuoy };
+
+/** Menu completo — o de hoje, mais a caixa central no topo. */
+const ITENS_ADMIN: Item[] = [
+  CAIXA_CENTRAL,
+  CONVERSAS,
   { href: "/atendimento/canais", label: "Canais", icon: Radio },
-  { href: "/atendimento/contatos", label: "Contatos", icon: Users },
-  { href: "/atendimento/empresas", label: "Empresas", icon: Building2 },
+  CONTATOS,
+  EMPRESAS,
   { href: "/atendimento/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/atendimento/campanhas", label: "Campanhas", icon: Megaphone },
-  { href: "/atendimento/macros", label: "Macros", icon: Zap },
+  MACROS,
   { href: "/atendimento/ia", label: "Agentes IA", icon: Bot },
-  { href: "/atendimento/ajuda", label: "Central de Ajuda", icon: LifeBuoy },
+  AJUDA,
   { href: "/atendimento/configuracoes", label: "Configurações", icon: Settings },
 ];
+
+const ITENS_RECEPCAO: Item[] = [CAIXA_CENTRAL, CONVERSAS, CONTATOS, EMPRESAS, AJUDA];
+
+const ITENS_ATENDENTE: Item[] = [CONVERSAS, CONTATOS, EMPRESAS, MACROS, AJUDA];
+
+function itensDoPapel(papel: AtendimentoPapel | undefined): Item[] {
+  if (papel === "recepcao") return ITENS_RECEPCAO;
+  if (papel === "atendente") return ITENS_ATENDENTE;
+  // administrador — e o fallback de quando o layout ainda não passa a prop.
+  return ITENS_ADMIN;
+}
 
 export function AtendimentoNav({
   nome,
   email,
   disponibilidade,
   avatarUrl,
+  papel,
 }: {
   nome: string;
   email: string;
   disponibilidade: AgentAvailability;
   avatarUrl?: string | null;
+  /** Ver o bloco no topo do arquivo: precisa ser ligado no layout.tsx. */
+  papel?: AtendimentoPapel;
 }) {
   const pathname = usePathname();
   const [colapsada, setColapsada] = useState(false);
   const [conversasAbertas, setConversasAbertas] = useState(true);
 
+  const ITEMS = itensDoPapel(papel);
+
   function isActive(item: Item) {
+    // A caixa central e "Conversas" moram na MESMA rota, separadas só pelo
+    // `?vista=`. Comparar só o pathname acenderia as duas ao mesmo tempo —
+    // e o `usePathname` não enxerga a query. Por isso a caixa central
+    // nunca acende sozinha: quem marca a vista é o cabeçalho da lista.
+    if (item.href.includes("?")) return false;
     if (item.href === "/atendimento") return pathname === "/atendimento";
     return pathname.startsWith(item.href);
   }
@@ -127,7 +201,9 @@ export function AtendimentoNav({
                   className={`flex-1 min-w-0 flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors ${
                     active
                       ? "bg-arini/10 text-arini dark:text-gold font-medium dark:bg-gold/15"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : item.destaque
+                        ? "border border-arini/30 dark:border-gold/30 text-arini dark:text-gold font-medium hover:bg-arini/10 dark:hover:bg-gold/15"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
                   <Icon size={16} className="shrink-0" />
@@ -169,8 +245,11 @@ export function AtendimentoNav({
         <ThemeToggle />
       </div>
 
+      {/* O papel fica visível: é ele que explica por que o menu de um
+          colega tem itens que o meu não tem. */}
       <div className="px-3 pb-2 flex items-center gap-1 text-[10px] text-muted-foreground/60">
         <Sparkles size={10} /> Arini Atendimento
+        {papel && <span className="ml-auto truncate">{PAPEL_LABELS[papel]}</span>}
       </div>
     </nav>
   );

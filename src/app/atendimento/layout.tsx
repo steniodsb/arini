@@ -3,6 +3,7 @@ import { AtendimentoNav } from "./AtendimentoNav";
 import { AtendimentoThemeProvider } from "./AtendimentoThemeProvider";
 import { ThemeScript } from "@/components/theme/ThemeScript";
 import { CommandBar } from "./CommandBar";
+import { papelDoPerfil } from "@/lib/atendimento/papel";
 import type { AgentAvailability, ThemePreference } from "@/lib/types";
 
 // Shell do SISTEMA DE ATENDIMENTO — sidebar estilo Chatwoot, tema
@@ -25,11 +26,14 @@ export default async function AtendimentoLayout({
       <ThemeScript initial={tema} />
       <AtendimentoThemeProvider initial={tema}>
         <div className="h-screen flex bg-background text-foreground">
+          {/* O menu muda conforme o papel: a recepção não vê Relatórios nem
+              Configurações, e o atendente não vê Configurações. */}
           <AtendimentoNav
             nome={profile?.nome ?? "Agente"}
             email={profile?.email ?? ""}
             disponibilidade={disponibilidade}
             avatarUrl={profile?.avatar_url ?? null}
+            papel={papelDoPerfil(profile)}
           />
           <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
             {children}

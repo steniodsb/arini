@@ -89,6 +89,7 @@ function AbaConta({ inicial }: { inicial: AtendimentoSettings | null }) {
     fuso: inicial?.fuso ?? "America/Sao_Paulo",
     auto_resolver_dias: inicial?.auto_resolver_dias ?? 0,
     ocultar_nome_agente: inicial?.ocultar_nome_agente ?? false,
+    recepcao_ve_atribuidas: inicial?.recepcao_ve_atribuidas ?? true,
     notificacao_som: inicial?.notificacao_som ?? true,
     logo_url: inicial?.logo_url ?? "",
   });
@@ -155,6 +156,12 @@ function AbaConta({ inicial }: { inicial: AtendimentoSettings | null }) {
       </Field>
 
       <div className="space-y-3 pt-1">
+        <Switch
+          checked={form.recepcao_ve_atribuidas}
+          onChange={(v) => setForm({ ...form, recepcao_ve_atribuidas: v })}
+          label="A recepção continua vendo a conversa depois de atribuir"
+          dica="Ligado, ela acompanha o que encaminhou — um segundo par de olhos junto com o administrador. Desligado, ela só enxerga a caixa central e a conversa some da tela dela assim que é triada."
+        />
         <Switch
           checked={form.ocultar_nome_agente}
           onChange={(v) => setForm({ ...form, ocultar_nome_agente: v })}

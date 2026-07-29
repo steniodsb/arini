@@ -89,6 +89,12 @@ export interface Profile {
   atendimento_tema: ThemePreference;
   disponibilidade: AgentAvailability;
   notificacoes: Record<string, boolean>;
+  /**
+   * Papel no ATENDIMENTO — independente do `sector` do CRM. O setor diz o
+   * que a pessoa faz no CRM de imóveis; isto diz quem tria, quem atende e
+   * quem administra. Misturar os dois foi o erro do modelo anterior.
+   */
+  atendimento_papel: AtendimentoPapel;
   created_at: string;
   updated_at: string;
 }
@@ -380,6 +386,9 @@ export interface Conversation {
   sla_first_response_due: string | null;
   sla_resolution_due: string | null;
   sla_violado: boolean;
+  /** Nulo = ainda na CAIXA CENTRAL, esperando triagem (0040). */
+  triada_em: string | null;
+  triada_por: string | null;
   /** O agente marcou de volta como não lida — o contador não serve p/ isso. */
   marcada_nao_lida: boolean;
   /** Intenção e resumo detectados pela IA (0034). */
@@ -1077,6 +1086,11 @@ export interface AtendimentoSettings {
   ocultar_nome_agente: boolean;
   notificacao_som: boolean;
   logo_url: string | null;
+  /**
+   * A recepção continua vendo a conversa depois de atribuir? (0040)
+   * true = segundo par de olhos; false = ela só enxerga a caixa central.
+   */
+  recepcao_ve_atribuidas: boolean;
   updated_at: string;
 }
 
@@ -1239,3 +1253,58 @@ export interface AgendaItem {
   property_id: string | null;
   property_codigo: string | null;
 }
+
+
+// =====================================================================
+// Papéis do atendimento e triagem (migration 0040)
+// =====================================================================
+
+export type AtendimentoPapel = "administrador" | "recepcao" | "atendente";
+
+export const PAPEL_LABELS: Record<AtendimentoPapel, string> = {
+  administrador: "Administrador",
+  recepcao: "Recepção (triagem)",
+  atendente: "Atendente",
+};
+
+export const PAPEL_DESCRICAO: Record<AtendimentoPapel, string> = {
+  administrador:
+    "Vê todas as conversas, assume, transfere, reabre e acompanha a produtividade da equipe.",
+  recepcao:
+    "Recebe tudo na caixa central, classifica e encaminha para a fila certa. Não atende.",
+  atendente:
+    "Vê apenas as conversas das filas de que participa e as atribuídas a ele.",
+};
+
+/** Ações registradas em `atendimento_transferencias`. */
+export type AcaoTransferencia = "triagem" | "transferencia" | "assumir" | "devolver";
+
+export const ACAO_TRANSFERENCIA_LABELS: Record<AcaoTransferencia, string> = {
+  triagem: "Triada",
+  transferencia: "Transferida",
+  assumir: "Assumida",
+  devolver: "Devolvida à caixa central",
+};
+
+export interface Transferencia {
+  id: string;
+  conversation_id: string;
+  acao: AcaoTransferencia;
+  de_equipe: string | null;
+  para_equipe: string | null;
+  de_agente: string | null;
+  para_agente: string | null;
+  motivo: string | null;
+  feito_por: string | null;
+  created_at: string;
+}
+
+/**
+ * As 9 filas de triagem semeadas na 0040. A lista existe no código só
+ * para ordenar e sugerir na tela — a verdade é a tabela
+ * `atendimento_teams`, e o cliente pode renomear ou criar outras.
+ */
+export const FILAS_SUGERIDAS = [
+  "Venda Urbana", "Fazenda", "Locação", "Consórcio", "Documentação",
+  "Financeiro", "Jurídico", "Marketing", "Administrativo",
+] as const;

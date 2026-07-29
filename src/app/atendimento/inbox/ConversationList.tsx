@@ -6,7 +6,8 @@ import {
   type Conversation,
 } from "@/lib/types";
 import { formatDateTimeBR } from "@/lib/utils";
-import { Check, Inbox, AlarmClock, Paperclip, AlertTriangle, Clock } from "lucide-react";
+import { formatarEspera, minutosEsperando, esperaCritica, LIMITE_ESPERA_MIN } from "./espera";
+import { Check, Inbox, AlarmClock, Paperclip, AlertTriangle, Clock, Hourglass } from "lucide-react";
 
 const CHANNEL_DOT: Record<string, string> = {
   whatsapp: "bg-green-500",
@@ -38,6 +39,33 @@ export function tempoRelativo(iso: string): string {
   return formatDateTimeBR(iso).slice(0, 5);
 }
 
+/**
+ * Quanto tempo a conversa está parada esperando triagem. Vermelho acima
+ * de LIMITE_ESPERA_MIN: na caixa central o atraso é o problema, e um
+ * número cinza no canto não faz ninguém correr.
+ */
+function EsperaBadge({ conversa }: { conversa: Conversation }) {
+  const min = minutosEsperando(conversa);
+  const critico = esperaCritica(min);
+  return (
+    <span
+      title={
+        critico
+          ? `Esperando triagem há mais de ${LIMITE_ESPERA_MIN} minutos`
+          : "Tempo esperando triagem"
+      }
+      className={`ml-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-medium ${
+        critico
+          ? "bg-red-500/15 text-red-600 dark:text-red-300"
+          : "bg-muted text-muted-foreground"
+      }`}
+    >
+      <Hourglass size={9} />
+      {formatarEspera(min)}
+    </span>
+  );
+}
+
 export function ConversationList({
   conversas,
   selecionadaId,
@@ -48,6 +76,9 @@ export function ConversationList({
   modoSelecao,
   selecionadas,
   onAlternarSelecao,
+  // Caixa central (0040)
+  modoCaixaCentral = false,
+  vazio: vazioCustom,
 }: {
   conversas: Conversation[];
   selecionadaId: string | null;
@@ -57,6 +88,14 @@ export function ConversationList({
   modoSelecao: boolean;
   selecionadas: Set<string>;
   onAlternarSelecao: (id: string) => void;
+  /**
+   * Na caixa central a linha troca o chip do responsável (que por
+   * definição não existe) pelo TEMPO ESPERANDO TRIAGEM — a única métrica
+   * que a recepção precisa ver para decidir o que pegar primeiro.
+   */
+  modoCaixaCentral?: boolean;
+  /** Estado vazio próprio da vista; sem ele, o genérico. */
+  vazio?: React.ReactNode;
 }) {
   const vazio = conversas.length === 0;
 
@@ -66,6 +105,7 @@ export function ConversationList({
   );
 
   if (vazio) {
+    if (vazioCustom) return <>{vazioCustom}</>;
     return (
       <div className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
         <Inbox size={30} className="opacity-40" />
@@ -135,10 +175,14 @@ export function ConversationList({
                 <span>{CHANNEL_LABELS[c.canal]}</span>
                 <span>·</span>
                 <span>{tempoRelativo(c.last_message_at)}</span>
-                {resp && (
-                  <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 truncate max-w-[72px]">
-                    {resp.split(" ")[0]}
-                  </span>
+                {modoCaixaCentral ? (
+                  <EsperaBadge conversa={c} />
+                ) : (
+                  resp && (
+                    <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 truncate max-w-[72px]">
+                      {resp.split(" ")[0]}
+                    </span>
+                  )
                 )}
               </div>
 

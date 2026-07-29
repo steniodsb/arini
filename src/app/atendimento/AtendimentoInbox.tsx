@@ -11,6 +11,7 @@ import {
   type Conversation, type Message, type CannedResponse, type AgentOption,
   type ConversationStatus, type ConversationPriority, type AtendimentoTeam,
   type AtendimentoLabel, type AtendimentoMacro, type MacroAction, type Profile,
+  type AtendimentoPapel,
 } from "@/lib/types";
 import { ContactPanel } from "./ContactPanel";
 import { ConversationList } from "./inbox/ConversationList";
@@ -20,12 +21,15 @@ import { SnoozeMenu } from "./inbox/SnoozeMenu";
 import { ParticipantsMenu } from "./inbox/ParticipantsMenu";
 import { CopilotPanel } from "./inbox/CopilotPanel";
 import { BotBadge } from "./inbox/BotBadge";
+import { PainelTriagem } from "./inbox/PainelTriagem";
+import { AcoesAdmin } from "./inbox/AcoesAdmin";
 import { useNotificacoes } from "./inbox/useNotificacoes";
 import { Modal } from "@/components/atendimento/ui";
 import {
   RefreshCw, Check, X, RotateCcw, Clock, Search, SlidersHorizontal, ArrowDownUp,
   CheckSquare, Users2, Flag, Tag as TagIcon, PanelRightClose, PanelRightOpen,
   AlarmClock, Trash2, MessageSquareDot, MailOpen, Volume2, VolumeX, Sparkles,
+  Inbox as InboxIcon, Hand, PartyPopper,
 } from "lucide-react";
 
 type StatusFilter = "todas" | ConversationStatus;
@@ -52,6 +56,9 @@ export function AtendimentoInbox({
   macros,
   provedorPorCanal,
   currentUser,
+  papel,
+  membrosPorEquipe,
+  minhasEquipes,
 }: {
   initialConversations: Conversation[];
   cannedResponses: CannedResponse[];
@@ -62,10 +69,32 @@ export function AtendimentoInbox({
   /** channel_id -> provedor, para o composer avisar sobre formato de áudio. */
   provedorPorCanal?: Record<string, string>;
   currentUser: Pick<Profile, "id" | "nome" | "assinatura">;
+  /**
+   * Papel no atendimento (0040). A RLS é quem bloqueia de verdade — isto
+   * serve para a tela NÃO oferecer o que o papel não pode fazer e para
+   * explicar por que a lista está vazia em vez de deixar o usuário achar
+   * que o sistema quebrou.
+   */
+  papel: AtendimentoPapel;
+  /** team_id -> profile_id[]: quem está em cada fila. */
+  membrosPorEquipe: Record<string, string[]>;
+  /** As filas de que EU participo — habilita o botão "Assumir". */
+  minhasEquipes: string[];
 }) {
   const params = useSearchParams();
-  const vista = params.get("vista"); // "mencoes" | "nao_atendidas" | null
+  const vistaParam = params.get("vista"); // "central" | "mencoes" | "nao_atendidas" | null
   const convParam = params.get("c");
+
+  /**
+   * A recepção abre direto na CAIXA CENTRAL: é o trabalho dela, e sem
+   * isso ela cairia numa lista "todas" que, dependendo da configuração
+   * `recepcao_ve_atribuidas`, pode estar vazia. O administrador abre em
+   * "todas" — ele acompanha tudo e escolhe a vista pelo menu.
+   */
+  const vista = vistaParam ?? (papel === "recepcao" ? "central" : null);
+  const naCaixaCentral = vista === "central";
+  const podeTriar = papel === "recepcao" || papel === "administrador";
+  const ehAdmin = papel === "administrador";
 
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -237,6 +266,10 @@ export function AtendimentoInbox({
   // Filtros e contadores
   // ------------------------------------------------------------------
   const porVista = useMemo(() => {
+    // CAIXA CENTRAL = tudo que ainda não passou pela triagem. `triada_em`
+    // nulo é a definição, não uma heurística: é a mesma coluna que a RLS
+    // usa para decidir quem enxerga o quê (ver 0040).
+    if (vista === "central") return conversations.filter((c) => !c.triada_em);
     if (vista === "mencoes") return conversations.filter((c) => minhasMencoes.has(c.id));
     if (vista === "nao_atendidas") {
       // "Não atendidas" = tem mensagem do cliente e ninguém respondeu ainda.
@@ -309,6 +342,62 @@ export function AtendimentoInbox({
     patchLocal(id, patch);
     const { error } = await supa().from("conversations").update(update).eq("id", id);
     if (error) setNotice({ tipo: "erro", texto: error.message });
+  }
+
+  /**
+   * Substitui a conversa pela linha que o servidor devolveu. As rotas de
+   * triagem escrevem várias colunas de uma vez (fila, responsável,
+   * carimbo); remontar isso à mão no cliente é como o estado da tela
+   * desanda.
+   */
+  function reconciliar(conv: Conversation) {
+    setConversations((prev) => prev.map((c) => (c.id === conv.id ? conv : c)));
+  }
+
+  /**
+   * Depois de triar, a conversa some da caixa central — então a tela tem
+   * que ir sozinha para a PRÓXIMA. Sem isso a recepcionista volta para
+   * uma tela sem seleção e clica de novo a cada triagem; com volume, é a
+   * diferença entre a tela ser usável e não ser.
+   *
+   * A próxima é calculada ANTES de reconciliar: depois da atualização a
+   * conversa já saiu de `filtered` e o índice não existiria mais.
+   */
+  function triada(conv: Conversation) {
+    const i = filtered.findIndex((c) => c.id === conv.id);
+    const proxima = filtered[i + 1] ?? filtered[i - 1] ?? null;
+    reconciliar(conv);
+    if (naCaixaCentral) setSelectedId(proxima ? proxima.id : null);
+    setNotice({
+      tipo: "info",
+      texto: `Conversa encaminhada${
+        conv.team_id ? ` para ${teams.find((t) => t.id === conv.team_id)?.nome ?? "a fila"}` : ""
+      }.`,
+    });
+    void refreshConversations();
+  }
+
+  /** Atendente pega para si uma conversa que está na fila dele sem dono. */
+  async function assumir() {
+    if (!selected) return;
+    try {
+      const res = await fetch("/api/atendimento/triagem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: selected.id, acao: "assumir" }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string; conversa?: Conversation;
+      };
+      if (!res.ok || !json.conversa) {
+        setNotice({ tipo: "erro", texto: json.error ?? "Não deu para assumir a conversa." });
+        return;
+      }
+      reconciliar(json.conversa);
+      setNotice({ tipo: "info", texto: "Conversa assumida — ela é sua agora." });
+    } catch {
+      setNotice({ tipo: "erro", texto: "Erro de rede ao assumir a conversa." });
+    }
   }
 
   const assign = (agentId: string | null) =>
@@ -646,7 +735,24 @@ export function AtendimentoInbox({
   // Render
   // ------------------------------------------------------------------
   const tituloVista =
-    vista === "mencoes" ? "Menções" : vista === "nao_atendidas" ? "Não atendidas" : "Conversas";
+    vista === "central" ? "Caixa central"
+      : vista === "mencoes" ? "Menções"
+      : vista === "nao_atendidas" ? "Não atendidas"
+      : "Conversas";
+
+  // Só faz sentido oferecer triagem em conversa que ainda não foi triada.
+  const mostrarTriagem = Boolean(selected && !selected.triada_em && podeTriar);
+
+  // "Assumir" só aparece quando há de fato o que assumir: conversa já
+  // triada, numa fila minha e sem dono. Com dono, o caminho é a
+  // transferência pelo administrador — e a rota recusa mesmo.
+  const podeAssumir = Boolean(
+    selected &&
+      selected.triada_em &&
+      !selected.responsavel_id &&
+      selected.team_id &&
+      (ehAdmin || minhasEquipes.includes(selected.team_id)),
+  );
 
   return (
     <div className="flex h-full min-h-0">
@@ -730,6 +836,21 @@ export function AtendimentoInbox({
             </button>
           </div>
 
+          {/* Cabeçalho próprio da caixa central: quem cai aqui pela
+              primeira vez precisa entender o que é esta tela antes de
+              clicar em qualquer coisa. */}
+          {naCaixaCentral && (
+            <div className="mx-3 mb-2 rounded-lg border border-arini/25 bg-arini/5 dark:border-gold/25 dark:bg-gold/10 px-2.5 py-2">
+              <p className="text-[11px] leading-snug text-arini dark:text-gold font-medium">
+                Tudo que chega cai aqui. Classifique e encaminhe.
+              </p>
+              <p className="text-[11px] leading-snug text-muted-foreground mt-0.5">
+                WhatsApp, Instagram, Messenger e site. A conversa sai desta lista assim que
+                você atribui uma fila.
+              </p>
+            </div>
+          )}
+
           <div className="px-3 pb-2">
             <div className="relative">
               <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -742,8 +863,10 @@ export function AtendimentoInbox({
             </div>
           </div>
 
-          {/* Abas de atribuição */}
-          <div className="flex text-xs px-3 gap-4">
+          {/* Abas de atribuição. Na caixa central não existem: por
+              definição nada ali tem responsável, então as três abas
+              mostrariam a mesma lista e a de "Minhas" viria sempre zerada. */}
+          <div className={`flex text-xs px-3 gap-4 ${naCaixaCentral ? "hidden" : ""}`}>
             {([
               ["minhas", "Minhas", counts.minhas],
               ["nao_atribuidas", "Não atribuídas", counts.nao_atribuidas],
@@ -826,6 +949,15 @@ export function AtendimentoInbox({
             modoSelecao={modoSelecao}
             selecionadas={selecionadas}
             onAlternarSelecao={alternarSelecao}
+            modoCaixaCentral={naCaixaCentral}
+            vazio={
+              naCaixaCentral ? (
+                <VazioCaixaCentral
+                  filtrando={Boolean(busca.trim()) || filtrosAtivos > 0 || statusFilter !== "todas"}
+                  total={conversations.length}
+                />
+              ) : undefined
+            }
           />
         </div>
       </aside>
@@ -833,6 +965,29 @@ export function AtendimentoInbox({
       {/* ================= Thread ================= */}
       <section className="flex-1 min-w-0 flex flex-col bg-muted/20 min-h-0">
         {!selected ? (
+          naCaixaCentral ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted-foreground">
+              {filtered.length === 0 ? (
+                <>
+                  <PartyPopper size={40} className="opacity-30" />
+                  <p className="font-medium text-foreground">Caixa central vazia.</p>
+                  <p className="text-xs max-w-sm">
+                    Nada esperando triagem. Assim que um cliente escrever no WhatsApp,
+                    Instagram, Messenger ou pelo site, a conversa aparece aqui.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <InboxIcon size={40} className="opacity-30" />
+                  <p>Escolha uma conversa à esquerda para classificar.</p>
+                  <p className="text-xs max-w-sm">
+                    Comece pelas marcadas em vermelho — são as que já passaram de 15 minutos
+                    sem ninguém olhar.
+                  </p>
+                </>
+              )}
+            </div>
+          ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
             <MessageSquareDot size={40} className="opacity-30" />
             <p>Selecione uma conversa à esquerda.</p>
@@ -843,6 +998,7 @@ export function AtendimentoInbox({
               <kbd className="rounded border px-1.5 py-0.5">/</kbd> mostra os atalhos
             </p>
           </div>
+          )
         ) : (
           <>
             <header className="px-3 py-2 border-b bg-card flex items-center justify-between gap-2 flex-wrap shrink-0">
@@ -860,10 +1016,23 @@ export function AtendimentoInbox({
                   {selected.contato_telefone ? ` · ${selected.contato_telefone}` : ""}
                   {selected.status === "adiada" && selected.snoozed_until &&
                     ` · adiada até ${new Date(selected.snoozed_until).toLocaleString("pt-BR")}`}
+                  {!selected.triada_em && (
+                    <span className="ml-1.5 rounded-full bg-arini/10 text-arini dark:bg-gold/15 dark:text-gold px-1.5 py-0.5 text-[10px] font-medium">
+                      na caixa central
+                    </span>
+                  )}
                 </div>
               </div>
 
               <div className="flex items-center gap-1.5 flex-wrap">
+                {/* Assumir: é o que permite cobrir férias sem depender do
+                    administrador redistribuir a fila na mão. */}
+                {podeAssumir && (
+                  <Button type="button" size="sm" variant="default" onClick={() => void assumir()}>
+                    <Hand size={14} /> Assumir
+                  </Button>
+                )}
+
                 <select
                   value={selected.prioridade ?? ""}
                   onChange={(e) => void setPrioridade((e.target.value || null) as ConversationPriority | null)}
@@ -874,25 +1043,33 @@ export function AtendimentoInbox({
                   {PRIORITY_ORDER.map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
                 </select>
 
-                <select
-                  value={selected.team_id ?? ""}
-                  onChange={(e) => void assignTeam(e.target.value || null)}
-                  className="text-xs rounded-md border bg-background px-2 py-1.5 max-w-[130px]"
-                  title="Equipe"
-                >
-                  <option value="">Sem equipe</option>
-                  {teams.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
+                {/* Os seletores soltos de equipe/responsável saem de cena
+                    quando o painel de triagem está aberto: dois caminhos
+                    para a mesma decisão, e só um deles grava o log de
+                    transferência e carimba `triada_em`. */}
+                {!mostrarTriagem && (
+                  <>
+                    <select
+                      value={selected.team_id ?? ""}
+                      onChange={(e) => void assignTeam(e.target.value || null)}
+                      className="text-xs rounded-md border bg-background px-2 py-1.5 max-w-[130px]"
+                      title="Equipe"
+                    >
+                      <option value="">Sem equipe</option>
+                      {teams.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                    </select>
 
-                <select
-                  value={selected.responsavel_id ?? ""}
-                  onChange={(e) => void assign(e.target.value || null)}
-                  className="text-xs rounded-md border bg-background px-2 py-1.5 max-w-[140px]"
-                  title="Responsável"
-                >
-                  <option value="">Não atribuído</option>
-                  {agents.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
-                </select>
+                    <select
+                      value={selected.responsavel_id ?? ""}
+                      onChange={(e) => void assign(e.target.value || null)}
+                      className="text-xs rounded-md border bg-background px-2 py-1.5 max-w-[140px]"
+                      title="Responsável"
+                    >
+                      <option value="">Não atribuído</option>
+                      {agents.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                    </select>
+                  </>
+                )}
 
                 <ParticipantsMenu
                   conversationId={selected.id}
@@ -971,6 +1148,20 @@ export function AtendimentoInbox({
                 </button>
               </div>
             </header>
+
+            {/* Transferir / retirar / devolver + histórico. Só para o
+                administrador e só depois da triagem — antes dela o
+                caminho é o painel de triagem lá embaixo. */}
+            {ehAdmin && selected.triada_em && (
+              <AcoesAdmin
+                conversa={selected}
+                teams={teams}
+                agents={agents}
+                membrosPorEquipe={membrosPorEquipe}
+                onAtualizada={(c) => { reconciliar(c); void refreshConversations(); }}
+                onErro={(texto) => setNotice({ tipo: "erro", texto })}
+              />
+            )}
 
             {/* Estado do agent bot — só aparece quando a caixa tem bot. */}
             <BotBadge
@@ -1069,22 +1260,42 @@ export function AtendimentoInbox({
               </div>
             )}
 
-            <Composer
-              cannedResponses={cannedResponses}
-              macros={macros}
-              agents={agents}
-              assinatura={currentUser.assinatura}
-              respondendoA={respondendoA}
-              onCancelarResposta={() => setRespondendoA(null)}
-              enviando={sending}
-              onEnviar={enviar}
-              onAplicarMacro={(id) => void aplicarMacro(id)}
-              provedorCanal={
-                selected.channel_id ? (provedorPorCanal?.[selected.channel_id] ?? null) : null
-              }
-              injetarTexto={textoSugerido}
-              onTextoInjetado={() => setTextoSugerido(null)}
-            />
+            {/* TRIAGEM — fica acima do composer porque, para quem tria,
+                é a ação da tela. */}
+            {mostrarTriagem && (
+              <PainelTriagem
+                conversa={selected}
+                teams={teams}
+                agents={agents}
+                membrosPorEquipe={membrosPorEquipe}
+                onTriada={triada}
+                onErro={(texto) => setNotice({ tipo: "erro", texto })}
+              />
+            )}
+
+            {/* A recepção NÃO atende: enquanto a conversa está na caixa
+                central, ela só classifica. Deixar o composer ali seria
+                convidar a responder um cliente que ainda vai mudar de
+                mão. O administrador mantém o composer — ele pode as duas
+                coisas. */}
+            {!(mostrarTriagem && papel === "recepcao") && (
+              <Composer
+                cannedResponses={cannedResponses}
+                macros={macros}
+                agents={agents}
+                assinatura={currentUser.assinatura}
+                respondendoA={respondendoA}
+                onCancelarResposta={() => setRespondendoA(null)}
+                enviando={sending}
+                onEnviar={enviar}
+                onAplicarMacro={(id) => void aplicarMacro(id)}
+                provedorCanal={
+                  selected.channel_id ? (provedorPorCanal?.[selected.channel_id] ?? null) : null
+                }
+                injetarTexto={textoSugerido}
+                onTextoInjetado={() => setTextoSugerido(null)}
+              />
+            )}
           </>
         )}
       </section>
@@ -1194,6 +1405,41 @@ export function AtendimentoInbox({
           e todo o histórico de mensagens delas.
         </p>
       </Modal>
+    </div>
+  );
+}
+
+/**
+ * Estado vazio da CAIXA CENTRAL. Vazio aqui quer dizer coisas muito
+ * diferentes e o usuário não tem como distinguir sozinho:
+ *   · não chegou nada (o normal, e é boa notícia);
+ *   · chegou, mas o filtro/busca escondeu;
+ *   · o sistema não recebeu nada NUNCA — aí o problema é canal
+ *     desconectado, não fila vazia, e mandar a pessoa esperar seria
+ *     esconder a falha.
+ */
+function VazioCaixaCentral({ filtrando, total }: { filtrando: boolean; total: number }) {
+  if (filtrando) {
+    return (
+      <div className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
+        <Search size={28} className="opacity-40" />
+        <p className="font-medium text-foreground">Nada com esse filtro.</p>
+        <p className="text-xs max-w-[15rem]">
+          Pode haver conversas esperando triagem fora do filtro atual — limpe a busca e
+          os filtros para ver a caixa inteira.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
+      <PartyPopper size={28} className="opacity-40" />
+      <p className="font-medium text-foreground">Tudo triado.</p>
+      <p className="text-xs max-w-[15rem]">
+        {total === 0
+          ? "Nenhuma conversa no sistema ainda. Se os clientes já estão escrevendo, confira as conexões em Canais."
+          : "Nenhuma conversa esperando classificação. As novas aparecem aqui sozinhas."}
+      </p>
     </div>
   );
 }

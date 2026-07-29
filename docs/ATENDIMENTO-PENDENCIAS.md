@@ -27,10 +27,21 @@ As migrações `0031` e `0032` **já foram aplicadas** no Supabase de produção
 | Central de Ajuda | 1 portal, 3 categorias |
 | Migração `0033` (SLA ligado à caixa + trigger) | aplicada |
 
-## 1. Liberar o acesso dos atendentes ⚠️ BLOQUEANTE (2 min)
+## 1. Papel, acesso e FILA de cada pessoa ⚠️ BLOQUEANTE (5 min)
 
-Hoje **só 1 pessoa** tem acesso ao atendimento (a diretoria). Todo o resto do
-time vai bater na tela "sem acesso".
+O fluxo mudou (ver `ATENDIMENTO-FLUXO.md`). Agora não basta liberar o
+acesso — cada pessoa precisa de **papel** e, se for atendente, de **fila**.
+
+**Atendente sem fila não vê absolutamente nada.** É o efeito direto do
+isolamento pedido, e é o erro mais provável no primeiro dia.
+
+Em **Configurações › Agentes**, para cada pessoa:
+1. ligue o acesso;
+2. escolha o papel — Administrador, Recepção ou Atendente;
+3. se for atendente, marque as filas dele (Venda Urbana, Fazenda…).
+
+Hoje só o `admin@arininegociosimobiliarios.com.br` é administrador; os
+outros 6 perfis nasceram como atendente **sem fila nenhuma**.
 
 **Tem tela para isso**: entre em **Configurações › Agentes** e ligue o
 interruptor de cada atendente. (Uma versão anterior deste documento dizia que
