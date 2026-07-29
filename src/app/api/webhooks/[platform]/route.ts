@@ -177,7 +177,10 @@ export async function POST(req: Request, { params }: { params: { platform: strin
         lead_id: leadId,
         contato_nome: extracted.nome,
         contato_telefone: extracted.telefone,
-        setor_responsavel: "recepcao", // triagem inicial
+        // `setor_responsavel` NÃO é mais escrito: até a migração 0040 ele
+        // decidia quem via a conversa (pelo setor do CRM). Agora quem decide
+        // é `triada_em` + a fila, e deixar "recepcao" gravado aqui só faria
+        // o próximo leitor achar que o roteamento passa pelo setor.
         status: "aberta",
       })
       .select("id")

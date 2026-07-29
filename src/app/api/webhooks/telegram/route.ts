@@ -346,7 +346,10 @@ export async function POST(req: Request) {
         lead_id: leadId,
         contato_nome: nome,
         contato_telefone: null,
-        setor_responsavel: "recepcao",
+        // `setor_responsavel` NÃO é mais escrito: até a migração 0040 ele
+        // decidia quem via a conversa (pelo setor do CRM). Agora quem decide
+        // é `triada_em` + a fila, e deixar "recepcao" gravado aqui só faria
+        // o próximo leitor achar que o roteamento passa pelo setor.
         status: "aberta",
       })
       .select("id")
