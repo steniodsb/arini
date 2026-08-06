@@ -116,6 +116,11 @@ na internet.
 Escolha **uma** opção por número (dá para ter vários números, cada um do seu jeito).
 Nada disso eu consigo fazer por você: envolve conta, cartão e aprovação da Meta.
 
+> As três opções estão implementadas ponta a ponta e aparecem em
+> **Atendimento › Canais › Conectar canal**. O que falta em cada uma é
+> **credencial** — nada disso eu consigo obter por você. Hoje há **zero**
+> canais cadastrados (conferido no banco).
+
 ### Opção A — Evolution API (mais rápido, o que eu recomendo para começar)
 
 O código está **pronto dos dois lados** (envio e recebimento, texto e mídia).
@@ -137,7 +142,9 @@ O código está **pronto dos dois lados** (envio e recebimento, texto e mídia).
 - [ ] App no Meta for Developers com o produto WhatsApp.
 - [ ] **Business Verification** aprovada.
 - [ ] Token permanente de **System User** (o de teste expira em 24 h).
-- [ ] Webhook em `/api/webhooks/whatsapp` com o mesmo Verify Token do sistema.
+- [ ] Webhook em `/api/webhooks/whatsapp` com o mesmo Verify Token que você
+      cadastrar no canal. O token pode estar em **Atendimento › Canais** ou na
+      tela antiga **CRM › Integrações** — a rota aceita as duas origens.
 - [ ] App Secret cadastrado (valida a assinatura dos webhooks).
 - [ ] ⚠️ **Avisar a equipe**: o número deixa de funcionar no app do celular.
 

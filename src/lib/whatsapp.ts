@@ -116,7 +116,28 @@ export async function verifyMetaSignature(
   signatureHeader: string | null,
 ): Promise<"ok" | "invalid" | "skip"> {
   const integ = await getConfig(admin, plataforma);
-  const appSecret = integ?.config.app_secret;
+  return conferirAssinaturaMeta(integ?.config.app_secret ?? null, rawBody, signatureHeader);
+}
+
+/**
+ * A conferência em si, sem ir ao banco.
+ *
+ * Existe separada porque o `app_secret` do WhatsApp passou a ter DUAS
+ * origens possíveis: a integração legada do CRM (`social_integrations`) e
+ * o canal cadastrado em Atendimento › Canais (`atendimento_channels`).
+ * Quem sabe qual usar é o webhook, que já resolveu de qual número veio a
+ * mensagem — então ele passa o segredo certo para cá.
+ *
+ * `skip` = não há segredo cadastrado, ninguém consegue validar nada. É
+ * permissivo de propósito (senão ligar a integração exigiria preencher o
+ * segredo antes de qualquer mensagem chegar), e é justamente por isso que
+ * a tela de Integrações pede o App Secret com destaque.
+ */
+export function conferirAssinaturaMeta(
+  appSecret: string | null | undefined,
+  rawBody: string,
+  signatureHeader: string | null,
+): "ok" | "invalid" | "skip" {
   if (!appSecret) return "skip";
   if (!signatureHeader) return "invalid";
 
@@ -126,4 +147,13 @@ export async function verifyMetaSignature(
   const b = Buffer.from(expected);
   if (a.length !== b.length) return "invalid";
   return crypto.timingSafeEqual(a, b) ? "ok" : "invalid";
+}
+
+/** Comparação de segredo em tempo constante (tokens de verificação). */
+export function segredoConfere(recebido: string | null, esperado: string | null): boolean {
+  if (!recebido || !esperado) return false;
+  const a = Buffer.from(recebido);
+  const b = Buffer.from(esperado);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }

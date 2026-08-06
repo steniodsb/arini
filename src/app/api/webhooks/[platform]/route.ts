@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
-import { verifyMetaSignature } from "@/lib/whatsapp";
+import {
+  verifyMetaSignature,
+  conferirAssinaturaMeta,
+  segredoConfere,
+} from "@/lib/whatsapp";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
 import {
   emitirContatoCriado,
@@ -26,6 +30,53 @@ const CONVERSATION_CHANNELS: Record<string, ConversationChannel> = {
   messenger: "messenger",
 };
 
+// =====================================================================
+// WhatsApp Cloud API: DUAS origens de credencial
+//
+// Historicamente esta rota só conhecia `social_integrations` — a tela
+// antiga do CRM. Depois nasceu Atendimento › Canais, que cadastra Cloud
+// API e Coexistence em `atendimento_channels` com os MESMOS campos
+// (phone_number_id, verify_token, app_secret).
+//
+// O efeito de a rota não saber disso era um beco sem saída silencioso:
+// quem conectasse o WhatsApp oficial pelo assistente via o canal ficar
+// "conectado" e conseguia ENVIAR (o despacho lê atendimento_channels),
+// mas não recebia nada — o handshake do webhook falhava por verify_token
+// desconhecido e, se passasse, a mensagem era descartada porque a linha
+// legada estava inativa. Nenhuma tela mostrava erro.
+//
+// Agora as duas origens valem, e o `phone_number_id` do payload diz qual
+// canal recebeu — o que também amarra a conversa ao número certo, para a
+// resposta sair por onde entrou.
+// =====================================================================
+
+type CanalCloud = { id: string; config: Record<string, string> };
+
+async function canaisCloudApi(admin: ReturnType<typeof createSupabaseAdmin>): Promise<CanalCloud[]> {
+  const { data } = await admin
+    .from("atendimento_channels")
+    .select("id, config")
+    .in("provedor", ["cloud_api", "cloud_api_coexistence"]);
+  return ((data ?? []) as { id: string; config: Record<string, string> | null }[]).map((c) => ({
+    id: c.id,
+    config: c.config ?? {},
+  }));
+}
+
+/** `entry[0].changes[0].value.metadata.phone_number_id` — qual número recebeu. */
+function phoneNumberIdDoPayload(payload: Record<string, unknown>): string | null {
+  try {
+    const entry = (payload.entry as unknown[])?.[0] as Record<string, unknown> | undefined;
+    const change = (entry?.changes as unknown[])?.[0] as Record<string, unknown> | undefined;
+    const value = change?.value as Record<string, unknown> | undefined;
+    const meta = value?.metadata as Record<string, unknown> | undefined;
+    const id = meta?.phone_number_id;
+    return typeof id === "string" && id ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Verificação do webhook (Meta/Instagram/Facebook/WhatsApp usam este handshake).
  * GET ?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...
@@ -46,10 +97,24 @@ export async function GET(req: Request, { params }: { params: { platform: string
     .eq("plataforma", params.platform)
     .maybeSingle();
 
-  const expected = (integ?.config as { verify_token?: string } | null)?.verify_token;
-  if (expected && token === expected) {
+  const esperado = (integ?.config as { verify_token?: string } | null)?.verify_token ?? null;
+  if (segredoConfere(token, esperado)) {
     return new Response(challenge ?? "", { status: 200 });
   }
+
+  // Plano B do WhatsApp: o verify_token pode ter sido cadastrado em
+  // Atendimento › Canais em vez da tela antiga do CRM. Sem isto, conectar
+  // o WhatsApp oficial pelo assistente falhava logo no handshake — e a
+  // mensagem da Meta ("não foi possível validar a URL de callback") não
+  // dá pista nenhuma de que o token está no outro lugar.
+  if (params.platform === "whatsapp") {
+    for (const canal of await canaisCloudApi(admin)) {
+      if (segredoConfere(token, canal.config.verify_token ?? null)) {
+        return new Response(challenge ?? "", { status: 200 });
+      }
+    }
+  }
+
   return NextResponse.json({ error: "verify_token inválido" }, { status: 403 });
 }
 
@@ -75,9 +140,29 @@ export async function POST(req: Request, { params }: { params: { platform: strin
 
   const admin = createSupabaseAdmin();
 
+  // Qual canal do Atendimento recebeu esta mensagem (só WhatsApp Cloud).
+  // Serve para três coisas: validar a assinatura com o segredo certo, não
+  // descartar a mensagem quando a linha legada está inativa, e amarrar a
+  // conversa ao número — sem isso a resposta pode sair por outro.
+  let canalCloud: CanalCloud | null = null;
+  if (params.platform === "whatsapp") {
+    const phoneNumberId = phoneNumberIdDoPayload(payload);
+    const canais = await canaisCloudApi(admin);
+    canalCloud =
+      canais.find((c) => c.config.phone_number_id === phoneNumberId) ??
+      // Um canal só cadastrado: não há ambiguidade possível. Vale como
+      // rede de segurança para payload sem `metadata` (a Meta manda alguns
+      // eventos assim) — com dois números, o `find` acima é quem decide.
+      (canais.length === 1 && !phoneNumberId ? canais[0] : null);
+  }
+
   // Assinatura: rejeita só quando há app_secret configurado e não confere.
+  // Com canal do Atendimento identificado, o segredo dele vence — é o que
+  // corresponde ao app da Meta que assinou este POST.
   const sig = req.headers.get("x-hub-signature-256");
-  const verdict = await verifyMetaSignature(admin, params.platform, rawBody, sig);
+  const verdict = canalCloud?.config.app_secret
+    ? conferirAssinaturaMeta(canalCloud.config.app_secret, rawBody, sig)
+    : await verifyMetaSignature(admin, params.platform, rawBody, sig);
   if (verdict === "invalid") {
     return NextResponse.json({ error: "assinatura inválida" }, { status: 403 });
   }
@@ -88,8 +173,11 @@ export async function POST(req: Request, { params }: { params: { platform: strin
     .eq("plataforma", params.platform)
     .maybeSingle();
 
-  // Se a integração não estiver ativa, apenas confirma o recebimento.
-  if (!integ?.ativo) return NextResponse.json({ ok: true, ignored: true });
+  // Só descarta quando NENHUMA das duas origens quer esta mensagem. Antes
+  // bastava a linha legada estar inativa para o canal do Atendimento ser
+  // ignorado em silêncio — o defeito mais caro do fluxo, porque tudo na
+  // tela dizia "conectado".
+  if (!integ?.ativo && !canalCloud) return NextResponse.json({ ok: true, ignored: true });
 
   const extracted = extractContact(payload, params.platform);
 
@@ -121,13 +209,25 @@ export async function POST(req: Request, { params }: { params: { platform: strin
   // 1) Acha-ou-cria a CONVERSA por (canal, external_id do contato).
   const { data: existingConv } = await admin
     .from("conversations")
-    .select("id, lead_id")
+    .select("id, lead_id, channel_id")
     .eq("canal", canal)
     .eq("external_id", contactId)
     .maybeSingle();
 
   let conversationId = existingConv?.id ?? null;
   let leadId = existingConv?.lead_id ?? null;
+
+  // Conversa antiga (de antes de existir canal cadastrado) ganha o vínculo
+  // na primeira mensagem nova. Sem ele o despacho de saída cai no "qualquer
+  // canal conectado do mesmo tipo" — o que, com dois números, responde pelo
+  // errado. Só preenche quando está vazio: nunca sequestra a conversa de um
+  // canal para outro.
+  if (conversationId && canalCloud && !existingConv?.channel_id) {
+    await admin
+      .from("conversations")
+      .update({ channel_id: canalCloud.id })
+      .eq("id", conversationId);
+  }
 
   if (!conversationId) {
     // 2) Dedupe do LEAD: no WhatsApp casa pelo telefone; senão cria um novo.
@@ -175,6 +275,9 @@ export async function POST(req: Request, { params }: { params: { platform: strin
         canal,
         external_id: contactId,
         lead_id: leadId,
+        // Amarra a conversa ao número que recebeu — é o que faz a resposta
+        // sair pelo mesmo canal, e não por qualquer WhatsApp conectado.
+        channel_id: canalCloud?.id ?? null,
         contato_nome: extracted.nome,
         contato_telefone: extracted.telefone,
         // `setor_responsavel` NÃO é mais escrito: até a migração 0040 ele
