@@ -111,12 +111,15 @@ function itensDoPapel(papel: AtendimentoPapel | undefined): Item[] {
 export function AtendimentoNav({
   nome,
   email,
+  cargo,
   disponibilidade,
   avatarUrl,
   papel,
 }: {
   nome: string;
   email: string;
+  /** Cargo do colaborador (0043) — identificação, não permissão. */
+  cargo?: string | null;
   disponibilidade: AgentAvailability;
   avatarUrl?: string | null;
   /** Ver o bloco no topo do arquivo: precisa ser ligado no layout.tsx. */
@@ -241,7 +244,13 @@ export function AtendimentoNav({
 
       {/* Rodapé: agente + tema */}
       <div className="border-t p-2 flex items-center gap-2">
-        <AgentStatusMenu nome={nome} email={email} inicial={disponibilidade} avatarUrl={avatarUrl} />
+        <AgentStatusMenu
+          nome={nome}
+          email={email}
+          cargo={cargo}
+          inicial={disponibilidade}
+          avatarUrl={avatarUrl}
+        />
         <ThemeToggle />
       </div>
 

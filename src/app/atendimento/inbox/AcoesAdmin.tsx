@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import {
   ACAO_TRANSFERENCIA_LABELS,
+  rotuloAgente,
   type AgentOption, type AtendimentoTeam, type Conversation, type Transferencia,
 } from "@/lib/types";
 import { tempoRelativo } from "./ConversationList";
@@ -57,9 +58,12 @@ export function AcoesAdmin({
   const [historico, setHistorico] = useState<Transferencia[] | null>(null);
   const [historicoAberto, setHistoricoAberto] = useState(false);
 
+  // Guarda o rótulo COM cargo: é este mapa que alimenta o resumo do
+  // cabeçalho e o histórico, e "Ana transferiu para Ana" é exatamente o
+  // tipo de linha que o cargo existe para desfazer.
   const nomePorId = useMemo(() => {
     const m = new Map<string, string>();
-    for (const a of agents) m.set(a.id, a.nome);
+    for (const a of agents) m.set(a.id, rotuloAgente(a));
     return m;
   }, [agents]);
 
@@ -182,7 +186,9 @@ export function AcoesAdmin({
                 className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
               >
                 <option value="">Deixar na fila</option>
-                {membros.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                {membros.map((a) => (
+                  <option key={a.id} value={a.id}>{rotuloAgente(a)}</option>
+                ))}
               </select>
             </label>
             <label className="block space-y-1">

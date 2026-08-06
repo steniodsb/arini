@@ -98,6 +98,7 @@ export function PerfilForm({
   nome: nomeInicial,
   email,
   telefone: telefoneInicial,
+  cargo,
   avatarUrl: avatarInicial,
   avatarPath: avatarPathInicial,
   assinatura: assinaturaInicial,
@@ -109,6 +110,13 @@ export function PerfilForm({
   nome: string;
   email: string;
   telefone: string | null;
+  /**
+   * Cargo (0043). Só leitura aqui: quem define como um colaborador se
+   * identifica para o time é a diretoria, em Configurações › Agentes —
+   * do contrário o rótulo deixaria de ser confiável no exato momento em
+   * que ele importa (na hora de assumir um lead).
+   */
+  cargo: string | null;
   avatarUrl: string | null;
   /** Caminho do arquivo no storage (profiles.avatar_path) — usado para apagar o anterior. */
   avatarPath: string | null;
@@ -249,6 +257,12 @@ export function PerfilForm({
             </Field>
             <Field label="E-mail" dica="O e-mail é o seu login e só pode ser alterado por um administrador.">
               <TextInput value={email} readOnly disabled />
+            </Field>
+            <Field
+              label="Cargo"
+              dica="É como você aparece para o time quando assume um lead. Quem define é a diretoria, em Configurações › Agentes."
+            >
+              <TextInput value={cargo ?? "Sem cargo definido"} readOnly disabled />
             </Field>
             <Field label="Telefone">
               <TextInput

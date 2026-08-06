@@ -18,7 +18,7 @@ export default async function CaixasPage() {
     supabase.from("atendimento_inbox_members").select("inbox_id, profile_id"),
     admin
       .from("profiles")
-      .select("id, nome")
+      .select("id, nome, cargo")
       .or("atendimento_access.eq.true,is_admin_central.eq.true")
       .eq("ativo", true)
       .order("nome"),

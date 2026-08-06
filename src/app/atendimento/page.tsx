@@ -39,10 +39,12 @@ export default async function AtendimentoPage() {
       .limit(300),
     supabase.from("canned_responses").select("*").order("titulo"),
     // A RLS de profiles esconde a lista dos não-admins → usa admin p/ montar
-    // o seletor de responsável (só id + nome dos atendentes/diretoria).
+    // o seletor de responsável (id, nome e cargo dos atendentes/diretoria).
+    // O cargo entra aqui e não numa consulta à parte porque é ele que
+    // desempata nome repetido na hora de atribuir ou assumir um lead.
     admin
       .from("profiles")
-      .select("id, nome")
+      .select("id, nome, cargo")
       .or("atendimento_access.eq.true,is_admin_central.eq.true")
       .eq("ativo", true)
       .order("nome"),
@@ -114,6 +116,7 @@ export default async function AtendimentoPage() {
           currentUser={{
             id: profile.id,
             nome: profile.nome,
+            cargo: profile.cargo ?? null,
             assinatura: profile.assinatura ?? null,
           }}
         />

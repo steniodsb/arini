@@ -7,7 +7,7 @@ import {
   PageHeader, Modal, Field, TextInput, TextArea, SelectInput, Switch,
   EmptyState, Card, Alerta, Spinner,
 } from "@/components/atendimento/ui";
-import type { AtendimentoInbox, InboxChannel, PreChatField, AgentOption } from "@/lib/types";
+import { rotuloAgente, type AtendimentoInbox, type InboxChannel, type PreChatField, type AgentOption } from "@/lib/types";
 import {
   Inbox as InboxIcon, Plus, ArrowLeft, Trash2, Check, Settings2, Users,
   MessageSquareText, Shuffle, ClipboardList, Star,
@@ -398,7 +398,7 @@ export function InboxesManager({
                       checked={agentesDaCaixa(a.id)}
                       onChange={(e) => void alternarAgente(rascunho.id, a.id, e.target.checked)}
                     />
-                    {a.nome}
+                    {rotuloAgente(a)}
                   </label>
                 ))}
               </div>

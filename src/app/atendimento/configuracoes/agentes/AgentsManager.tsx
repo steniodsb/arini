@@ -11,11 +11,15 @@ import {
 } from "@/lib/types";
 
 // =====================================================================
-// AGENTES — acesso, PAPEL e FILAS.
+// AGENTES — acesso, CARGO, PAPEL e FILAS.
 //
-// As três colunas respondem perguntas diferentes e nenhuma substitui as
+// As quatro colunas respondem perguntas diferentes e nenhuma substitui as
 // outras:
 //   · ACESSO  — a pessoa entra no sistema de atendimento?
+//   · CARGO   — como ela se identifica para o time (0043). É rótulo, não
+//               permissão: "Corretora", "Gerente de Locação". Aparece ao
+//               lado do nome no seletor de responsável, na triagem e no
+//               histórico de quem assumiu o quê.
 //   · PAPEL   — ela tria, atende ou administra? (eixo da RLS na 0040)
 //   · FILAS   — de quais equipes ela participa?
 //
@@ -35,10 +39,25 @@ type AgentRow = {
   nome: string;
   email: string;
   sector: string;
+  cargo: string | null;
   is_admin_central: boolean;
   atendimento_access: boolean;
   atendimento_papel: AtendimentoPapel;
 };
+
+/** Mesmo limite da rota — a tela avisa antes de o servidor recusar. */
+const CARGO_MAX = 40;
+
+/**
+ * Sugestões de cargo. Não é um enum: imobiliária inventa função nova toda
+ * hora, e travar a lista só faria alguém escrever "Corretor" no campo
+ * errado. É `datalist` — sugere sem impedir.
+ */
+const CARGOS_SUGERIDOS = [
+  "Corretor", "Corretora", "Captador", "Captadora",
+  "Recepcionista", "Gerente de Locação", "Gerente de Vendas",
+  "Marketing", "Financeiro", "Jurídico", "Administrativo", "Diretoria",
+];
 
 type Member = { team_id: string; profile_id: string };
 
@@ -58,6 +77,10 @@ export function AgentsManager({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filasDe, setFilasDe] = useState<AgentRow | null>(null);
+  // O que está sendo digitado no campo de cargo, por agente. Some no blur:
+  // aí a fonte da verdade volta a ser a linha (que já foi gravada, ou
+  // revertida se o servidor recusou).
+  const [rascunhoCargo, setRascunhoCargo] = useState<Record<string, string>>({});
 
   const nomeEquipe = useMemo(() => {
     const m = new Map<string, string>();
@@ -89,6 +112,33 @@ export function AgentsManager({
     if (await salvar(id, { access })) {
       setRows((p) => p.map((r) => (r.id === id ? { ...r, atendimento_access: access } : r)));
     }
+  }
+
+  /**
+   * Grava o cargo no blur (e no Enter), não a cada tecla: seriam dez POSTs
+   * e dez linhas de auditoria para escrever "Corretora". Sai cedo quando
+   * nada mudou, senão trocar de campo já geraria log.
+   */
+  async function salvarCargo(id: string, valor: string) {
+    const limpo = valor.trim().slice(0, CARGO_MAX);
+    const atual = rows.find((r) => r.id === id)?.cargo ?? null;
+    const novo = limpo || null;
+    if (novo === atual) return;
+
+    setRows((p) => p.map((r) => (r.id === id ? { ...r, cargo: novo } : r)));
+    const ok = await salvar(id, { cargo: novo });
+    if (!ok) {
+      setRows((p) => p.map((r) => (r.id === id ? { ...r, cargo: atual } : r)));
+    }
+  }
+
+  function largarCargo(id: string) {
+    setRascunhoCargo((p) => {
+      if (!(id in p)) return p;
+      const resto: Record<string, string> = {};
+      for (const chave of Object.keys(p)) if (chave !== id) resto[chave] = p[chave];
+      return resto;
+    });
   }
 
   async function trocarPapel(id: string, papel: AtendimentoPapel) {
@@ -124,6 +174,13 @@ export function AgentsManager({
 
   return (
     <div className="space-y-3">
+      {/* Uma lista só para a tela inteira — cada linha aponta para ela. */}
+      <datalist id="cargos-sugeridos">
+        {CARGOS_SUGERIDOS.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+
       <Alerta tipo="info">
         <strong>Como o atendimento se organiza:</strong> tudo que chega cai na{" "}
         <strong>caixa central</strong>, que só o administrador e a recepção enxergam.
@@ -133,12 +190,15 @@ export function AgentsManager({
         <br />
         O <strong>administrador</strong> vê tudo, transfere e devolve conversas para a caixa
         central.
+        <br />
+        O <strong>cargo</strong> não muda permissão nenhuma — é só como a pessoa se
+        identifica para o time quando assume um lead.
       </Alerta>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!canManage && (
         <p className="text-xs text-muted-foreground">
-          Só a diretoria pode alterar acesso, papel e filas dos agentes.
+          Só a diretoria pode alterar acesso, cargo, papel e filas dos agentes.
         </p>
       )}
 
@@ -158,7 +218,14 @@ export function AgentsManager({
             <div key={r.id} className="p-3 space-y-2">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">{r.nome}</div>
+                  <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
+                    {r.nome}
+                    {r.cargo && (
+                      <span className="rounded-full border px-1.5 py-px text-[10px] font-normal text-muted-foreground">
+                        {r.cargo}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-muted-foreground truncate">
                     {r.email} · {r.sector}
                   </div>
@@ -180,7 +247,41 @@ export function AgentsManager({
                 </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-2">
+              <div className="grid sm:grid-cols-3 gap-2">
+                {/* -------- Cargo -------- */}
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Cargo
+                  </span>
+                  <input
+                    value={rascunhoCargo[r.id] ?? r.cargo ?? ""}
+                    disabled={!canManage || busy === r.id}
+                    maxLength={CARGO_MAX}
+                    list="cargos-sugeridos"
+                    placeholder="Ex.: Corretora"
+                    onChange={(e) =>
+                      setRascunhoCargo((p) => ({ ...p, [r.id]: e.target.value }))
+                    }
+                    onBlur={(e) => {
+                      const valor = e.target.value;
+                      largarCargo(r.id);
+                      void salvarCargo(r.id, valor);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      // Esc desiste da edição sem gravar.
+                      if (e.key === "Escape") {
+                        largarCargo(r.id);
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    className="w-full rounded-md border bg-background px-2 py-1.5 text-sm disabled:opacity-60"
+                  />
+                  <span className="block text-[11px] text-muted-foreground leading-snug">
+                    Aparece ao lado do nome quando esta pessoa assume um lead.
+                  </span>
+                </label>
+
                 {/* -------- Papel -------- */}
                 <label className="block space-y-1">
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

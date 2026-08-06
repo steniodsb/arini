@@ -13,7 +13,10 @@ export default async function EquipesPage() {
   const [{ data: teams }, { data: members }, { data: agents }] = await Promise.all([
     supabase.from("atendimento_teams").select("*").order("nome"),
     supabase.from("atendimento_team_members").select("team_id, profile_id"),
-    admin.from("profiles").select("id, nome").or("atendimento_access.eq.true,is_admin_central.eq.true").eq("ativo", true).order("nome"),
+    // Com o cargo junto: montar uma fila escolhendo entre três "Ana" sem
+    // saber qual é a corretora e qual é a estagiária é como o time acaba
+    // com o lead na mão da pessoa errada.
+    admin.from("profiles").select("id, nome, cargo").or("atendimento_access.eq.true,is_admin_central.eq.true").eq("ativo", true).order("nome"),
   ]);
 
   return (

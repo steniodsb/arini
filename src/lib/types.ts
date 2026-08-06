@@ -78,6 +78,12 @@ export interface Profile {
   email: string;
   telefone: string | null;
   sector: Sector;
+  /**
+   * Cargo/função exibido ao lado do nome — "Corretora", "Gerente de
+   * Locação". É IDENTIFICAÇÃO, não permissão: quem decide acesso é
+   * `sector` (CRM) e `atendimento_papel` (caixa). Migration 0043.
+   */
+  cargo: string | null;
   is_admin_central: boolean;
   ativo: boolean;
   avatar_url: string | null;
@@ -445,6 +451,25 @@ export interface CannedResponse {
 export interface AgentOption {
   id: string;
   nome: string;
+  /**
+   * Cargo do colaborador (migration 0043). Opcional porque nem toda tela
+   * que monta um `AgentOption` precisa dele — quem seleciona só
+   * `id, nome` continua compilando e cai no rótulo sem cargo.
+   */
+  cargo?: string | null;
+}
+
+/**
+ * "Ana Paula · Corretora" — o rótulo de identificação de um colaborador.
+ *
+ * Existe porque o nome sozinho não basta na hora de assumir um lead: com
+ * três Anas no time, o histórico de transferência e o seletor de
+ * responsável viram adivinhação. Sem cargo cadastrado devolve só o nome,
+ * então dá para usar em qualquer lugar sem checar antes.
+ */
+export function rotuloAgente(a: { nome: string; cargo?: string | null }): string {
+  const cargo = a.cargo?.trim();
+  return cargo ? `${a.nome} · ${cargo}` : a.nome;
 }
 
 export interface AtendimentoLabel {
@@ -1155,7 +1180,7 @@ export type OnboardingPassoId = (typeof ONBOARDING_PASSOS)[number]["id"];
 export type AgendaVista = "kanban" | "timeline" | "mes" | "semana" | "lista";
 
 export const AGENDA_VISTA_LABELS: Record<AgendaVista, string> = {
-  kanban: "Quadro",
+  kanban: "Kanban",
   timeline: "Linha do tempo",
   mes: "Mês",
   semana: "Semana",

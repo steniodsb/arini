@@ -31,6 +31,7 @@ export default async function AtendimentoLayout({
           <AtendimentoNav
             nome={profile?.nome ?? "Agente"}
             email={profile?.email ?? ""}
+            cargo={profile?.cargo ?? null}
             disponibilidade={disponibilidade}
             avatarUrl={profile?.avatar_url ?? null}
             papel={papelDoPerfil(profile)}

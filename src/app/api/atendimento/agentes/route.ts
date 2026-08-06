@@ -8,6 +8,7 @@ import { PAPEL_LABELS, type AtendimentoPapel } from "@/lib/types";
 // POST /api/atendimento/agentes
 //   { profileId, access? }              → liga/desliga o acesso ao inbox
 //   { profileId, atendimento_papel? }   → troca o papel (0040)
+//   { profileId, cargo? }               → identificação do colaborador (0043)
 //
 // Só a diretoria (is_admin_central) pode gerenciar agentes.
 //
@@ -25,12 +26,20 @@ import { PAPEL_LABELS, type AtendimentoPapel } from "@/lib/types";
 // mudança mais sensível desta tela. Escrever isso direto do navegador
 // significaria fazê-la sem deixar rastro nenhum.
 //
-// Os dois campos são independentes e opcionais: a tela manda um ou outro
-// conforme o controle que o usuário mexeu, e não precisa reenviar o
-// estado inteiro da linha.
+// O CARGO veio junto por conveniência de tela, não por segurança: ele não
+// decide acesso a nada, é o rótulo que aparece ao lado do nome quando
+// alguém assume um lead. Passa por aqui porque a tela que o edita é a
+// mesma (Configurações › Agentes) e porque quem define cargo alheio é a
+// diretoria — a checagem já está feita no topo desta rota.
+//
+// Os três campos são independentes e opcionais: a tela manda o que o
+// usuário mexeu, e não precisa reenviar o estado inteiro da linha.
 // =====================================================================
 
 const PAPEIS_VALIDOS: AtendimentoPapel[] = ["administrador", "recepcao", "atendente"];
+
+/** Cabe em uma linha de tabela e num select sem estourar o layout. */
+const CARGO_MAX = 40;
 
 export async function POST(req: Request) {
   const result = await getAtendimentoUser();
@@ -39,7 +48,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "apenas a diretoria pode gerenciar agentes" }, { status: 403 });
   }
 
-  let body: { profileId?: string; access?: boolean; atendimento_papel?: string };
+  let body: {
+    profileId?: string;
+    access?: boolean;
+    atendimento_papel?: string;
+    cargo?: string | null;
+  };
   try {
     body = await req.json();
   } catch {
@@ -57,9 +71,21 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (!temAccess && papel === undefined) {
+
+  // `undefined` = não mexe. String vazia = apagar o cargo (o campo da tela
+  // esvaziado tem que virar "sem cargo", não ser ignorado em silêncio).
+  const temCargo = body.cargo !== undefined;
+  const cargo = temCargo ? (body.cargo ?? "").trim() || null : undefined;
+  if (cargo && cargo.length > CARGO_MAX) {
     return NextResponse.json(
-      { error: "informe access e/ou atendimento_papel" },
+      { error: `o cargo precisa ter no máximo ${CARGO_MAX} caracteres` },
+      { status: 400 },
+    );
+  }
+
+  if (!temAccess && papel === undefined && !temCargo) {
+    return NextResponse.json(
+      { error: "informe access, atendimento_papel e/ou cargo" },
       { status: 400 },
     );
   }
@@ -70,7 +96,7 @@ export async function POST(req: Request) {
   // Também serve de porteiro — linha vazia denuncia profileId inexistente.
   const { data: antes } = await admin
     .from("profiles")
-    .select("id, nome, email, sector, atendimento_access, atendimento_papel, is_admin_central")
+    .select("id, nome, email, sector, cargo, atendimento_access, atendimento_papel, is_admin_central")
     .eq("id", body.profileId)
     .maybeSingle();
   if (!antes) return NextResponse.json({ error: "agente não encontrado" }, { status: 404 });
@@ -78,12 +104,13 @@ export async function POST(req: Request) {
   const patch: Record<string, unknown> = {};
   if (temAccess) patch.atendimento_access = body.access;
   if (papel !== undefined) patch.atendimento_papel = papel;
+  if (temCargo) patch.cargo = cargo;
 
   const { data: alvo, error } = await admin
     .from("profiles")
     .update(patch)
     .eq("id", body.profileId)
-    .select("id, nome, email, sector, atendimento_access, atendimento_papel")
+    .select("id, nome, email, sector, cargo, atendimento_access, atendimento_papel")
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   if (!alvo) return NextResponse.json({ error: "agente não encontrado" }, { status: 404 });
@@ -109,6 +136,21 @@ export async function POST(req: Request) {
       ...base,
       acao: body.access ? "liberou_acesso" : "revogou_acesso",
       detalhes: { ...alvoDescrito, atendimento_access: body.access },
+    });
+  }
+  // O cargo é cosmético, mas "quem me rebaixou de Gerente para Estagiário
+  // no sistema?" é pergunta que aparece — e sem linha no log não tem
+  // resposta. Custa um insert.
+  if (temCargo && cargo !== (antes.cargo as string | null)) {
+    await registrarAuditoria(admin, {
+      ...base,
+      acao: "atualizou",
+      detalhes: {
+        ...alvoDescrito,
+        campo: "cargo",
+        de: (antes.cargo as string | null) ?? null,
+        para: cargo ?? null,
+      },
     });
   }
   if (papel !== undefined && papel !== antes.atendimento_papel) {

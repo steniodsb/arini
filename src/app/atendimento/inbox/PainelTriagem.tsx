@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Send, AlertTriangle } from "lucide-react";
-import type { AgentOption, AtendimentoTeam, Conversation } from "@/lib/types";
+import { rotuloAgente, type AgentOption, type AtendimentoTeam, type Conversation } from "@/lib/types";
 import { formatarEspera, minutosEsperando, esperaCritica } from "./espera";
 
 // =====================================================================
@@ -171,7 +171,7 @@ export function PainelTriagem({
               >
                 <option value="">Deixar na fila (qualquer um assume)</option>
                 {membros.map((a) => (
-                  <option key={a.id} value={a.id}>{a.nome}</option>
+                  <option key={a.id} value={a.id}>{rotuloAgente(a)}</option>
                 ))}
               </select>
               <span className="block text-[11px] text-muted-foreground">
@@ -209,7 +209,12 @@ export function PainelTriagem({
                 <>
                   {" "}
                   <ArrowRight size={11} className="inline -mt-px" />{" "}
-                  <strong>{agents.find((a) => a.id === responsavelId)?.nome}</strong>
+                  <strong>
+                    {(() => {
+                      const alvo = agents.find((a) => a.id === responsavelId);
+                      return alvo ? rotuloAgente(alvo) : "";
+                    })()}
+                  </strong>
                 </>
               )}
             </>

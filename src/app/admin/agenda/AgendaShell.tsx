@@ -755,7 +755,7 @@ export function AgendaShell({
       {painel === "exibicao" && (
         <div className="rounded-lg border bg-card p-3 flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-sm text-arini">
-            <span className="text-muted-foreground">Agrupar o quadro:</span>
+            <span className="text-muted-foreground">Agrupar o Kanban:</span>
             <Select
               value={agrupamento}
               onChange={(e) => navegar({ agrupar: e.target.value as AgendaAgrupamento })}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { type AtendimentoTeam, type AgentOption } from "@/lib/types";
+import { rotuloAgente, type AtendimentoTeam, type AgentOption } from "@/lib/types";
 import { Trash2, Plus } from "lucide-react";
 
 type Member = { team_id: string; profile_id: string };
@@ -82,7 +82,7 @@ export function TeamsManager({
             {agents.map((a) => (
               <label key={a.id} className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={isMember(a.id)} onChange={(e) => void toggleMember(sel.id, a.id, e.target.checked)} />
-                {a.nome}
+                {rotuloAgente(a)}
               </label>
             ))}
           </div>

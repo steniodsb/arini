@@ -117,7 +117,14 @@ export function ParticipantsMenu({
                 <span className="h-5 w-5 shrink-0 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold">
                   {a.nome.charAt(0).toUpperCase()}
                 </span>
-                <span className="flex-1 truncate">{a.nome}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate">{a.nome}</span>
+                  {a.cargo && (
+                    <span className="block text-[10px] text-muted-foreground truncate">
+                      {a.cargo}
+                    </span>
+                  )}
+                </span>
                 {participantes.includes(a.id) && (
                   <Check size={13} className="text-arini dark:text-gold shrink-0" />
                 )}

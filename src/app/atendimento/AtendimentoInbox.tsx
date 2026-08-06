@@ -12,6 +12,7 @@ import {
   type ConversationStatus, type ConversationPriority, type AtendimentoTeam,
   type AtendimentoLabel, type AtendimentoMacro, type MacroAction, type Profile,
   type AtendimentoPapel,
+  rotuloAgente,
 } from "@/lib/types";
 import { ContactPanel } from "./ContactPanel";
 import { ConversationList } from "./inbox/ConversationList";
@@ -68,7 +69,7 @@ export function AtendimentoInbox({
   macros: AtendimentoMacro[];
   /** channel_id -> provedor, para o composer avisar sobre formato de áudio. */
   provedorPorCanal?: Record<string, string>;
-  currentUser: Pick<Profile, "id" | "nome" | "assinatura">;
+  currentUser: Pick<Profile, "id" | "nome" | "cargo" | "assinatura">;
   /**
    * Papel no atendimento (0040). A RLS é quem bloqueia de verdade — isto
    * serve para a tela NÃO oferecer o que o papel não pode fazer e para
@@ -394,7 +395,12 @@ export function AtendimentoInbox({
         return;
       }
       reconciliar(json.conversa);
-      setNotice({ tipo: "info", texto: "Conversa assumida — ela é sua agora." });
+      // Devolve o rótulo com que o time vai te ver. Com dois "Ana" na
+      // fila, "ela é sua agora" não diz a quem a conversa ficou.
+      setNotice({
+        tipo: "info",
+        texto: `Conversa assumida — o time vê "${rotuloAgente(currentUser)}" como responsável.`,
+      });
     } catch {
       setNotice({ tipo: "erro", texto: "Erro de rede ao assumir a conversa." });
     }
@@ -754,6 +760,15 @@ export function AtendimentoInbox({
       (ehAdmin || minhasEquipes.includes(selected.team_id)),
   );
 
+  // "Ana Paula · Corretora" do responsável atual. `null` quando a conversa
+  // não tem dono OU quando o perfil saiu da lista (agente desativado) —
+  // o cabeçalho trata os dois casos.
+  const responsavelRotulo = (() => {
+    if (!selected?.responsavel_id) return null;
+    const dono = agents.find((a) => a.id === selected.responsavel_id);
+    return dono ? rotuloAgente(dono) : null;
+  })();
+
   return (
     <div className="flex h-full min-h-0">
       {/* ================= Lista ================= */}
@@ -1021,6 +1036,16 @@ export function AtendimentoInbox({
                       na caixa central
                     </span>
                   )}
+                  {/* Quem está com este lead, com o cargo junto. O select ao
+                      lado some durante a triagem; esta linha não. */}
+                  {selected.responsavel_id && (
+                    <span className="ml-1.5">
+                      · com{" "}
+                      <strong className="font-medium text-foreground/80">
+                        {responsavelRotulo ?? "atendente removido"}
+                      </strong>
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1066,7 +1091,9 @@ export function AtendimentoInbox({
                       title="Responsável"
                     >
                       <option value="">Não atribuído</option>
-                      {agents.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                      {agents.map((a) => (
+                        <option key={a.id} value={a.id}>{rotuloAgente(a)}</option>
+                      ))}
                     </select>
                   </>
                 )}

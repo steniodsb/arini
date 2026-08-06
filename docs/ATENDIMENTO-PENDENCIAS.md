@@ -38,8 +38,15 @@ isolamento pedido, e é o erro mais provável no primeiro dia.
 
 Em **Configurações › Agentes**, para cada pessoa:
 1. ligue o acesso;
-2. escolha o papel — Administrador, Recepção ou Atendente;
-3. se for atendente, marque as filas dele (Venda Urbana, Fazenda…).
+2. preencha o **cargo** (Corretora, Gerente de Locação…) — é o rótulo que
+   aparece ao lado do nome quando ela assume um lead (migração 0043);
+3. escolha o papel — Administrador, Recepção ou Atendente;
+4. se for atendente, marque as filas dele (Venda Urbana, Fazenda…).
+
+> **Colaborador novo:** crie o login em **CRM › Usuários**. Aquela tela já
+> pergunta setor, cargo, acesso ao Atendimento e papel de uma vez — não
+> precisa mais criar aqui e liberar o acesso lá. A **fila** continua sendo
+> o único passo que sobra para Configurações › Agentes.
 
 Hoje só o `admin@arininegociosimobiliarios.com.br` é administrador; os
 outros 6 perfis nasceram como atendente **sem fila nenhuma**.
@@ -183,6 +190,8 @@ para a cara da Arini:
 | Tokens de API | 🟡 cadastro pronto; **não existe API pública que os valide** |
 | Registro de auditoria | ✅ canais, acesso de agente, contatos, conversas e login — 🟡 falta caixas/macros/SLA |
 | Papéis e permissões | 🟡 cadastro pronto; **quem controla acesso ainda é a RLS** — reescrevê-la é decisão sua (seção 9) |
+| Cargo do colaborador (identificação) | ✅ 0043 — editável em Agentes e na criação do usuário; aparece no seletor de responsável, na triagem, nas filas e no histórico |
+| Criar colaborador já com acesso ao Atendimento | ✅ CRM › Usuários cria login, setor, cargo, acesso e papel numa tela só |
 | Integrações (Slack, Dialogflow) | 🟡 credenciais guardadas; nada é chamado em evento algum |
 | Campanha, SLA e snooze automáticos | 🟡 jobs prontos — 🔑 falta ligar o cron (seção 2.1) |
 | Templates de WhatsApp | ✅ cadastro + sincronizar/enviar à Meta — 🔑 exige canal Cloud API |

@@ -3,7 +3,7 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SECTOR_LABELS, type Profile } from "@/lib/types";
+import { PAPEL_LABELS, SECTOR_LABELS, type Profile } from "@/lib/types";
 import { formatDateBR } from "@/lib/utils";
 import { Pencil } from "lucide-react";
 import Link from "next/link";
@@ -20,7 +20,9 @@ export default async function UsuariosPage() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-3xl text-arini">Usuários</h1>
-        <p className="text-muted-foreground mt-1">Crie acessos individualizados por setor.</p>
+        <p className="text-muted-foreground mt-1">
+          Um login por colaborador, com setor, cargo e acesso ao Atendimento.
+        </p>
       </div>
 
       <Card>
@@ -33,17 +35,31 @@ export default async function UsuariosPage() {
         <CardContent>
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase text-muted-foreground">
-              <tr><th className="py-2">Nome</th><th>E-mail</th><th>Setor</th><th>Status</th><th>Criado em</th><th className="text-right">Ações</th></tr>
+              <tr><th className="py-2">Nome</th><th>E-mail</th><th>Setor</th><th>Atendimento</th><th>Status</th><th>Criado em</th><th className="text-right">Ações</th></tr>
             </thead>
             <tbody>
               {list.map((u) => (
                 <tr key={u.id} className="border-t">
                   <td className="py-2">
                     <a href={`/admin/usuarios/${u.id}`} className="text-arini hover:text-gold-dark font-medium">{u.nome}</a>
+                    {u.cargo && (
+                      <div className="text-xs text-muted-foreground">{u.cargo}</div>
+                    )}
                   </td>
                   <td>{u.email}</td>
                   <td>
                     {u.is_admin_central ? <Badge variant="gold">Admin Central</Badge> : <Badge variant="outline">{SECTOR_LABELS[u.sector]}</Badge>}
+                  </td>
+                  {/* A diretoria é administradora da caixa pela regra do
+                      banco (fn_atendimento_papel), tenha ou não a flag. */}
+                  <td>
+                    {u.is_admin_central || u.atendimento_access ? (
+                      <Badge variant="outline">
+                        {u.is_admin_central ? PAPEL_LABELS.administrador : PAPEL_LABELS[u.atendimento_papel]}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td><Badge variant={u.ativo ? "success" : "muted"}>{u.ativo ? "Ativo" : "Inativo"}</Badge></td>
                   <td>{formatDateBR(u.created_at)}</td>
@@ -57,7 +73,7 @@ export default async function UsuariosPage() {
                   </td>
                 </tr>
               ))}
-              {list.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">Nenhum usuário cadastrado.</td></tr>}
+              {list.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-muted-foreground">Nenhum usuário cadastrado.</td></tr>}
             </tbody>
           </table>
         </CardContent>

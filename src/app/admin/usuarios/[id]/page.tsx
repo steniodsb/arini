@@ -5,7 +5,7 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SECTOR_LABELS, type Profile } from "@/lib/types";
+import { PAPEL_LABELS, SECTOR_LABELS, type Profile } from "@/lib/types";
 import { formatDateBR } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import { HistoryTimeline } from "@/components/crm/HistoryTimeline";
@@ -36,6 +36,7 @@ export default async function CorretorDetailPage({ params }: { params: { id: str
               ) : (
                 <Badge variant="outline">{SECTOR_LABELS[u.sector]}</Badge>
               )}
+              {u.cargo && <Badge variant="outline">{u.cargo}</Badge>}
               <Badge variant={u.ativo ? "success" : "muted"}>{u.ativo ? "Ativo" : "Inativo"}</Badge>
             </div>
           </div>
@@ -48,7 +49,16 @@ export default async function CorretorDetailPage({ params }: { params: { id: str
           <div>E-mail: {u.email ?? "—"}</div>
           <div>Telefone: {u.telefone ?? "—"}</div>
           <div>Setor: {SECTOR_LABELS[u.sector]}</div>
+          <div>Cargo: {u.cargo ?? "—"}</div>
           <div>Cadastrado em: {formatDateBR(u.created_at)}</div>
+          <div>
+            Atendimento:{" "}
+            {u.is_admin_central
+              ? `${PAPEL_LABELS.administrador} (diretoria)`
+              : u.atendimento_access
+                ? PAPEL_LABELS[u.atendimento_papel]
+                : "sem acesso"}
+          </div>
         </CardContent>
       </Card>
 

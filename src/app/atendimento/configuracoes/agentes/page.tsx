@@ -17,7 +17,7 @@ export default async function AgentesPage() {
   const [{ data: agentes }, { data: teams }, { data: membros }] = await Promise.all([
     admin
       .from("profiles")
-      .select("id, nome, email, sector, is_admin_central, atendimento_access, atendimento_papel")
+      .select("id, nome, email, sector, cargo, is_admin_central, atendimento_access, atendimento_papel")
       .eq("ativo", true)
       .order("nome"),
     admin.from("atendimento_teams").select("*").order("nome"),
@@ -29,7 +29,7 @@ export default async function AgentesPage() {
       <div>
         <h1 className="font-display text-xl text-arini dark:text-gold">Agentes</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Quem acessa o Atendimento, com que papel e em quais filas.
+          Quem acessa o Atendimento, com que cargo, que papel e em quais filas.
         </p>
       </div>
       <AgentsManager

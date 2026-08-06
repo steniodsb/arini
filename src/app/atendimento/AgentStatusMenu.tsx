@@ -13,11 +13,14 @@ const OPCOES: AgentAvailability[] = ["online", "ocupado", "ausente", "offline"];
 export function AgentStatusMenu({
   nome,
   email,
+  cargo,
   inicial,
   avatarUrl,
 }: {
   nome: string;
   email: string;
+  /** Cargo do colaborador (0043). Aparece no lugar do status quando existe. */
+  cargo?: string | null;
   inicial: AgentAvailability;
   /** Foto do perfil. Sem ela, cai no círculo com a inicial do nome. */
   avatarUrl?: string | null;
@@ -81,8 +84,11 @@ export function AgentStatusMenu({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-medium truncate">{nome}</span>
+          {/* Com cargo cadastrado, ele vem primeiro: a bolinha colorida
+              sobre o avatar já diz a disponibilidade, e o cargo é a
+              informação que não está representada em nenhum outro lugar. */}
           <span className="block text-[10px] text-muted-foreground truncate">
-            {AVAILABILITY_LABELS[status]}
+            {cargo?.trim() ? `${cargo.trim()} · ${AVAILABILITY_LABELS[status]}` : AVAILABILITY_LABELS[status]}
           </span>
         </span>
       </button>
@@ -91,6 +97,9 @@ export function AgentStatusMenu({
         <div className="absolute bottom-11 left-0 z-50 w-56 rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden">
           <div className="px-3 py-2 border-b">
             <div className="text-xs font-medium truncate">{nome}</div>
+            {cargo?.trim() && (
+              <div className="text-[10px] text-muted-foreground truncate">{cargo.trim()}</div>
+            )}
             <div className="text-[10px] text-muted-foreground truncate">{email}</div>
           </div>
           <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

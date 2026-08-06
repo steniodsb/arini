@@ -17,6 +17,7 @@ export default async function PerfilPage() {
         nome={profile.nome ?? ""}
         email={profile.email ?? user.email ?? ""}
         telefone={profile.telefone}
+        cargo={profile.cargo ?? null}
         avatarUrl={profile.avatar_url}
         // avatar_path nasceu na migration 0034 e ainda não está em Profile;
         // o select("*") já traz a coluna, só falta o tipo saber disso.
