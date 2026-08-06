@@ -121,16 +121,32 @@ Nada disso eu consigo fazer por você: envolve conta, cartão e aprovação da M
 > **credencial** — nada disso eu consigo obter por você. Hoje há **zero**
 > canais cadastrados (conferido no banco).
 
-### Opção A — Evolution API (mais rápido, o que eu recomendo para começar)
+### Opção A — Evolution API ✅ SERVIDOR NO AR, FALTA LER O QR
 
-O código está **pronto dos dois lados** (envio e recebimento, texto e mídia).
+O código está pronto dos dois lados e **o servidor foi provisionado** em
+06/08/2026. Só sobrou o passo que exige o celular na mão.
 
-- [ ] Subir um servidor da Evolution API (Docker + Postgres + Redis).
-- [ ] **Trocar a `AUTHENTICATION_API_KEY` padrão** — servidores com a chave de
-      fábrica são varridos ativamente na internet.
-- [ ] Fixar a tag da imagem (`:v2.3.7`), nunca `:latest`.
-- [ ] HTTPS obrigatório no endereço da Evolution.
-- [ ] Cadastrar o canal em **Atendimento › Canais** e ler o QR Code.
+- [x] Servidor da Evolution API (Docker Swarm na VPSWAVE01, `51.222.55.8`)
+      — stack `evoarini`, imagem `evoapicloud/evolution-api:v2.3.7`, com
+      Postgres e Redis próprios. Arquivos versionados em `deploy/evolution/`.
+- [x] `AUTHENTICATION_API_KEY` aleatória de 24 bytes (nunca a de fábrica —
+      servidores com a chave padrão são varridos ativamente na internet).
+      Guardada em `/opt/evolution-arini/segredos.env` (0600, só root).
+- [x] Tag fixa `:v2.3.7`, nunca `:latest`.
+- [x] HTTPS em `https://evolution-arini.apps.wavehost.com.br`, com
+      Let's Encrypt. Não precisou de DNS novo: já existe wildcard
+      `*.apps.wavehost.com.br` para o mesmo IP.
+- [x] Limites de memória (768M/256M/128M) — a VPS tem 3,8 GB e hospeda
+      outros clientes; sem teto, um pico da Evolution acionaria o OOM
+      killer, que não escolhe de quem é o container que mata.
+- [x] Canal **"WhatsApp Comercial"** já cadastrado em Atendimento › Canais,
+      instância `arini-comercial`, status `desconectado`.
+- [x] Compatibilidade conferida contra a API real: `instance/create` (QR
+      chegou), `connectionState`, `webhook/set` e `instance/delete`.
+- [ ] **Você:** abrir Atendimento › Canais › WhatsApp Comercial, clicar em
+      **Gerar QR Code** e ler no celular (WhatsApp → Aparelhos conectados).
+- [ ] (Opcional) Ligar S3/Minio na Evolution. Sem isso a mídia recebida vem
+      com URL criptografada do WhatsApp — a mensagem chega, o anexo não abre.
 - [ ] (Opcional, mas recomendado) Ligar o **S3/Minio na Evolution**. Sem isso a
       mídia recebida vem com URL criptografada do WhatsApp e o navegador não
       exibe — a mensagem chega, mas o anexo não abre.

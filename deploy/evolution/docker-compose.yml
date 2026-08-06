@@ -1,0 +1,139 @@
+# =====================================================================
+# Evolution API v2.3.7 — gateway de WhatsApp do Atendimento da Arini.
+#
+# Este arquivo é a cópia versionada do que roda em produção na VPSWAVE01
+# (`/opt/evolution-arini/docker-compose.yml`). Existe aqui para a
+# infraestrutura não viver só dentro de um servidor: se a VPS sumir, o
+# ambiente se reconstrói a partir daqui.
+#
+# COMO SUBIR
+#   1. crie /opt/evolution-arini/segredos.env com:
+#        PG_PASS=$(openssl rand -hex 20)
+#        API_KEY=$(openssl rand -hex 24)
+#   2. `set -a; . ./segredos.env; set +a`
+#   3. `docker stack deploy -c docker-compose.yml evoarini`
+#   4. rota no Traefik: ver deploy/evolution/traefik-evolution-arini.yml
+#
+# POR QUE OS LIMITES DE MEMÓRIA NÃO SÃO OPCIONAIS
+# -----------------------------------------------
+# A VPSWAVE01 tem 3,8 GB e hospeda outros clientes (Trust Tools, LAA
+# Turismo, WebCloneAI) além do próprio CRM da Arini. A Evolution usa
+# Baileys, que guarda estado de sessão em memória e cresce com o volume de
+# conversa. Sem teto, um pico dela acionaria o OOM killer do kernel — e o
+# OOM killer não sabe de quem é o container que ele mata. Com teto, um pico
+# derruba a Evolution e mais nada.
+#
+# Medido depois de subir, em repouso: api 180 MB, postgres 38 MB,
+# redis 6 MB. Os limites abaixo são folgados de propósito.
+#
+# POR QUE A TAG É FIXA
+# --------------------
+# `:latest` num gateway não-oficial de WhatsApp é pedir para acordar com a
+# integração quebrada por um breaking change que ninguém pediu. O cliente
+# em src/lib/evolution.ts foi escrito contra o código-fonte da 2.3.7 (a
+# documentação publicada ainda mostra payloads da v1 em vários endpoints).
+#
+# ⚠️ A imagem oficial é `evoapicloud/evolution-api`. Os repositórios
+# `atendimento/evolution-api` e `atendai/evolution-api` NÃO existem mais no
+# Docker Hub — dão "pull access denied", que parece erro de login e não é.
+# =====================================================================
+
+version: "3.8"
+
+services:
+  api:
+    image: evoapicloud/evolution-api:v2.3.7
+    environment:
+      SERVER_URL: https://evolution-arini.apps.wavehost.com.br
+      AUTHENTICATION_API_KEY: ${API_KEY}
+      AUTHENTICATION_TYPE: apikey
+      LANGUAGE: pt-BR
+      # Apagar instância no logout perderia a sessão a cada reconexão.
+      DEL_INSTANCE: "false"
+      LOG_LEVEL: ERROR
+      LOG_COLOR: "false"
+      LOG_BAILEYS: error
+      TELEMETRY: "false"
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${PG_PASS}@postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_arini
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      # Etiqueta e histórico ficam desligados: quem guarda a conversa é o
+      # nosso banco. Duplicar tudo aqui só consome disco da VPS.
+      DATABASE_SAVE_DATA_LABELS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: evolution_arini
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+      CONFIG_SESSION_PHONE_CLIENT: Arini
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      QRCODE_LIMIT: "30"
+      # O webhook é por instância (o nosso app o registra na conexão), não
+      # global. Global mandaria evento de toda instância para a mesma URL.
+      WEBHOOK_GLOBAL_ENABLED: "false"
+    volumes:
+      - instances:/evolution/instances
+    networks:
+      # `interna` fala com postgres/redis; `dokploy-network` é por onde o
+      # Traefik alcança este container para publicar o HTTPS.
+      - interna
+      - dokploy-network
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 768M
+      restart_policy:
+        condition: any
+        delay: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${PG_PASS}
+      POSTGRES_DB: evolution
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - interna
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 256M
+      restart_policy:
+        condition: any
+
+  redis:
+    image: redis:7-alpine
+    # Cache puro: sem persistência e com teto próprio, para o Redis nunca
+    # ser o motivo de a Evolution bater no limite dela.
+    command:
+      ["redis-server","--save","","--appendonly","no","--maxmemory","96mb","--maxmemory-policy","allkeys-lru"]
+    networks:
+      - interna
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 128M
+      restart_policy:
+        condition: any
+
+networks:
+  interna:
+    driver: overlay
+  dokploy-network:
+    external: true
+
+volumes:
+  instances:
+  pgdata:

@@ -1,0 +1,39 @@
+# Rota HTTPS da Evolution API.
+#
+# Cópia versionada de `/etc/dokploy/traefik/dynamic/evolution-arini.yml` na
+# VPSWAVE01. Segue o mesmo formato dos apps do Dokploy (provider `file`) em
+# vez de labels de container — assim quem abrir a pasta do Traefik encontra
+# esta rota junto das outras, no mesmo padrão.
+#
+# O domínio não precisou de registro novo no Cloudflare: existe um wildcard
+# `*.apps.wavehost.com.br` apontando para 51.222.55.8, o mesmo IP. O
+# certificado sai do resolver `letsencrypt` já configurado no Traefik, por
+# desafio HTTP na entrada `web` — por isso o router de `web` existe e só
+# redireciona.
+#
+# O alvo `evoarini_api` é o nome do serviço no Swarm (`<stack>_<service>`),
+# resolvido pelo DNS interno do Docker na rede `dokploy-network`.
+
+http:
+  routers:
+    evolution-arini-web:
+      rule: Host(`evolution-arini.apps.wavehost.com.br`)
+      service: evolution-arini-service
+      middlewares:
+        - redirect-to-https
+      entryPoints:
+        - web
+    evolution-arini-websecure:
+      rule: Host(`evolution-arini.apps.wavehost.com.br`)
+      service: evolution-arini-service
+      middlewares: []
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+  services:
+    evolution-arini-service:
+      loadBalancer:
+        servers:
+          - url: http://evoarini_api:8080
+        passHostHeader: true
