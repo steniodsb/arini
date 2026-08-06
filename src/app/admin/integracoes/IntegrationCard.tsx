@@ -23,6 +23,7 @@ export function IntegrationCard({
   const [verifyToken, setVerifyToken] = useState((config.verify_token as string) ?? "");
   const [accessToken, setAccessToken] = useState((config.access_token as string) ?? "");
   const [extraId, setExtraId] = useState((config.page_id as string) ?? (config.phone_number_id as string) ?? "");
+  const [appSecret, setAppSecret] = useState((config.app_secret as string) ?? "");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -37,6 +38,7 @@ export function IntegrationCard({
       ...config,
       verify_token: verifyToken || null,
       access_token: accessToken || null,
+      app_secret: appSecret || null,
       [platform === "whatsapp" ? "phone_number_id" : "page_id"]: extraId || null,
     };
     const { error } = await supabase
@@ -64,6 +66,22 @@ export function IntegrationCard({
           <div><Label>{idLabel}</Label><Input value={extraId} onChange={(e) => setExtraId(e.target.value)} /></div>
         </div>
         <div><Label>Access Token</Label><Input value={accessToken} onChange={(e) => setAccessToken(e.target.value)} type="password" placeholder="token de acesso" /></div>
+        {/* Sem App Secret o webhook aceita QUALQUER POST que chegue na URL:
+            a validação de assinatura só roda quando há segredo cadastrado.
+            O campo não existia na tela, então na prática nunca rodava. */}
+        <div>
+          <Label>App Secret</Label>
+          <Input
+            value={appSecret}
+            onChange={(e) => setAppSecret(e.target.value)}
+            type="password"
+            placeholder="segredo do app na Meta"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Valida a assinatura dos webhooks. <strong>Sem ele, qualquer um que descubra a URL
+            consegue injetar mensagem falsa</strong> — a URL é pública por natureza.
+          </p>
+        </div>
         <div className="flex items-center justify-between pt-1">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />

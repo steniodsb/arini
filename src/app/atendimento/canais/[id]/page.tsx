@@ -37,10 +37,29 @@ export default async function CanalPage({ params }: { params: { id: string } }) 
 
   const base =
     process.env.NEXT_PUBLIC_SITE_URL || "https://atendimento.arininegociosimobiliarios.com.br";
-  const webhookUrl =
-    canal.provedor === "evolution"
-      ? `${base}/api/webhooks/evolution`
-      : `${base}/api/webhooks/whatsapp`;
+
+  // Cada provedor entrega em um caminho diferente. Antes tudo que não era
+  // Evolution caía em /webhooks/whatsapp — o que passou a mentir quando
+  // Telegram, e-mail, SMS e API genérica entraram.
+  const CAMINHO_WEBHOOK: Record<AtendimentoChannelSafe["provedor"], string> = {
+    evolution: "/api/webhooks/evolution",
+    cloud_api: "/api/webhooks/whatsapp",
+    cloud_api_coexistence: "/api/webhooks/whatsapp",
+    telegram_bot: "/api/webhooks/telegram",
+    email_smtp: "/api/webhooks/email",
+    sms_generico: "/api/webhooks/sms",
+    api_generica: "/api/webhooks/api",
+    widget: "/api/widget",
+  };
+  const webhookUrl = `${base}${CAMINHO_WEBHOOK[canal.provedor]}`;
+
+  // Canais HTTP não têm handshake: o que falta neles é o segredo, e a URL
+  // de entrada só serve com ele embutido (?canal=…&secret=…). Mostrar o
+  // painel de "conectar" aqui prometeria um passo que não existe.
+  const ehHttp =
+    canal.provedor === "email_smtp" ||
+    canal.provedor === "sms_generico" ||
+    canal.provedor === "api_generica";
 
   return (
     <div className="h-full overflow-y-auto">
@@ -72,7 +91,28 @@ export default async function CanalPage({ params }: { params: { id: string } }) 
           </div>
         )}
 
-        <ChannelConnection canal={canal} webhookUrl={webhookUrl} />
+        {ehHttp ? (
+          <div className="rounded-lg border p-4 space-y-2">
+            <h2 className="font-medium text-arini dark:text-gold">Falta o segredo do webhook</h2>
+            <p className="text-sm text-muted-foreground">
+              Este canal não tem passo de conexão — com a credencial salva, ele já envia. O que
+              falta é a <strong>entrada</strong>: gerar o segredo e copiar a URL de webhook
+              completa para cadastrar no provedor.
+            </p>
+            <Link
+              href="/atendimento/configuracoes/api-canal"
+              className="inline-flex items-center gap-1 text-sm text-arini dark:text-gold hover:underline"
+            >
+              Abrir Configurações › Canal por API →
+            </Link>
+            <p className="text-xs text-muted-foreground">
+              Sem o segredo a URL responde 401 — de propósito: ela é pública, e sem prova qualquer
+              um injetaria mensagem falsa no inbox.
+            </p>
+          </div>
+        ) : (
+          <ChannelConnection canal={canal} webhookUrl={webhookUrl} />
+        )}
 
         <div className="rounded-lg border p-4 text-sm space-y-2">
           <h2 className="font-medium text-arini dark:text-gold">Detalhes</h2>

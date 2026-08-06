@@ -34,18 +34,22 @@ async function main() {
     const hash = bcrypt.hashSync(DEFAULT_PASSWORD, 10);
     const id = require("crypto").randomUUID();
 
+    // `confirmed_at` fora do insert: no Postgres do Supabase atual ela é
+    // coluna GERADA (menor entre email_confirmed_at e phone_confirmed_at).
+    // Gravá-la aborta tudo com "cannot insert a non-DEFAULT value into
+    // column confirmed_at" — este script parou de funcionar por isso.
     await c.query(
       `insert into auth.users (
          id, instance_id, email, encrypted_password,
          email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
-         aud, role, created_at, updated_at, confirmed_at,
+         aud, role, created_at, updated_at,
          confirmation_token, recovery_token, email_change_token_new,
          email_change, phone_change, phone_change_token,
          email_change_token_current, reauthentication_token
        ) values (
          $1, '00000000-0000-0000-0000-000000000000', $2, $3,
          now(), '{"provider":"email","providers":["email"]}'::jsonb, $4::jsonb,
-         'authenticated', 'authenticated', now(), now(), now(),
+         'authenticated', 'authenticated', now(), now(),
          '', '', '', '', '', '', '', ''
        )`,
       [id, u.email, hash, JSON.stringify({ nome: u.nome, sector: u.sector })],

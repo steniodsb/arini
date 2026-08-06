@@ -9,6 +9,7 @@
     "lint": "next lint",
     "db:migrate": "node scripts/apply-migrations.js",
     "db:seed-users": "node scripts/seed-users.js",
+    "db:seed-atendimento": "node scripts/seed-atendimento-papeis.js",
     "agenda:demo": "node scripts/seed-agenda-demo.js",
     "agenda:demo:undo": "node scripts/seed-agenda-demo.js --undo"
   },

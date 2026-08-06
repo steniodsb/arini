@@ -6,6 +6,7 @@ import {
   type TelegramMediaTipo,
 } from "@/lib/telegram";
 import { sendOutboundText } from "@/lib/whatsapp";
+import { ehCanalMeta, enviarPorMeta } from "@/lib/meta-messaging";
 import {
   enviarEmail,
   gerarMessageId,
@@ -28,7 +29,11 @@ import type { ConversationChannel, MessageTipo } from "@/lib/types";
 // Ordem de resolução do canal:
 //   1. conversations.channel_id (o canal por onde a conversa entrou)
 //   2. qualquer canal CONECTADO do mesmo `canal` (WhatsApp, etc.)
-//   3. social_integrations (configuração antiga do CRM, só Cloud API)
+//   3. Instagram / Messenger / Facebook → Messenger Platform, com a
+//      credencial de `social_integrations` (ver lib/meta-messaging.ts).
+//      Esses canais nunca têm linha em `atendimento_channels`: eles são
+//      cadastrados no CRM, não aqui.
+//   4. social_integrations (configuração antiga do CRM, só Cloud API)
 // =====================================================================
 
 const GRAPH_VERSION = "v21.0";
@@ -267,7 +272,25 @@ export async function enviarMensagem(
       : cloudSendText(row.config, destino, texto ?? "");
   }
 
-  // 2) Sem canal no Atendimento: cai na integração antiga do CRM (só texto).
+  // 2) Instagram, Messenger e Facebook: Messenger Platform.
+  //
+  // Vem ANTES do ramo legado porque estes canais não têm — e não devem ter
+  // — linha em `atendimento_channels`: a página da Meta é cadastrada uma
+  // vez em CRM › Integrações e serve aos dois sistemas. Aceita mídia, ao
+  // contrário do legado logo abaixo.
+  if (ehCanalMeta(canal)) {
+    const r = await enviarPorMeta(admin, {
+      canal,
+      destino,
+      texto: texto ?? null,
+      media: media ? { url: media.url, tipo: media.tipo, nome: media.nome ?? null } : null,
+    });
+    return r.ok
+      ? { ok: true, externalId: r.externalId, via: `meta_${canal}` }
+      : { ok: false, reason: r.reason };
+  }
+
+  // 3) Sem canal no Atendimento: cai na integração antiga do CRM (só texto).
   if (media) {
     return { ok: false, reason: "nenhum canal conectado para enviar mídia — configure em Canais" };
   }

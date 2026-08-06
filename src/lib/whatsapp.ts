@@ -40,9 +40,14 @@ async function getConfig(
 }
 
 /**
- * Envia uma mensagem de texto pelo canal do contato. Hoje implementa o
- * WhatsApp Cloud API (foco do fluxo). Instagram/Facebook ficam preparados
- * mas retornam "não configurado" até habilitarmos o envio por lá.
+ * Envia texto pelo WhatsApp Cloud API usando a integração LEGADA do CRM
+ * (`social_integrations.whatsapp`), para quem nunca cadastrou um canal em
+ * Atendimento › Canais.
+ *
+ * Só WhatsApp: Instagram, Messenger e Facebook são outro contrato (o
+ * destinatário é um PSID, não um telefone) e vivem em
+ * `src/lib/meta-messaging.ts`. O despacho em `atendimento/outbound.ts`
+ * roteia para lá antes de chegar aqui.
  */
 export async function sendOutboundText(
   admin: SupabaseClient,
@@ -51,7 +56,12 @@ export async function sendOutboundText(
   body: string,
 ): Promise<SendResult> {
   if (canal !== "whatsapp") {
-    return { ok: false, reason: `envio por ${canal} ainda não habilitado` };
+    // Chegar aqui com outro canal é erro de roteamento, não falta de
+    // recurso — daí a mensagem apontar o caminho certo.
+    return {
+      ok: false,
+      reason: `envio por ${canal} não passa por esta função (ver lib/meta-messaging.ts)`,
+    };
   }
 
   const integ = await getConfig(admin, "whatsapp");

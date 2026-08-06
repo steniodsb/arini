@@ -43,6 +43,12 @@ Em **Configurações › Agentes**, para cada pessoa:
 3. escolha o papel — Administrador, Recepção ou Atendente;
 4. se for atendente, marque as filas dele (Venda Urbana, Fazenda…).
 
+> **Contas de teste dos três papéis** já existem (`npm run db:seed-atendimento`):
+> `atendimento.administrador@`, `atendimento.recepcao@` e `atendimento.atendente@`
+> (esta última já dentro da fila **Venda Urbana**). Servem para ver com os
+> próprios olhos o que cada papel enxerga. **Apague ou troque as senhas antes de
+> abrir o sistema para o time** — o script imprime a senha uma única vez.
+
 > **Colaborador novo:** crie o login em **CRM › Usuários**. Aquela tela já
 > pergunta setor, cargo, acesso ao Atendimento e papel de uma vez — não
 > precisa mais criar aqui e liberar o acesso lá. A **fila** continua sendo
@@ -156,6 +162,9 @@ Tudo da Opção B, **mais**:
 - [ ] **Trocar a senha da conta do Chatwoot** compartilhada em conversa
       (`cearini22@gmail.com`).
 - [ ] Definir quem é `admin_central` — só esse perfil cadastra canais e vê tokens.
+- [ ] **Preencher o App Secret** de cada plataforma em **CRM › Integrações**. O campo passou a
+      existir na tela; sem ele o webhook da Meta aceita qualquer POST que chegue na URL, e a URL
+      é pública por natureza.
 
 ## 6. Configuração inicial dentro do sistema (10 min)
 
@@ -178,7 +187,9 @@ para a cara da Arini:
 | Item | Situação |
 |---|---|
 | WhatsApp (Evolution e Cloud API), Telegram, chat do site | ✅ envio e recebimento prontos |
-| E-mail (Resend), SMS, canal via API | ✅ código pronto — 🔑 sem credencial, nada roda |
+| E-mail (Resend), SMS, canal via API | ✅ código pronto **e conectáveis pela tela** (Canais › Conectar canal) — 🔑 sem credencial, nada roda |
+| Instagram / Messenger / Facebook | ✅ recebe **e responde** (texto e anexo) — 🔑 exige Access Token de página em CRM › Integrações e as permissões da Meta |
+| TikTok | 🟡 só vira lead; não existe conversa de duas vias |
 | Anexos, prioridade, snooze, massa, menções, participantes | ✅ pronto |
 | Apagar mensagem, marcar não lida, busca na thread | ✅ pronto |
 | Som e notificação do sistema | ✅ pronto |
