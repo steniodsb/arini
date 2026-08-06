@@ -46,8 +46,14 @@ Em **Configurações › Agentes**, para cada pessoa:
 > **Contas de teste dos três papéis** já existem (`npm run db:seed-atendimento`):
 > `atendimento.administrador@`, `atendimento.recepcao@` e `atendimento.atendente@`
 > (esta última já dentro da fila **Venda Urbana**). Servem para ver com os
-> próprios olhos o que cada papel enxerga. **Apague ou troque as senhas antes de
-> abrir o sistema para o time** — o script imprime a senha uma única vez.
+> próprios olhos o que cada papel enxerga. A senha é a `SEED_USER_PASSWORD` do
+> `.env.local` — a mesma dos demais usuários demo.
+>
+> ⚠️ **As 10 contas do sistema compartilham essa senha.** Serve para demonstrar,
+> não para operar: quando o time entrar de verdade, cada pessoa precisa da
+> própria senha (Meu perfil › Segurança), e as contas `(teste)` devem ser
+> desativadas. Uma senha só, conhecida por todos, num sistema que guarda
+> conversa de cliente, é um incidente esperando data.
 
 > **Colaborador novo:** crie o login em **CRM › Usuários**. Aquela tela já
 > pergunta setor, cargo, acesso ao Atendimento e papel de uma vez — não

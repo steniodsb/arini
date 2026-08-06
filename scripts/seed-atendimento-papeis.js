@@ -18,9 +18,16 @@
 // Uso:
 //   node scripts/seed-atendimento-papeis.js
 //   node scripts/seed-atendimento-papeis.js --senha "MinhaSenhaForte1!"
+//   node scripts/seed-atendimento-papeis.js --resetar-senha
 //
-// Sem --senha, gera uma aleatória por conta e imprime no fim. Ela aparece
-// UMA vez: não fica gravada em lugar nenhum além do hash no banco.
+// A senha padrão é a `SEED_USER_PASSWORD` do .env.local — a mesma dos
+// demais usuários demo (scripts/seed-users.js). Unificar evita a situação
+// em que metade da equipe entra com uma senha e metade com outra, que é
+// como se acaba anotando senha em papel.
+//
+// `--resetar-senha` também troca a senha de quem JÁ existe. Sem a flag, o
+// script cria o que falta e não encosta na senha de ninguém — trocar
+// senha alheia sem pedir é o tipo de coisa que tem que ser explícita.
 // =====================================================================
 
 const crypto = require("crypto");
@@ -71,9 +78,18 @@ function senhaAleatoria() {
   return `Arini-${corpo}!`;
 }
 
-function senhaDoArgumento() {
+/**
+ * Ordem: `--senha` explícito > SEED_USER_PASSWORD do .env.local >
+ * aleatória. A aleatória é o último recurso, para o script nunca criar
+ * conta com senha previsível num ambiente que esqueceu de configurar.
+ */
+function senhaEscolhida() {
   const i = process.argv.indexOf("--senha");
-  return i >= 0 ? process.argv[i + 1] : null;
+  if (i >= 0 && process.argv[i + 1]) return { senha: process.argv[i + 1], origem: "--senha" };
+  if (process.env.SEED_USER_PASSWORD) {
+    return { senha: process.env.SEED_USER_PASSWORD, origem: "SEED_USER_PASSWORD do .env.local" };
+  }
+  return { senha: null, origem: "aleatória por conta" };
 }
 
 async function criarAuthUser(c, conta, senha) {
@@ -120,8 +136,11 @@ async function main() {
   const c = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
   await c.connect();
 
-  const senhaFixa = senhaDoArgumento();
+  const { senha: senhaFixa, origem } = senhaEscolhida();
+  const resetar = process.argv.includes("--resetar-senha");
   const criadas = [];
+
+  console.log(`Senha: ${origem}${resetar ? " · redefinindo também quem já existe" : ""}\n`);
 
   for (const conta of CONTAS) {
     const existente = await c.query(`select id from auth.users where email = $1`, [conta.email]);
@@ -129,7 +148,16 @@ async function main() {
     let senha = null;
 
     if (id) {
-      console.log(`ℹ️  ${conta.email} já existia — perfil atualizado, senha intacta`);
+      if (resetar) {
+        senha = senhaFixa || senhaAleatoria();
+        await c.query(
+          `update auth.users set encrypted_password = $1, updated_at = now() where id = $2`,
+          [bcrypt.hashSync(senha, 10), id],
+        );
+        console.log(`🔑 ${conta.email} já existia — senha redefinida`);
+      } else {
+        console.log(`ℹ️  ${conta.email} já existia — perfil atualizado, senha intacta`);
+      }
     } else {
       senha = senhaFixa || senhaAleatoria();
       id = await criarAuthUser(c, conta, senha);
