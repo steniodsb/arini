@@ -145,36 +145,47 @@
     --destaque-fg: 0 0% 100%;
   }
 
-  /* ATENDIMENTO — tema escuro (superfícies do WhatsApp Web). */
-  html.atendimento.dark {
-    --background: 203 25% 11%;   /* #111B21 */
-    --foreground: 200 16% 93%;   /* #E9EDEF */
-    --card: 202 23% 16%;         /* #202C33 */
-    --card-foreground: 200 16% 93%;
-    --popover: 202 23% 16%;
-    --popover-foreground: 200 16% 93%;
-    --primary: 200 16% 93%;
-    --primary-foreground: 203 25% 11%;
-    --secondary: 202 22% 21%;    /* #2A3942 */
-    --secondary-foreground: 200 16% 93%;
-    --muted: 202 22% 21%;
-    --muted-foreground: 203 9% 61%; /* #8696A0 */
-    --accent: 202 22% 21%;
-    --accent-foreground: 200 16% 93%;
-    --border: 202 20% 24%;
-    --input: 202 20% 24%;
-    --superficie-chat: 204 41% 7%; /* #0B141A */
+  /* -------------------------------------------------------------------
+     ATENDIMENTO — tema escuro.
 
-    --marca: 200 16% 93%;
+     O fundo é o #00140C escolhido pelo Stenio: preto com um resto de
+     verde da marca. A rampa inteira é derivada DELE (mesmo matiz, 156),
+     e não dos cinza-azulados do WhatsApp Web: cartão e borda em azul
+     sobre fundo verde brigam — a tela parece ter duas identidades.
+
+     A escada de profundidade é: thread (mais fundo) → painéis → cartões
+     e bolhas recebidas. Sem essa diferença, mensagem e fundo viram a
+     mesma superfície e a conversa perde a forma.
+     ------------------------------------------------------------------- */
+  html.atendimento.dark {
+    --background: 156 100% 4%;   /* #00140C */
+    --foreground: 150 8% 93%;
+    --card: 157 45% 8%;          /* #0B1E17 — acima do fundo */
+    --card-foreground: 150 8% 93%;
+    --popover: 157 45% 8%;
+    --popover-foreground: 150 8% 93%;
+    --primary: 150 8% 93%;
+    --primary-foreground: 156 100% 4%;
+    --secondary: 156 35% 13%;    /* #162D23 */
+    --secondary-foreground: 150 8% 93%;
+    --muted: 156 35% 13%;
+    --muted-foreground: 150 10% 62%;
+    --accent: 156 35% 13%;
+    --accent-foreground: 150 8% 93%;
+    --border: 156 30% 18%;       /* #203C31 */
+    --input: 156 30% 18%;
+    --superficie-chat: 156 100% 4%; /* o fundo pedido, também na thread */
+
+    --marca: 150 8% 93%;
     --marca-dark: 0 0% 100%;
-    --marca-light: 200 12% 80%;
-    --marca-50: 202 22% 21%;
-    --marca-900: 200 16% 93%;
-    --destaque: 200 16% 93%;
-    --destaque-from: 200 16% 93%;
-    --destaque-to: 200 16% 93%;
-    --destaque-dark: 200 16% 93%;
-    --destaque-fg: 203 25% 11%;
+    --marca-light: 150 8% 80%;
+    --marca-50: 156 35% 13%;
+    --marca-900: 150 8% 93%;
+    --destaque: 150 8% 93%;
+    --destaque-from: 150 8% 93%;
+    --destaque-to: 150 8% 93%;
+    --destaque-dark: 150 8% 93%;
+    --destaque-fg: 156 100% 4%;
   }
 
   /* -------------------------------------------------------------------
@@ -195,7 +206,7 @@
     --acao-fg: 0 0% 100%;
     --ring: 167 100% 33%;
     --bolha-out: 169 100% 18%;   /* #005C4B */
-    --bolha-out-fg: 200 16% 93%;
+    --bolha-out-fg: 150 8% 93%;
   }
 
   /* Verde Arini */
@@ -211,7 +222,7 @@
     --acao-fg: 0 0% 100%;
     --ring: 152 45% 40%;
     --bolha-out: 152 42% 20%;
-    --bolha-out-fg: 200 16% 93%;
+    --bolha-out-fg: 150 8% 93%;
   }
 
   /* Grafite */
