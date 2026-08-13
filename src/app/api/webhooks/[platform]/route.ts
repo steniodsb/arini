@@ -206,13 +206,39 @@ export async function POST(req: Request, { params }: { params: { platform: strin
 
   const contactId = extracted.contactId ?? extracted.telefone ?? "desconhecido";
 
-  // 1) Acha-ou-cria a CONVERSA por (canal, external_id do contato).
-  const { data: existingConv } = await admin
+  // 1) Acha-ou-cria a CONVERSA por (canal, external_id do contato) e, no
+  //    WhatsApp oficial, também pelo NÚMERO que recebeu.
+  //
+  // Com dois números cadastrados, ignorar o `channel_id` juntava numa
+  // conversa só o cliente que escreve para os dois — e a resposta saía
+  // pelo número errado. Instagram/Messenger continuam sem esse filtro:
+  // lá não há linha em `atendimento_channels`, o `channel_id` é sempre
+  // nulo, e filtrar por ele não acharia conversa nenhuma.
+  let buscaConv = admin
     .from("conversations")
     .select("id, lead_id, channel_id")
     .eq("canal", canal)
-    .eq("external_id", contactId)
-    .maybeSingle();
+    .eq("external_id", contactId);
+  if (canalCloud) buscaConv = buscaConv.eq("channel_id", canalCloud.id);
+  const { data: achadas } = await buscaConv
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(1);
+  let existingConv = achadas?.[0] ?? null;
+
+  // Conversa ANTIGA, de antes de existir canal cadastrado: `channel_id`
+  // nulo. Ela precisa ser adotada, não duplicada — senão o histórico do
+  // cliente se parte em duas no dia em que o canal foi criado.
+  if (!existingConv && canalCloud) {
+    const { data: orfas } = await admin
+      .from("conversations")
+      .select("id, lead_id, channel_id")
+      .eq("canal", canal)
+      .eq("external_id", contactId)
+      .is("channel_id", null)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(1);
+    existingConv = orfas?.[0] ?? null;
+  }
 
   let conversationId = existingConv?.id ?? null;
   let leadId = existingConv?.lead_id ?? null;

@@ -6,7 +6,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { uploadAtendimentoMedia, tipoDaMensagemPeloMime, uploadErrorMsg } from "@/lib/upload";
 import {
-  CHANNEL_LABELS, PRIORITY_LABELS, PRIORITY_ORDER, PRIORITY_CLASSES,
+  CHANNEL_LABELS, PRIORITY_LABELS, PRIORITY_ORDER,
   CONVERSATION_STATUS_LABELS,
   type Conversation, type Message, type CannedResponse, type AgentOption,
   type ConversationStatus, type ConversationPriority, type AtendimentoTeam,
@@ -14,6 +14,9 @@ import {
   type AtendimentoPapel,
   rotuloAgente,
 } from "@/lib/types";
+import {
+  EtiquetaChip, PrioridadeChip, StatusChip,
+} from "@/components/atendimento/Chips";
 import { ContactPanel } from "./ContactPanel";
 import { ConversationList } from "./inbox/ConversationList";
 import { MessageThread } from "./inbox/MessageThread";
@@ -56,6 +59,7 @@ export function AtendimentoInbox({
   labels,
   macros,
   provedorPorCanal,
+  canaisPorId,
   currentUser,
   papel,
   membrosPorEquipe,
@@ -69,6 +73,12 @@ export function AtendimentoInbox({
   macros: AtendimentoMacro[];
   /** channel_id -> provedor, para o composer avisar sobre formato de áudio. */
   provedorPorCanal?: Record<string, string>;
+  /**
+   * channel_id -> conexão. Com mais de um número conectado, é o que
+   * permite ver e filtrar POR QUAL deles a conversa entrou. Com um só,
+   * a tela esconde essa informação — seria ruído em toda linha.
+   */
+  canaisPorId?: Record<string, { nome: string; canal: string; telefone: string | null }>;
   currentUser: Pick<Profile, "id" | "nome" | "cargo" | "assinatura">;
   /**
    * Papel no atendimento (0040). A RLS é quem bloqueia de verdade — isto
@@ -113,6 +123,19 @@ export function AtendimentoInbox({
   const [assignFilter, setAssignFilter] = useState<AssignFilter>("todas");
   const [busca, setBusca] = useState("");
   const [canalFiltro, setCanalFiltro] = useState<string>("todos");
+  /** Filtro por CONEXÃO (qual número), diferente do filtro por tipo de canal. */
+  const [conexaoFiltro, setConexaoFiltro] = useState<string>("todas");
+
+  /**
+   * As conexões cadastradas, em lista. Com UMA só, a tela não mostra nem
+   * o filtro nem o rótulo do número: seria a mesma informação repetida em
+   * toda linha, o oposto de ajudar.
+   */
+  const conexoes = useMemo(
+    () => Object.entries(canaisPorId ?? {}).map(([id, c]) => ({ id, ...c })),
+    [canaisPorId],
+  );
+  const multiplasConexoes = conexoes.length > 1;
   const [prioridadeFiltro, setPrioridadeFiltro] = useState<string>("todas");
   const [equipeFiltro, setEquipeFiltro] = useState<string>("todas");
   const [etiquetaFiltro, setEtiquetaFiltro] = useState<string>("todas");
@@ -295,6 +318,7 @@ export function AtendimentoInbox({
       if (assignFilter === "minhas" && c.responsavel_id !== currentUser.id) return false;
       if (assignFilter === "nao_atribuidas" && c.responsavel_id) return false;
       if (canalFiltro !== "todos" && c.canal !== canalFiltro) return false;
+      if (conexaoFiltro !== "todas" && c.channel_id !== conexaoFiltro) return false;
       if (prioridadeFiltro !== "todas") {
         if (prioridadeFiltro === "sem" ? c.prioridade !== null : c.prioridade !== prioridadeFiltro) return false;
       }
@@ -326,12 +350,13 @@ export function AtendimentoInbox({
       return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
     });
   }, [
-    byStatus, assignFilter, busca, currentUser.id, canalFiltro,
+    byStatus, assignFilter, busca, currentUser.id, canalFiltro, conexaoFiltro,
     prioridadeFiltro, equipeFiltro, etiquetaFiltro, ordenacao,
   ]);
 
   const filtrosAtivos =
-    (canalFiltro !== "todos" ? 1 : 0) + (prioridadeFiltro !== "todas" ? 1 : 0) +
+    (canalFiltro !== "todos" ? 1 : 0) + (conexaoFiltro !== "todas" ? 1 : 0) +
+    (prioridadeFiltro !== "todas" ? 1 : 0) +
     (equipeFiltro !== "todas" ? 1 : 0) + (etiquetaFiltro !== "todas" ? 1 : 0);
 
   // ------------------------------------------------------------------
@@ -796,7 +821,7 @@ export function AtendimentoInbox({
               >
                 <SlidersHorizontal size={15} />
                 {filtrosAtivos > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-arini dark:bg-gold text-white dark:text-arini text-[8px] flex items-center justify-center">
+                  <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-acao text-acao-foreground text-[8px] flex items-center justify-center">
                     {filtrosAtivos}
                   </span>
                 )}
@@ -808,10 +833,13 @@ export function AtendimentoInbox({
                   prioridade={prioridadeFiltro} setPrioridade={setPrioridadeFiltro}
                   equipe={equipeFiltro} setEquipe={setEquipeFiltro}
                   etiqueta={etiquetaFiltro} setEtiqueta={setEtiquetaFiltro}
+                  conexao={conexaoFiltro} setConexao={setConexaoFiltro}
+                  conexoes={conexoes}
                   teams={teams} labels={labels}
                   onLimpar={() => {
                     setCanalFiltro("todos"); setPrioridadeFiltro("todas");
                     setEquipeFiltro("todas"); setEtiquetaFiltro("todas");
+                    setConexaoFiltro("todas");
                   }}
                 />
               )}
@@ -914,7 +942,7 @@ export function AtendimentoInbox({
                 onClick={() => setStatusFilter(s)}
                 className={`px-2 py-0.5 rounded-full whitespace-nowrap ${
                   statusFilter === s
-                    ? "bg-arini text-white dark:bg-gold dark:text-arini"
+                    ? "bg-acao text-acao-foreground"
                     : "hover:bg-muted text-muted-foreground"
                 }`}
               >
@@ -965,6 +993,11 @@ export function AtendimentoInbox({
             selecionadas={selecionadas}
             onAlternarSelecao={alternarSelecao}
             modoCaixaCentral={naCaixaCentral}
+            nomePorConexao={
+              multiplasConexoes
+                ? Object.fromEntries(conexoes.map((c) => [c.id, c.nome]))
+                : undefined
+            }
             vazio={
               naCaixaCentral ? (
                 <VazioCaixaCentral
@@ -1020,15 +1053,27 @@ export function AtendimentoInbox({
               <div className="min-w-0">
                 <div className="font-semibold text-sm truncate flex items-center gap-1.5">
                   {contactName(selected)}
-                  {selected.prioridade && (
-                    <span className={`rounded border px-1.5 py-px text-[10px] font-medium ${PRIORITY_CLASSES[selected.prioridade]}`}>
-                      {PRIORITY_LABELS[selected.prioridade]}
-                    </span>
-                  )}
+                  {selected.prioridade && <PrioridadeChip prioridade={selected.prioridade} />}
+                  <StatusChip status={selected.status} />
                 </div>
                 <div className="text-xs text-muted-foreground truncate">
                   {CHANNEL_LABELS[selected.canal]}
                   {selected.contato_telefone ? ` · ${selected.contato_telefone}` : ""}
+                  {/* POR QUAL número esta conversa entrou. Antes de responder,
+                      é a informação que evita falar pelo número errado — e a
+                      resposta sai sempre por este aqui. */}
+                  {multiplasConexoes && selected.channel_id && canaisPorId?.[selected.channel_id] && (
+                    <span
+                      className="ml-1.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-foreground/70"
+                      title={
+                        canaisPorId[selected.channel_id].telefone
+                          ? `Entrou por ${canaisPorId[selected.channel_id].nome} (${canaisPorId[selected.channel_id].telefone}) — a resposta sai por este número`
+                          : `Entrou por ${canaisPorId[selected.channel_id].nome} — a resposta sai por esta conexão`
+                      }
+                    >
+                      {canaisPorId[selected.channel_id].nome}
+                    </span>
+                  )}
                   {selected.status === "adiada" && selected.snoozed_until &&
                     ` · adiada até ${new Date(selected.snoozed_until).toLocaleString("pt-BR")}`}
                   {!selected.triada_em && (
@@ -1200,21 +1245,14 @@ export function AtendimentoInbox({
 
             {/* Etiquetas */}
             <div className="px-3 py-1.5 border-b bg-card/60 flex items-center gap-1.5 flex-wrap shrink-0">
-              {selected.tags.map((t) => {
-                const cor = labelColors.get(t);
-                return (
-                  <span
-                    key={t}
-                    className="inline-flex items-center gap-1 rounded-full text-[11px] px-2 py-0.5"
-                    style={cor ? { backgroundColor: `${cor}22`, color: cor } : undefined}
-                  >
-                    {!cor ? <span className="text-arini dark:text-gold">{t}</span> : t}
-                    <button type="button" onClick={() => removeTag(t)} className="hover:text-red-600" aria-label={`Remover ${t}`}>
-                      <X size={10} />
-                    </button>
-                  </span>
-                );
-              })}
+              {selected.tags.map((t) => (
+                <EtiquetaChip
+                  key={t}
+                  nome={t}
+                  cor={labelColors.get(t)}
+                  onRemover={() => removeTag(t)}
+                />
+              ))}
               <input
                 list="catalogo-etiquetas"
                 value={novaTag}
@@ -1379,9 +1417,7 @@ export function AtendimentoInbox({
               onClick={() => void massaAtualizar({ prioridade: p })}
               className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm"
             >
-              <span className={`rounded border px-1.5 py-px text-[10px] mr-2 ${PRIORITY_CLASSES[p]}`}>
-                {PRIORITY_LABELS[p]}
-              </span>
+              <PrioridadeChip prioridade={p} />
             </button>
           ))}
         </div>
@@ -1493,13 +1529,17 @@ function AcaoMassa({
 
 function PainelFiltros({
   onFechar, canal, setCanal, prioridade, setPrioridade,
-  equipe, setEquipe, etiqueta, setEtiqueta, teams, labels, onLimpar,
+  equipe, setEquipe, etiqueta, setEtiqueta, conexao, setConexao, conexoes,
+  teams, labels, onLimpar,
 }: {
   onFechar: () => void;
   canal: string; setCanal: (v: string) => void;
   prioridade: string; setPrioridade: (v: string) => void;
   equipe: string; setEquipe: (v: string) => void;
   etiqueta: string; setEtiqueta: (v: string) => void;
+  /** Qual CONEXÃO (número/conta), não o tipo de canal. */
+  conexao: string; setConexao: (v: string) => void;
+  conexoes: { id: string; nome: string; canal: string; telefone: string | null }[];
   teams: AtendimentoTeam[]; labels: AtendimentoLabel[];
   onLimpar: () => void;
 }) {
@@ -1524,6 +1564,23 @@ function PainelFiltros({
           ))}
         </select>
       </label>
+      {/* Só aparece com mais de uma conexão: com um número só, filtrar
+          por ele não separa nada. */}
+      {conexoes.length > 1 && (
+        <label className="block space-y-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Número / conexão
+          </span>
+          <select value={conexao} onChange={(e) => setConexao(e.target.value)} className={cls}>
+            <option value="todas">Qualquer</option>
+            {conexoes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.telefone ? `${c.nome} · ${c.telefone}` : c.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="block space-y-1">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Prioridade</span>
         <select value={prioridade} onChange={(e) => setPrioridade(e.target.value)} className={cls}>

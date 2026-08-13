@@ -60,6 +60,7 @@ type FonteOpcoes =
   | "agentes"
   | "equipes"
   | "etiquetas"
+  | "conexoes"
   | "sim_nao";
 
 interface CampoCondicao {
@@ -76,6 +77,9 @@ const CAMPOS_CONDICAO: CampoCondicao[] = [
   { campo: "status", label: "Status da conversa", fonte: "status" },
   { campo: "prioridade", label: "Prioridade", fonte: "prioridade" },
   { campo: "canal", label: "Canal", fonte: "canal" },
+  // Distinta de "Canal": lá é o TIPO (WhatsApp, Telegram), aqui é QUAL
+  // conexão — o que separa o número comercial do número de locação.
+  { campo: "channel_id", label: "Número / conexão", fonte: "conexoes" },
   { campo: "responsavel_id", label: "Responsável", fonte: "agentes" },
   { campo: "team_id", label: "Equipe", fonte: "equipes" },
   { campo: "tags", label: "Etiquetas", fonte: "etiquetas" },
@@ -123,12 +127,15 @@ export function AutomationsManager({
   equipes,
   etiquetas,
   agentes,
+  conexoes = [],
 }: {
   usuarioId: string;
   initialRegras: AtendimentoAutomation[];
   equipes: AtendimentoTeam[];
   etiquetas: AtendimentoLabel[];
   agentes: AgentOption[];
+  /** Conexões cadastradas (multi-WhatsApp). */
+  conexoes?: { id: string; nome: string; telefone: string | null }[];
 }) {
   const [regras, setRegras] = useState<AtendimentoAutomation[]>(initialRegras);
   const [form, setForm] = useState<FormRegra | null>(null);
@@ -314,6 +321,11 @@ export function AutomationsManager({
         return equipes.map((e) => ({ valor: e.id, label: e.nome }));
       case "etiquetas":
         return etiquetas.map((e) => ({ valor: e.nome, label: e.nome }));
+      case "conexoes":
+        return conexoes.map((c) => ({
+          valor: c.id,
+          label: c.telefone ? `${c.nome} · ${c.telefone}` : c.nome,
+        }));
       case "sim_nao":
         return [
           { valor: "sim", label: "Sim" },

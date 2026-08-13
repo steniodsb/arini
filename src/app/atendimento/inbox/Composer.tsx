@@ -232,7 +232,7 @@ export function Composer({
           type="button"
           onClick={() => setModo("resposta")}
           className={`text-xs px-2.5 py-1 rounded-t-md ${
-            !nota ? "bg-arini text-white dark:bg-gold dark:text-arini" : "text-muted-foreground hover:bg-muted"
+            !nota ? "bg-acao text-acao-foreground" : "text-muted-foreground hover:bg-muted"
           }`}
         >
           Responder

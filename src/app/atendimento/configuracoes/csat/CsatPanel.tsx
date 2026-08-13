@@ -165,7 +165,7 @@ export function CsatPanel({ agents }: { agents: AgentOption[] }) {
                         {d.nota} <Star size={12} className="text-amber-500" fill="currentColor" />
                       </span>
                       <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full bg-arini dark:bg-gold" style={{ width: `${pct}%` }} />
+                        <div className="h-full rounded-full bg-acao" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="w-20 shrink-0 text-right text-xs text-muted-foreground">
                         {d.qtd} ({pct.toFixed(0)}%)

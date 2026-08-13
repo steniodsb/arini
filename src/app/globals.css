@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =====================================================================
+   CORES — três camadas, nesta ordem de especificidade:
+
+   1. `:root` / `.dark`   → o padrão da MARCA (verde + dourado). É o que
+      o site público e o CRM enxergam. Os valores aqui reproduzem os hex
+      que antes viviam no tailwind.config.ts, então nada mudou para eles.
+
+   2. `html.atendimento`  → só o sistema de Atendimento. Superfícies
+      neutras (branco / quase-preto), no espírito do WhatsApp Web: o
+      verde deixa de pintar a tela inteira e fica restrito à sidebar.
+
+   3. `html[data-cor="…"]` → a PALETA escolhida (padrão da conta ou do
+      agente). Define a cor de ação (botões, links, foco) e a bolha das
+      mensagens enviadas. Trocar de paleta não mexe em mais nada.
+
+   Por que variável e não classe: `bg-arini` e `text-gold` aparecem em
+   340 lugares. Trocar cor editando 340 arquivos é como o problema se
+   repete; trocar aqui é como ele acaba.
+   ===================================================================== */
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -24,6 +44,38 @@
     --input: 150 10% 88%;
     --ring: 40 92% 58%;
     --radius: 0.625rem;
+
+    /* Marca (classe `arini`) — o verde institucional. */
+    --marca: 150 59% 9%;        /* #092316 */
+    --marca-dark: 150 63% 6%;   /* #061a10 */
+    --marca-light: 150 59% 13%; /* #0e3622 */
+    --marca-50: 147 24% 93%;    /* #e8f1ec */
+    --marca-900: 150 59% 9%;
+
+    /* Destaque (classe `gold`) — o dourado. */
+    --destaque: 43 93% 58%;      /* #F8BF32 */
+    --destaque-from: 43 93% 58%;
+    --destaque-to: 39 85% 46%;   /* #D99212 */
+    --destaque-dark: 39 85% 46%;
+    /* Texto sobre o dourado. Verde, não branco: branco sobre #F8BF32 dá
+       contraste 1.8:1 — ilegível. É a cor do botão dourado do site. */
+    --destaque-fg: 150 59% 9%;
+
+    /* Ação: preenchimento de botão, link e anel de foco. */
+    --acao: 150 59% 9%;
+    --acao-fg: 0 0% 100%;
+
+    /* Conversa: bolha da mensagem enviada e fundo da thread. */
+    --bolha-out: 150 59% 9%;
+    --bolha-out-fg: 0 0% 100%;
+    --superficie-chat: 0 0% 100%;
+
+    /* Sidebar do Atendimento — verde fixo, não segue o tema. */
+    --sidebar: 150 59% 9%;
+    --sidebar-fg: 0 0% 100%;
+    --sidebar-muted: 150 12% 74%;
+    --sidebar-hover: 150 45% 15%;
+    --sidebar-border: 150 40% 17%;
   }
 
   .dark {
@@ -46,6 +98,176 @@
     --border: 153 30% 18%;
     --input: 153 30% 18%;
     --ring: 40 92% 58%;
+
+    --acao: 43 93% 58%;
+    --acao-fg: 150 59% 9%;
+    --bolha-out: 43 93% 58%;
+    --bolha-out-fg: 150 59% 9%;
+    --superficie-chat: 153 60% 8%;
+  }
+
+  /* -------------------------------------------------------------------
+     ATENDIMENTO — tema claro. Superfícies brancas e tinta quase preta;
+     o fundo da thread é o bege do WhatsApp, que separa a conversa dos
+     painéis sem precisar de borda.
+     ------------------------------------------------------------------- */
+  html.atendimento {
+    --background: 0 0% 100%;
+    --foreground: 203 32% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 203 32% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 203 32% 10%;
+    --primary: 203 32% 10%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 216 20% 95%;
+    --secondary-foreground: 203 32% 10%;
+    --muted: 216 20% 96%;
+    --muted-foreground: 205 8% 45%;
+    --accent: 216 20% 95%;
+    --accent-foreground: 203 32% 10%;
+    --border: 205 15% 88%;
+    --input: 205 15% 88%;
+    --superficie-chat: 37 29% 91%; /* #EFEAE2 */
+
+    /* `arini` e `gold` viram TINTA neutra aqui. É o que faz títulos e
+       ícones ficarem pretos/brancos em vez de verdes e dourados — a cor
+       da marca passa a viver só na sidebar e na cor de ação. */
+    --marca: 203 32% 10%;
+    --marca-dark: 203 32% 6%;
+    --marca-light: 203 20% 25%;
+    --marca-50: 216 20% 96%;
+    --marca-900: 203 32% 10%;
+    --destaque: 203 32% 10%;
+    --destaque-from: 203 32% 10%;
+    --destaque-to: 203 32% 10%;
+    --destaque-dark: 203 32% 10%;
+    --destaque-fg: 0 0% 100%;
+  }
+
+  /* ATENDIMENTO — tema escuro (superfícies do WhatsApp Web). */
+  html.atendimento.dark {
+    --background: 203 25% 11%;   /* #111B21 */
+    --foreground: 200 16% 93%;   /* #E9EDEF */
+    --card: 202 23% 16%;         /* #202C33 */
+    --card-foreground: 200 16% 93%;
+    --popover: 202 23% 16%;
+    --popover-foreground: 200 16% 93%;
+    --primary: 200 16% 93%;
+    --primary-foreground: 203 25% 11%;
+    --secondary: 202 22% 21%;    /* #2A3942 */
+    --secondary-foreground: 200 16% 93%;
+    --muted: 202 22% 21%;
+    --muted-foreground: 203 9% 61%; /* #8696A0 */
+    --accent: 202 22% 21%;
+    --accent-foreground: 200 16% 93%;
+    --border: 202 20% 24%;
+    --input: 202 20% 24%;
+    --superficie-chat: 204 41% 7%; /* #0B141A */
+
+    --marca: 200 16% 93%;
+    --marca-dark: 0 0% 100%;
+    --marca-light: 200 12% 80%;
+    --marca-50: 202 22% 21%;
+    --marca-900: 200 16% 93%;
+    --destaque: 200 16% 93%;
+    --destaque-from: 200 16% 93%;
+    --destaque-to: 200 16% 93%;
+    --destaque-dark: 200 16% 93%;
+    --destaque-fg: 203 25% 11%;
+  }
+
+  /* -------------------------------------------------------------------
+     PALETAS — só cor de ação e bolha. Valem apenas dentro do
+     atendimento; o site e o CRM ignoram o `data-cor`.
+     ------------------------------------------------------------------- */
+
+  /* WhatsApp (padrão) */
+  html.atendimento[data-cor="whatsapp"] {
+    --acao: 169 100% 25%;        /* #008069 */
+    --acao-fg: 0 0% 100%;
+    --ring: 169 100% 25%;
+    --bolha-out: 111 91% 91%;    /* #D9FDD3 */
+    --bolha-out-fg: 203 32% 10%;
+  }
+  html.atendimento.dark[data-cor="whatsapp"] {
+    --acao: 167 100% 33%;        /* #00A884 */
+    --acao-fg: 0 0% 100%;
+    --ring: 167 100% 33%;
+    --bolha-out: 169 100% 18%;   /* #005C4B */
+    --bolha-out-fg: 200 16% 93%;
+  }
+
+  /* Verde Arini */
+  html.atendimento[data-cor="verde_arini"] {
+    --acao: 150 59% 13%;
+    --acao-fg: 0 0% 100%;
+    --ring: 150 59% 13%;
+    --bolha-out: 150 59% 13%;
+    --bolha-out-fg: 0 0% 100%;
+  }
+  html.atendimento.dark[data-cor="verde_arini"] {
+    --acao: 152 45% 40%;
+    --acao-fg: 0 0% 100%;
+    --ring: 152 45% 40%;
+    --bolha-out: 152 42% 20%;
+    --bolha-out-fg: 200 16% 93%;
+  }
+
+  /* Grafite */
+  html.atendimento[data-cor="grafite"] {
+    --acao: 0 0% 11%;
+    --acao-fg: 0 0% 100%;
+    --ring: 0 0% 11%;
+    --bolha-out: 0 0% 13%;
+    --bolha-out-fg: 0 0% 100%;
+  }
+  html.atendimento.dark[data-cor="grafite"] {
+    --acao: 0 0% 96%;
+    --acao-fg: 0 0% 10%;
+    --ring: 0 0% 96%;
+    --bolha-out: 240 4% 22%;
+    --bolha-out-fg: 0 0% 95%;
+  }
+
+  /* Azul */
+  html.atendimento[data-cor="azul"] {
+    --acao: 217 91% 45%;
+    --acao-fg: 0 0% 100%;
+    --ring: 217 91% 45%;
+    --bolha-out: 217 91% 45%;
+    --bolha-out-fg: 0 0% 100%;
+  }
+  html.atendimento.dark[data-cor="azul"] {
+    --acao: 217 91% 60%;
+    --acao-fg: 0 0% 100%;
+    --ring: 217 91% 60%;
+    --bolha-out: 217 55% 32%;
+    --bolha-out-fg: 0 0% 98%;
+  }
+
+  /* Dourado — o visual anterior do atendimento, para quem preferir. */
+  html.atendimento[data-cor="dourado"] {
+    --acao: 150 59% 9%;
+    --acao-fg: 0 0% 100%;
+    --ring: 43 93% 58%;
+    --bolha-out: 150 59% 9%;
+    --bolha-out-fg: 0 0% 100%;
+    --destaque: 39 85% 40%;
+    --destaque-from: 43 93% 58%;
+    --destaque-to: 39 85% 46%;
+    --destaque-dark: 39 85% 46%;
+  }
+  html.atendimento.dark[data-cor="dourado"] {
+    --acao: 43 93% 58%;
+    --acao-fg: 150 59% 9%;
+    --ring: 43 93% 58%;
+    --bolha-out: 43 93% 58%;
+    --bolha-out-fg: 150 59% 9%;
+    --destaque: 43 93% 58%;
+    --destaque-from: 43 93% 58%;
+    --destaque-to: 39 85% 46%;
+    --destaque-dark: 39 85% 46%;
   }
 
   * {
@@ -59,22 +281,41 @@
 
 @layer components {
   .text-gold-gradient {
-    background: linear-gradient(135deg, #F8BF32 0%, #D99212 100%);
+    background: linear-gradient(
+      135deg,
+      hsl(var(--destaque-from)) 0%,
+      hsl(var(--destaque-to)) 100%
+    );
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
   }
   .btn-gold {
-    background: linear-gradient(135deg, #F8BF32 0%, #D99212 100%);
-    color: #092316;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--destaque-from)) 0%,
+      hsl(var(--destaque-to)) 100%
+    );
+    color: hsl(var(--destaque-fg));
     font-weight: 600;
-    box-shadow: 0 4px 14px rgba(217, 146, 18, 0.25);
+    box-shadow: 0 4px 14px hsl(var(--destaque-to) / 0.25);
     transition: all 0.2s;
   }
   .btn-gold:hover {
     filter: brightness(1.06);
-    box-shadow: 0 6px 20px rgba(217, 146, 18, 0.4);
+    box-shadow: 0 6px 20px hsl(var(--destaque-to) / 0.4);
+  }
+  /* No atendimento o botão principal é chapado na cor de ação: gradiente
+     dourado sobre tela neutra chamava mais atenção que o conteúdo. */
+  html.atendimento .btn-gold {
+    background: hsl(var(--acao));
+    color: hsl(var(--acao-fg));
+    box-shadow: none;
+  }
+  html.atendimento .btn-gold:hover {
+    filter: brightness(1.08);
+    box-shadow: none;
   }
 }
 

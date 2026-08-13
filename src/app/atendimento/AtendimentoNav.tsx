@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { ThemeSwitch } from "@/components/theme/ThemeSwitch";
 import { AgentStatusMenu } from "./AgentStatusMenu";
 import { PAPEL_LABELS, type AgentAvailability, type AtendimentoPapel } from "@/lib/types";
 
@@ -143,12 +144,12 @@ export function AtendimentoNav({
 
   if (colapsada) {
     return (
-      <nav className="w-14 shrink-0 border-r bg-card flex flex-col items-center py-3 gap-1">
+      <nav className="w-14 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground flex flex-col items-center py-3 gap-1">
         <button
           type="button"
           onClick={() => setColapsada(false)}
           title="Expandir menu"
-          className="p-2 rounded-md text-muted-foreground hover:bg-muted mb-2"
+          className="p-2 rounded-md text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground mb-2"
         >
           <PanelLeftOpen size={16} />
         </button>
@@ -161,31 +162,35 @@ export function AtendimentoNav({
               href={item.href}
               title={item.label}
               className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
-                active ? "bg-arini text-white dark:bg-gold dark:text-arini" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                active
+                  ? "bg-white/15 text-sidebar-foreground"
+                  : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
               }`}
             >
               <Icon size={17} />
             </Link>
           );
         })}
-        <div className="mt-auto"><ThemeToggle compact /></div>
+        <div className="mt-auto"><ThemeToggle compact tom="sidebar" /></div>
       </nav>
     );
   }
 
   return (
-    <nav className="w-56 shrink-0 border-r bg-card flex flex-col">
+    <nav className="w-56 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground flex flex-col">
       {/* Cabeçalho da conta */}
-      <div className="h-12 shrink-0 px-3 flex items-center gap-2 border-b">
-        <Logo size={20} href="/atendimento" />
-        <span className="font-display text-sm leading-none text-arini dark:text-gold truncate flex-1">
+      <div className="h-12 shrink-0 px-3 flex items-center gap-2 border-b border-sidebar-border">
+        {/* A sidebar é verde nos dois temas, então o logo é sempre o de
+            fundo escuro — o padrão sumiria no tema claro. */}
+        <Logo size={20} href="/atendimento" variant="light" />
+        <span className="font-display text-sm leading-none text-sidebar-foreground truncate flex-1">
           Atendimento
         </span>
         <button
           type="button"
           onClick={() => setColapsada(true)}
           title="Recolher menu"
-          className="p-1 rounded text-muted-foreground hover:bg-muted"
+          className="p-1 rounded text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
         >
           <PanelLeftClose size={15} />
         </button>
@@ -203,10 +208,10 @@ export function AtendimentoNav({
                   href={item.href}
                   className={`flex-1 min-w-0 flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors ${
                     active
-                      ? "bg-arini/10 text-arini dark:text-gold font-medium dark:bg-gold/15"
+                      ? "bg-white/15 text-sidebar-foreground font-medium"
                       : item.destaque
-                        ? "border border-arini/30 dark:border-gold/30 text-arini dark:text-gold font-medium hover:bg-arini/10 dark:hover:bg-gold/15"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        ? "border border-white/25 text-sidebar-foreground font-medium hover:bg-sidebar-hover"
+                        : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
                   }`}
                 >
                   <Icon size={16} className="shrink-0" />
@@ -216,7 +221,7 @@ export function AtendimentoNav({
                   <button
                     type="button"
                     onClick={() => setConversasAbertas((v) => !v)}
-                    className="p-1 text-muted-foreground hover:text-foreground"
+                    className="p-1 text-sidebar-muted hover:text-sidebar-foreground"
                     title={conversasAbertas ? "Recolher" : "Expandir"}
                   >
                     {conversasAbertas ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -224,12 +229,12 @@ export function AtendimentoNav({
                 )}
               </div>
               {temFilhos && conversasAbertas && (
-                <div className="ml-4 pl-2 border-l space-y-0.5 my-0.5">
+                <div className="ml-4 pl-2 border-l border-sidebar-border space-y-0.5 my-0.5">
                   {item.children!.map((sub) => (
                     <Link
                       key={sub.href}
                       href={sub.href}
-                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
                     >
                       <sub.icon size={13} className="shrink-0 opacity-70" />
                       <span className="truncate">{sub.label}</span>
@@ -243,20 +248,23 @@ export function AtendimentoNav({
       </div>
 
       {/* Rodapé: agente + tema */}
-      <div className="border-t p-2 flex items-center gap-2">
+      <div className="border-t border-sidebar-border p-2 flex items-center gap-2">
         <AgentStatusMenu
           nome={nome}
           email={email}
           cargo={cargo}
           inicial={disponibilidade}
           avatarUrl={avatarUrl}
+          tom="sidebar"
         />
-        <ThemeToggle />
+        {/* Interruptor direto. O menu de três opções (com "automático")
+            vive em Meu perfil › Aparência — aqui o gesto é um clique. */}
+        <ThemeSwitch tom="sidebar" />
       </div>
 
       {/* O papel fica visível: é ele que explica por que o menu de um
           colega tem itens que o meu não tem. */}
-      <div className="px-3 pb-2 flex items-center gap-1 text-[10px] text-muted-foreground/60">
+      <div className="px-3 pb-2 flex items-center gap-1 text-[10px] text-sidebar-muted/70">
         <Sparkles size={10} /> Arini Atendimento
         {papel && <span className="ml-auto truncate">{PAPEL_LABELS[papel]}</span>}
       </div>

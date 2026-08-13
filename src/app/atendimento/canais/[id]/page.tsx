@@ -11,6 +11,7 @@ import {
 } from "@/lib/types";
 import { formatDateTimeBR } from "@/lib/utils";
 import { ChannelConnection } from "./ChannelConnection";
+import { RemoverCanal } from "./RemoverCanal";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -135,6 +136,13 @@ export default async function CanalPage({ params }: { params: { id: string } }) 
             <dd className="font-mono break-all">{webhookUrl}</dd>
           </dl>
         </div>
+
+        <RemoverCanal
+          canalId={canal.id}
+          nome={canal.nome}
+          ehEvolution={canal.provedor === "evolution"}
+          instancia={canal.instance_name}
+        />
       </div>
     </div>
   );

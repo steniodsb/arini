@@ -163,7 +163,7 @@ export function Switch({
         onClick={() => onChange(!checked)}
         className={cn(
           "mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors relative disabled:opacity-50",
-          checked ? "bg-arini dark:bg-gold" : "bg-muted-foreground/30",
+          checked ? "bg-acao" : "bg-muted-foreground/30",
         )}
       >
         <span

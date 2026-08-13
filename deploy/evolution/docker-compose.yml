@@ -26,6 +26,20 @@
 # Medido depois de subir, em repouso: api 180 MB, postgres 38 MB,
 # redis 6 MB. Os limites abaixo são folgados de propósito.
 #
+# TETO POR NÚMERO CONECTADO
+# -------------------------
+# Cada número é uma sessão Baileys separada dentro do MESMO container: o
+# consumo cresce por instância, não por container. Com um número em
+# operação real (2.962 contatos, 1.138 mensagens sincronizadas), 768M
+# dava folga; com três ou quatro números o mesmo teto vira o gargalo, e
+# o sintoma é cruel — o container reinicia, TODOS os números caem juntos
+# e cada um precisa de QR novo.
+#
+# Regra usada aqui: ~350 MB por número + 400 MB de base. 1,5 GB cobre
+# quatro números com folga e ainda deixa ~2 GB para os outros clientes
+# da VPS. Passando de quatro, o caminho não é subir o teto de novo — é
+# uma segunda stack, para um pico não derrubar a operação inteira.
+#
 # POR QUE A TAG É FIXA
 # --------------------
 # `:latest` num gateway não-oficial de WhatsApp é pedir para acordar com a
@@ -89,7 +103,8 @@ services:
       replicas: 1
       resources:
         limits:
-          memory: 768M
+          # 1,5 GB = base + ~350 MB por número (ver nota no topo).
+          memory: 1536M
       restart_policy:
         condition: any
         delay: 10s

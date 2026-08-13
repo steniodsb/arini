@@ -389,7 +389,7 @@ export function AoVivoPanel() {
                     </div>
                     <div className={`mt-1.5 rounded-full bg-muted overflow-hidden ${tv ? "h-3" : "h-1.5"}`}>
                       <div
-                        className="h-full rounded-full bg-arini dark:bg-gold"
+                        className="h-full rounded-full bg-acao"
                         style={{ width: `${pct}%` }}
                       />
                     </div>

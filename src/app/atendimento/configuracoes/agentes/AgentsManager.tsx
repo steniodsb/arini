@@ -239,7 +239,7 @@ export function AgentsManager({
                     type="button"
                     disabled={!canManage || r.is_admin_central || busy === r.id}
                     onClick={() => void alternarAcesso(r.id, !r.atendimento_access)}
-                    className={`relative h-6 w-11 rounded-full transition-colors ${habilitado ? "bg-arini" : "bg-muted"} ${(!canManage || r.is_admin_central) ? "opacity-50" : ""}`}
+                    className={`relative h-6 w-11 rounded-full transition-colors ${habilitado ? "bg-acao" : "bg-muted"} ${(!canManage || r.is_admin_central) ? "opacity-50" : ""}`}
                     title={habilitado ? "Com acesso" : "Sem acesso"}
                   >
                     <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${habilitado ? "left-[22px]" : "left-0.5"}`} />
@@ -371,7 +371,7 @@ export function AgentsManager({
                 >
                   <span
                     className={`mt-0.5 h-4 w-4 shrink-0 rounded border flex items-center justify-center ${
-                      dentro ? "bg-arini border-arini text-white dark:bg-gold dark:border-gold dark:text-arini" : ""
+                      dentro ? "bg-acao border-acao text-acao-foreground" : ""
                     }`}
                   >
                     {dentro && <Check size={11} />}

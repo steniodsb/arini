@@ -42,6 +42,8 @@ import type {
 export interface ConversaContexto {
   id: string;
   canal?: ConversationChannel | string | null;
+  /** Conexão que recebeu (multi-WhatsApp). Nulo em canais sem cadastro. */
+  channel_id?: string | null;
   status?: ConversationStatus | null;
   prioridade?: ConversationPriority | null;
   responsavel_id?: string | null;
@@ -82,6 +84,8 @@ function lerCampo(campo: string, ctx: ContextoAutomacao): ValorCampo {
       return c.prioridade ?? null;
     case "canal":
       return c.canal ?? null;
+    case "channel_id":
+      return c.channel_id ?? null;
     case "responsavel_id":
       return c.responsavel_id ?? null;
     case "team_id":

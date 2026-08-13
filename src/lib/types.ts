@@ -707,6 +707,55 @@ export const PRIORITY_CLASSES: Record<ConversationPriority, string> = {
   baixa: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30",
 };
 
+/**
+ * Bolinha cheia da prioridade. Existe porque numa lista densa o chip
+ * inteiro rouba a atenção do nome do contato: onde cabe pouco, entra a
+ * cor sozinha; onde cabe texto, entra o chip de PRIORITY_CLASSES.
+ */
+export const PRIORITY_DOT: Record<ConversationPriority, string> = {
+  urgente: "bg-red-500",
+  alta: "bg-orange-500",
+  media: "bg-amber-500",
+  baixa: "bg-sky-500",
+};
+
+/** Cor de cada STATUS da conversa — mesma gramática visual da prioridade. */
+export const STATUS_CLASSES: Record<ConversationStatus, string> = {
+  aberta: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  pendente: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+  resolvida: "bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30",
+  adiada: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+};
+
+/**
+ * Os mesmos significados em HEX, para gráfico.
+ *
+ * Recharts não entende classe do Tailwind — e sem estes mapas o relatório
+ * pintava "Urgente" com a cor genérica da paleta, enquanto a caixa de
+ * entrada pintava de vermelho. Cor que muda de tela para tela deixa de
+ * ser informação e vira decoração.
+ */
+export const PRIORITY_HEX: Record<ConversationPriority, string> = {
+  urgente: "#ef4444",
+  alta: "#f97316",
+  media: "#f59e0b",
+  baixa: "#0ea5e9",
+};
+
+export const STATUS_HEX: Record<ConversationStatus, string> = {
+  aberta: "#10b981",
+  pendente: "#0ea5e9",
+  resolvida: "#94a3b8",
+  adiada: "#f59e0b",
+};
+
+export const STATUS_DOT: Record<ConversationStatus, string> = {
+  aberta: "bg-emerald-500",
+  pendente: "bg-sky-500",
+  resolvida: "bg-slate-400",
+  adiada: "bg-amber-500",
+};
+
 export const CHANNEL_LABELS: Record<ConversationChannel, string> = {
   whatsapp: "WhatsApp",
   instagram: "Instagram",

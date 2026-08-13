@@ -1,69 +1,45 @@
 # Atendimento — o que depende de VOCÊ (Stenio)
 
-Tudo aqui é ação **fora do código**. As ondas **A a I** estão entregues, mais
-o fluxo de caixa central e triagem (ver `ATENDIMENTO-FLUXO.md`):
-`npm run build` verde com **129 rotas**, migrações **0031–0042 já aplicadas**
+Atualizado em **13/08/2026**, de madrugada, com o estado conferido direto
+no banco de produção, no servidor da Evolution e nos endpoints públicos —
+não no que a documentação dizia.
+
+`npm run build` verde com **132 rotas**. Migrações **0031–0047 aplicadas**
 em produção.
 
-Ordem sugerida: 1 → 2 → 3. Sem os itens 1 e 2 o sistema abre mas não recebe
-mensagem nenhuma.
+**O resumo de uma linha:** o WhatsApp está no ar e recebendo; o que trava
+o resto é o time não ter acesso (item 1), o cron não estar ligado (item 2)
+e as credenciais da Meta (item 4).
 
 ---
 
-## 0. Banco de dados — ✅ JÁ FEITO, não precisa fazer nada
+## 0. Banco de dados — ✅ nada a fazer
 
-As migrações `0031` e `0032` **já foram aplicadas** no Supabase de produção
-(`vdqbwlxmaagjnfpcajwt`). Verificado em 26/07/2026 direto no banco:
+Todas as migrações estão aplicadas, incluindo as desta madrugada:
 
-| Item | Estado |
+| Migração | O que fez |
 |---|---|
-| Tabelas `atendimento_*` | 22 criadas |
-| Colunas novas em `conversations` | `prioridade`, `snoozed_until`, `inbox_id` ✅ |
-| Função `fn_despertar_conversas_adiadas` | existe |
-| Caixa de entrada padrão | 1 |
-| Horário comercial | 7 linhas (seg–sex 8–18, sáb 8–12) |
-| Política de SLA "Padrão" | 1 |
-| Etiquetas / respostas rápidas / macros | 5 / 4 / 1 |
-| Atributos personalizados | 3 |
-| Central de Ajuda | 1 portal, 3 categorias |
-| Migração `0033` (SLA ligado à caixa + trigger) | aplicada |
+| `0044` | Paleta de cores (padrão da conta + escolha do agente) |
+| `0045` | Índice de busca da conversa por conexão |
+| `0046` | **Unicidade por conexão** — o que destravou o 2º WhatsApp |
+| `0047` | Renomear/remover etiqueta dentro das conversas |
 
-## 1. Papel, acesso e FILA de cada pessoa ⚠️ BLOQUEANTE (5 min)
+## 1. Acesso, papel e FILA de cada pessoa ⚠️ BLOQUEANTE (10 min)
 
-O fluxo mudou (ver `ATENDIMENTO-FLUXO.md`). Agora não basta liberar o
-acesso — cada pessoa precisa de **papel** e, se for atendente, de **fila**.
+Conferido agora: **`admin@arininegociosimobiliarios.com.br` está com
+`atendimento_access = false`**. Hoje só as três contas de teste
+(`atendimento.administrador@`, `atendimento.recepcao@`,
+`atendimento.atendente@`) entram no sistema. Das 9 filas, só *Venda
+Urbana* tem 1 membro — e é a conta de teste.
 
-**Atendente sem fila não vê absolutamente nada.** É o efeito direto do
-isolamento pedido, e é o erro mais provável no primeiro dia.
+Em **Configurações › Agentes**, para cada pessoa: ligue o acesso, preencha
+o cargo, escolha o papel e — se for atendente — marque as **filas**.
 
-Em **Configurações › Agentes**, para cada pessoa:
-1. ligue o acesso;
-2. preencha o **cargo** (Corretora, Gerente de Locação…) — é o rótulo que
-   aparece ao lado do nome quando ela assume um lead (migração 0043);
-3. escolha o papel — Administrador, Recepção ou Atendente;
-4. se for atendente, marque as filas dele (Venda Urbana, Fazenda…).
+> **Atendente sem fila não vê absolutamente nada.** A tela de Filas agora
+> avisa disso na cara: ela lista quem está fora de todas as filas e quais
+> filas estão sem ninguém.
 
-> **Contas de teste dos três papéis** já existem (`npm run db:seed-atendimento`):
-> `atendimento.administrador@`, `atendimento.recepcao@` e `atendimento.atendente@`
-> (esta última já dentro da fila **Venda Urbana**). Servem para ver com os
-> próprios olhos o que cada papel enxerga. A senha é a `SEED_USER_PASSWORD` do
-> `.env.local` — a mesma dos demais usuários demo.
->
-> ⚠️ **As 10 contas do sistema compartilham essa senha.** Serve para demonstrar,
-> não para operar: quando o time entrar de verdade, cada pessoa precisa da
-> própria senha (Meu perfil › Segurança), e as contas `(teste)` devem ser
-> desativadas. Uma senha só, conhecida por todos, num sistema que guarda
-> conversa de cliente, é um incidente esperando data.
-
-> **Colaborador novo:** crie o login em **CRM › Usuários**. Aquela tela já
-> pergunta setor, cargo, acesso ao Atendimento e papel de uma vez — não
-> precisa mais criar aqui e liberar o acesso lá. A **fila** continua sendo
-> o único passo que sobra para Configurações › Agentes.
-
-Hoje só o `admin@arininegociosimobiliarios.com.br` é administrador; os
-outros 6 perfis nasceram como atendente **sem fila nenhuma**.
-
-Se ainda não conseguir entrar para usar a tela:
+Se você não conseguir nem entrar para usar a tela:
 
 ```sql
 update public.profiles
@@ -71,236 +47,170 @@ update public.profiles
  where email = 'seu@email.com';
 ```
 
-## 2. Deploy e domínio ⚠️ BLOQUEANTE
+⚠️ **As 10 contas compartilham a senha `Arini2026@!`.** Serve para
+demonstrar, não para operar: antes de abrir para o time, cada pessoa
+precisa da própria senha (Meu perfil › Segurança) e as contas `(teste)`
+devem ser desativadas.
 
-- [ ] **`atendimento.arininegociosimobiliarios.com.br`** apontando para o MESMO
-      projeto do site/CRM (não crie projeto novo — o `middleware.ts` já roteia
-      por subdomínio).
-- [ ] SSL do subdomínio (automático na Vercel depois do DNS propagar).
-- [ ] **`NEXT_PUBLIC_SITE_URL`** em produção com a URL do atendimento.
-      Sem ela a URL de webhook mostrada na tela de Canais sai errada e a
-      Evolution/Meta não conseguem entregar mensagem.
-- [ ] Confirmar `SUPABASE_SERVICE_ROLE_KEY` no ambiente de produção.
-- [ ] Confirmar as variáveis do **Cloudflare R2** (`R2_*` +
-      `NEXT_PUBLIC_STORAGE_DRIVER=r2`). É por onde sobem os **anexos** da
-      conversa. Sem R2 ele cai no Supabase Storage — funciona, mas o bucket
-      precisa aceitar os MIMEs de áudio/vídeo/PDF.
+## 2. Cron dos jobs ⚠️ BLOQUEANTE (5 min)
 
-### 2.1 Ligar o cron dos jobs (5 min) — destrava 3 coisas de uma vez
+`POST /api/atendimento/jobs` em produção responde **503** — nem
+`ATENDIMENTO_JOBS_SECRET` nem `CRON_SECRET` existem no ambiente. Enquanto
+isso: **SLA não é marcado, conversa adiada não desperta e campanha não
+sai**. O 503 é proposital (endpoint aberto na internet seria pior).
 
-Existe um endpoint que roda as tarefas de fundo: **despertar conversa adiada**,
-**marcar violação de SLA** e **enviar as campanhas**. Ele não roda sozinho —
-precisa de alguém chamando de minuto em minuto.
-
-**Na Vercel**, o agendamento já está pronto em `vercel.json` (a cada 5 min).
-Você só precisa:
-
-- [ ] Definir **`CRON_SECRET`** nas variáveis de ambiente. A Vercel manda esse
-      valor sozinha no `Authorization: Bearer`, então não há mais nada a fazer.
-
-**No VPS/Dokploy** (que é onde o resto do projeto roda hoje):
-
-- [ ] Definir **`ATENDIMENTO_JOBS_SECRET`** (qualquer string longa e aleatória).
-- [ ] Agendar no cron:
+No Dokploy, defina `ATENDIMENTO_JOBS_SECRET` (string longa e aleatória) e
+agende de 5 em 5 minutos — os três jobs são idempotentes:
 
 ```bash
-curl -X POST https://atendimento.arininegociosimobiliarios.com.br/api/atendimento/jobs -H "x-jobs-secret: SEU_SEGREDO"
+curl -X POST https://arininegociosimobiliarios.com.br/api/atendimento/jobs -H "x-jobs-secret: SEU_SEGREDO"
 ```
 
-De minuto em minuto é seguro: os três jobs são idempotentes. **Sem nenhuma das
-duas variáveis o endpoint responde 503** — é proposital, para não ficar aberto
-na internet.
+O que **já está certo** (conferido): DNS de
+`atendimento.arininegociosimobiliarios.com.br` apontando para o mesmo
+servidor, SSL funcionando, `/atendimento/login` respondendo 200 e o
+webhook da Evolution entregando.
 
-## 3. WhatsApp — decidir o caminho 🔑 DECISÃO SUA
+## 3. WhatsApp — ✅ CONECTADO
 
-Escolha **uma** opção por número (dá para ter vários números, cada um do seu jeito).
-Nada disso eu consigo fazer por você: envolve conta, cartão e aprovação da Meta.
+O número **55 34 99745-140** ("Arini Negócios Imobiliários") está `open`
+na instância `arini-comercial`: 2.962 contatos, 1.138 mensagens
+sincronizadas e, nas últimas 24 h, **100 mensagens de entrada e 100 de
+saída** gravadas no banco. Não há mais nada a fazer aqui.
 
-> As três opções estão implementadas ponta a ponta e aparecem em
-> **Atendimento › Canais › Conectar canal**. O que falta em cada uma é
-> **credencial** — nada disso eu consigo obter por você. Hoje há **zero**
-> canais cadastrados (conferido no banco).
+### Ligar um SEGUNDO número (ou terceiro)
 
-### Opção A — Evolution API ✅ SERVIDOR NO AR, FALTA LER O QR
+Agora funciona ponta a ponta. **Atendimento › Canais › Conectar canal ›
+Evolution API**, com o mesmo servidor e a mesma API key do primeiro,
+mudando só o **nome da instância** (ex.: `arini-locacao`), e leia o QR com
+o outro chip.
 
-O código está pronto dos dois lados e **o servidor foi provisionado** em
-06/08/2026. Só sobrou o passo que exige o celular na mão.
+O que muda na tela quando existe mais de um número:
+- cada conversa mostra **por qual número** entrou, e responde por ele;
+- a caixa ganha o filtro **Número / conexão**;
+- as automações ganham a condição **Número / conexão** — é assim que se
+  faz "o que entrar no número de locação vai para a fila Locação".
 
-- [x] Servidor da Evolution API (Docker Swarm na VPSWAVE01, `51.222.55.8`)
-      — stack `evoarini`, imagem `evoapicloud/evolution-api:v2.3.7`, com
-      Postgres e Redis próprios. Arquivos versionados em `deploy/evolution/`.
-- [x] `AUTHENTICATION_API_KEY` aleatória de 24 bytes (nunca a de fábrica —
-      servidores com a chave padrão são varridos ativamente na internet).
-      Guardada em `/opt/evolution-arini/segredos.env` (0600, só root).
-- [x] Tag fixa `:v2.3.7`, nunca `:latest`.
-- [x] HTTPS em `https://evolution-arini.apps.wavehost.com.br`, com
-      Let's Encrypt. Não precisou de DNS novo: já existe wildcard
-      `*.apps.wavehost.com.br` para o mesmo IP.
-- [x] Limites de memória (768M/256M/128M) — a VPS tem 3,8 GB e hospeda
-      outros clientes; sem teto, um pico da Evolution acionaria o OOM
-      killer, que não escolhe de quem é o container que mata.
-- [x] Canal **"WhatsApp Comercial"** já cadastrado em Atendimento › Canais,
-      instância `arini-comercial`, status `desconectado`.
-- [x] Compatibilidade conferida contra a API real: `instance/create` (QR
-      chegou), `connectionState`, `webhook/set` e `instance/delete`.
-- [ ] **Você:** abrir Atendimento › Canais › WhatsApp Comercial, clicar em
-      **Gerar QR Code** e ler no celular (WhatsApp → Aparelhos conectados).
-- [ ] (Opcional) Ligar S3/Minio na Evolution. Sem isso a mídia recebida vem
-      com URL criptografada do WhatsApp — a mensagem chega, o anexo não abre.
-- [ ] (Opcional, mas recomendado) Ligar o **S3/Minio na Evolution**. Sem isso a
-      mídia recebida vem com URL criptografada do WhatsApp e o navegador não
-      exibe — a mensagem chega, mas o anexo não abre.
-- [ ] ⚠️ **Aceitar o risco**: é não-oficial, o WhatsApp pode bloquear o número
-      sem aviso e sem recurso. Tenha um número reserva.
+⚠️ **Antes do 3º ou 4º número**, suba o teto de memória da Evolution: cada
+número é uma sessão Baileys no mesmo container e o teto atual (768 MB)
+segura um, não quatro. O `deploy/evolution/docker-compose.yml` já está
+com 1,5 GB — falta aplicar na VPS, o que **reinicia o container e derruba
+momentaneamente os números conectados**, então faça junto com a conexão
+do próximo número:
 
-### Opção B — API Oficial da Meta (o número migra)
+```bash
+cd /opt/evolution-arini && set -a && . ./segredos.env && set +a && docker stack deploy -c docker-compose.yml evoarini
+```
 
-- [ ] App no Meta for Developers com o produto WhatsApp.
-- [ ] **Business Verification** aprovada.
-- [ ] Token permanente de **System User** (o de teste expira em 24 h).
-- [ ] Webhook em `/api/webhooks/whatsapp` com o mesmo Verify Token que você
-      cadastrar no canal. O token pode estar em **Atendimento › Canais** ou na
-      tela antiga **CRM › Integrações** — a rota aceita as duas origens.
-- [ ] App Secret cadastrado (valida a assinatura dos webhooks).
-- [ ] ⚠️ **Avisar a equipe**: o número deixa de funcionar no app do celular.
+### Remover um canal
 
-### Opção C — API Oficial + celular (Coexistence)
+Passou a existir: **Canais › (o canal) › Remover**. As conversas não são
+apagadas — perdem o vínculo com o número. Apagar a instância na Evolution
+é uma opção separada, porque é irreversível.
 
-Tudo da Opção B, **mais**:
+## 4. Instagram, Messenger e Facebook 🔑 DEPENDE DE VOCÊ
 
-- [ ] Aprovação como **Tech Provider ou Solution Partner** na Meta. Leva semanas.
-- [ ] **App Review** com 2 vídeos de demonstração.
-- [ ] **Access Verification** (limite de onboarding 10 → 200 clientes).
-- [ ] **Embedded Signup** nascendo direto no **v4** (o v2 morre em 15/10/2026).
-- [ ] Assinar os webhooks `history`, `smb_app_state_sync` e `smb_message_echoes`.
-- [ ] App WhatsApp Business **2.24.17+** no celular.
-- [ ] ⚠️ Não sincroniza grupos nem chamadas, e desativa etiquetas/respostas
-      rápidas do app.
+A tela agora é **Atendimento › Canais › Redes sociais** (antes só existia
+em CRM › Integrações, que a maioria dos perfis nem enxerga). Ela diz o que
+falta em cada plataforma e tem um botão **Testar** que consulta a Página
+na Graph API de verdade.
 
-## 4. Custos a aprovar 🔑
+⚠️ **Desativei a integração do Facebook.** Ela estava ativa com a URL do
+webhook colada no campo `access_token` (alguém errou o campo) e **sem App
+Secret** — ou seja, incapaz de responder e com o endpoint público
+aceitando qualquer POST que chegasse. `page_id` e `verify_token` foram
+preservados; reativar é um clique quando houver credencial real.
 
-- [ ] **Meta (B e C)**: cobrança **por mensagem de template**. Mensagem comum
-      dentro da janela de atendimento aberta é **grátis**. Faturamento no
-      Brasil em BRL desde jul/2026.
-- [ ] **Evolution (A)**: sem custo por mensagem, só o servidor.
-- [ ] **IA (Onda F)**: para ligar o Copiloto/triagem, precisa de
-      `ANTHROPIC_API_KEY` e aprovar o custo por token.
+O que preciso de você, uma vez só (serve para Instagram e Messenger):
 
-## 5. Segurança 🔑
+- [ ] Página do Facebook da Arini com você como **administrador** (a
+      página `671747376016929` já está cadastrada);
+- [ ] Instagram da imobiliária como conta **Profissional** e **vinculado a
+      essa Página**;
+- [ ] no app do Instagram: Configurações › Privacidade › Mensagens ›
+      **Permitir acesso a mensagens** (sem isso a DM nunca chega);
+- [ ] app no **Meta for Developers** (Business) com os produtos Messenger
+      e Instagram;
+- [ ] **Verificação do negócio** + App Review das permissões
+      `pages_messaging`, `pages_manage_metadata`, `instagram_basic` e
+      `instagram_manage_messages` — é a parte que leva semanas;
+- [ ] me entregar (ou colar na tela): **Access Token de Página
+      permanente** (System User), **App Secret**, **Page ID** e um
+      **Verify Token** que você escolhe.
 
-- [ ] **Trocar a senha da conta do Chatwoot** compartilhada em conversa
-      (`cearini22@gmail.com`).
-- [ ] Definir quem é `admin_central` — só esse perfil cadastra canais e vê tokens.
-- [ ] **Preencher o App Secret** de cada plataforma em **CRM › Integrações**. O campo passou a
-      existir na tela; sem ele o webhook da Meta aceita qualquer POST que chegue na URL, e a URL
-      é pública por natureza.
+**TikTok** continua só gerando lead: não existe API pública de mensagens
+para responder. A tela diz isso agora, em vez de prometer conversa.
 
-## 6. Configuração inicial dentro do sistema (10 min)
+## 5. Outros canais — prontos, faltando credencial 🔑
 
-Nada disso é obrigatório — tudo já veio semeado e funcionando. É só ajustar
-para a cara da Arini:
+| Canal | O que falta |
+|---|---|
+| **Telegram** | Token do @BotFather. 5 minutos, sem burocracia. |
+| **E-mail** | Conta na Resend + domínio verificado + API key. |
+| **SMS** | Contratar gateway (Zenvia/Twilio/Comtele): URL, chave e remetente. |
+| **Chat do site** | Token já gerado. Falta **colar a tag no site** — decisão sua: o site já tem o botão flutuante do WhatsApp, e dois botões flutuantes brigam pelo mesmo canto. A tag está em Configurações › Chat do site. |
+| **Canal por API** | Gerar o segredo em Configurações › Canal por API. |
 
-- [ ] **Configurações › Caixas de entrada** — renomear a caixa padrão, escolher
-      os agentes, ligar saudação e mensagem de ausência.
-- [ ] **Configurações › Horário comercial** — conferir seg–sex 8–18 e sáb 8–12.
-- [ ] **Configurações › SLA** — a política "Padrão" nasce com 15 min de primeira
-      resposta e 24 h de resolução. Ajuste se for irreal.
-- [ ] **Configurações › Etiquetas** — o catálogo veio com quente/morno/frio/
-      financiamento/rural.
-- [ ] **Respostas rápidas** e **Macros** — 4 respostas e 1 macro já semeadas.
+## 6. Custos a aprovar 🔑
 
----
+- **Meta**: cobrança por mensagem de template; conversa dentro da janela
+  de 24 h é grátis. Faturamento em BRL desde jul/2026.
+- **Evolution**: sem custo por mensagem, só o servidor (já pago).
+- **IA (copiloto, triagem, auto-resposta)**: exige `ANTHROPIC_API_KEY` e
+  aprovação do custo por token. Hoje está desligada.
 
-## 7. O que o código ainda NÃO faz (honesto, sem otimismo)
+## 7. Aparência — já configurável, sem precisar de mim
+
+- **Configurações › Aparência** — cor padrão da conta (só diretoria).
+- **Meu perfil › Aparência** — cada agente escolhe a sua ou segue a conta.
+- Paletas: WhatsApp (padrão), Verde Arini, Grafite, Azul e Dourado (o
+  visual antigo).
+- Interruptor claro/escuro de um clique na sidebar.
+- Etiquetas com 16 cores, edição e prévia em **Configurações › Etiquetas**.
+  Renomear ou excluir agora acerta também as conversas.
+
+## 8. O que o código NÃO faz (honesto)
 
 | Item | Situação |
 |---|---|
-| WhatsApp (Evolution e Cloud API), Telegram, chat do site | ✅ envio e recebimento prontos |
-| E-mail (Resend), SMS, canal via API | ✅ código pronto **e conectáveis pela tela** (Canais › Conectar canal) — 🔑 sem credencial, nada roda |
-| Instagram / Messenger / Facebook | ✅ recebe **e responde** (texto e anexo) — 🔑 exige Access Token de página em CRM › Integrações e as permissões da Meta |
+| WhatsApp (Evolution), vários números | ✅ conectado e testado em produção |
+| WhatsApp Cloud API, Telegram, e-mail, SMS, API, chat do site | ✅ prontos — 🔑 sem credencial, nada roda |
+| Instagram / Messenger / Facebook | ✅ recebe e responde — 🔑 exige token de página e App Secret |
 | TikTok | 🟡 só vira lead; não existe conversa de duas vias |
-| Anexos, prioridade, snooze, massa, menções, participantes | ✅ pronto |
-| Apagar mensagem, marcar não lida, busca na thread | ✅ pronto |
-| Som e notificação do sistema | ✅ pronto |
-| Copiloto de IA (sugerir / resumir / classificar) | ✅ pronto — 🔑 exige `ANTHROPIC_API_KEY` |
-| Triagem e auto-resposta por IA rodando sozinhas | ✅ ligadas no Telegram e no chat do site, com trava anti-loop |
-| Automações disparando nos webhooks | ✅ ligado |
-| Central de Ajuda pública (portal, categorias, artigos, votos) | ✅ pronto, com 6 artigos semeados |
-| Webhooks de saída | ✅ disparando em conversa criada/atualizada/resolvida, mensagem e contato |
-| Tokens de API | 🟡 cadastro pronto; **não existe API pública que os valide** |
-| Registro de auditoria | ✅ canais, acesso de agente, contatos, conversas e login — 🟡 falta caixas/macros/SLA |
-| Papéis e permissões | 🟡 cadastro pronto; **quem controla acesso ainda é a RLS** — reescrevê-la é decisão sua (seção 9) |
-| Cargo do colaborador (identificação) | ✅ 0043 — editável em Agentes e na criação do usuário; aparece no seletor de responsável, na triagem, nas filas e no histórico |
-| Criar colaborador já com acesso ao Atendimento | ✅ CRM › Usuários cria login, setor, cargo, acesso e papel numa tela só |
-| Integrações (Slack, Dialogflow) | 🟡 credenciais guardadas; nada é chamado em evento algum |
-| Campanha, SLA e snooze automáticos | 🟡 jobs prontos — 🔑 falta ligar o cron (seção 2.1) |
-| Templates de WhatsApp | ✅ cadastro + sincronizar/enviar à Meta — 🔑 exige canal Cloud API |
-| Anexo em e-mail | 🟡 sai como link, não como arquivo MIME |
-| Bloquear contato | ✅ bloqueia de fato em todos os canais (checagem no `inbound.ts`) |
-| Relatório de SLA | ✅ por política, por agente e violações no tempo |
-| Categorias de respostas rápidas | ✅ agrupamento e filtro |
-| `dominio_customizado` do portal de ajuda | ❌ a coluna existe, mas nada a usa |
-| Excluir canal | ❌ não existe rota nem botão |
-| Gravar áudio no composer | ✅ com medidor, pausa e preview — 🟡 sem teste com microfone real |
-| Agent Bots (motor, API `/api/bot/v1`, handoff) | ✅ ida provada pelo botão Testar; volta sem bot real |
-| Relatório ao vivo (tempo real + modo TV) | ✅ |
-| Relatório de bot | ✅ código pronto; sem dado real para validar |
-| Exportar contatos em CSV | ✅ busca o filtro inteiro no banco, em lotes |
-| Assistente de primeiros passos | ✅ com detecção automática do que já está feito |
+| Filas (criar, renomear, membros, excluir com impacto) | ✅ |
+| Remover canal | ✅ (era o buraco antigo) |
+| Cores de etiqueta, prioridade, status, SLA e bot | ✅ padronizadas em um módulo só |
+| Tema claro/escuro + paleta por agente | ✅ |
+| Jobs (SLA, snooze, campanhas) | 🟡 prontos — 🔑 falta o segredo do cron (item 2) |
+| Copiloto de IA | ✅ pronto — 🔑 exige `ANTHROPIC_API_KEY` |
+| Papéis mandando de verdade | 🟡 quem controla acesso ainda é a RLS, não o papel |
+| Mídia recebida no WhatsApp | 🟡 caminho pronto, mas **nenhuma mídia real passou ainda** — mande uma foto, um áudio e um PDF para o número e confira |
+| Anexo em e-mail | 🟡 sai como link, não como arquivo |
 
-## 8. Verificação feita nesta entrega
+## 9. Duas coisas que eu NÃO decidi por você 🔑
 
-- `npx tsc --noEmit` — limpo.
-- `npm run build` — **113 rotas**, sem erro.
-- `npx next lint` — 7 avisos, **todos pré-existentes do CRM**, nenhum do atendimento.
-- Banco de produção — conferido por consulta direta: migrações **0031 a 0036
-  aplicadas**, seeds no lugar, enum `lead_origin` com `telegram` e `email`.
-- Central de Ajuda — 6 artigos reais publicados, para o portal não nascer vazio.
-- Portal público — testado contra o banco real num dev server: home, categoria,
-  busca e 404 respondendo certo; escape de HTML e bloqueio de `javascript:`
-  validados.
-- Tema — testado no navegador: `escuro` → classe `dark`, `claro` → `light`,
-  `sistema` segue o SO, variáveis CSS trocando de fato.
+1. **RLS × papéis.** Os papéis estão cadastrados, mas quem controla acesso
+   de verdade é a RLS do Supabase (setor do CRM + `atendimento_access`).
+   Fazer o papel mandar exige reescrever as policies de `conversations`,
+   `messages` e `leads` — num banco com dado real e sem você por perto,
+   uma policy errada esconde conversa de quem precisa ou mostra para quem
+   não devia.
+   Um caso concreto do mesmo tipo: a RLS de `atendimento_settings` permite
+   escrita a **qualquer** pessoa com acesso ao atendimento. A tela
+   restringe o padrão de cor à diretoria; o banco, não.
 
-### O que continua SEM teste real
-
-- **Nenhuma tela do painel foi vista logada** — o shell exige sessão e eu não
-  entro com a sua senha.
-- **Nenhuma integração externa foi exercitada**: WhatsApp, Telegram, Resend,
-  SMS e Graph API da Meta não têm credencial cadastrada. Todo o código desses
-  canais segue a documentação, sem uma única chamada real. Espere ajuste fino
-  na primeira rodada — em especial no corpo do SMS, que não tem padrão de
-  mercado, e no inbound do e-mail.
-- **Widget do site**: compila e o script passa em `node --check`, mas não foi
-  aberto num navegador nem embutido num site de verdade.
+2. **Chat do site no ar.** Ver item 5: é uma mudança visível no site
+   público da Arini e briga com o botão de WhatsApp que já existe lá.
 
 ---
 
-## 8.1 Armadilha do Agent Bot ⚠️
+## 10. O que continua SEM teste real
 
-O bot só dispara quando a conversa tem caixa de entrada resolvida.
-`conversations.inbox_id` **só é preenchido pelo chat do site** — WhatsApp,
-Telegram, e-mail e SMS abrem conversa sem caixa. O código cai num plano B
-que casa `atendimento_inboxes.channel_id` com o canal da conversa.
-
-**Na prática:** se a caixa não estiver amarrada à conexão em
-**Configurações › Caixas de entrada**, o bot nunca vai disparar nesses
-canais — e a tela não avisa disso. Se for usar bot fora do chat do site,
-confira esse vínculo primeiro.
-
-## 9. Uma decisão que eu NÃO tomei por você 🔑
-
-Os **papéis personalizados** estão cadastrados e podem ser atribuídos ao
-agente, mas hoje quem realmente controla o acesso é a **RLS do Supabase**
-(setor do CRM + `atendimento_access`), não o papel.
-
-Fazer o papel mandar de verdade significa **reescrever as políticas de RLS**
-de `conversations`, `messages`, `leads` e companhia. Num banco com dados
-reais, sem você por perto para validar, uma policy errada ou esconde
-conversa de quem precisa, ou mostra para quem não devia. Não é o tipo de
-coisa que se faz de madrugada e sozinho.
-
-Quando quiser encarar, o caminho é: criar uma função `fn_tem_permissao(uid,
-'conversa:ver_todas')` que lê `profiles.atendimento_role_id`, e trocar as
-policies uma a uma, testando com um usuário de cada papel antes de aplicar
-na próxima.
+- **Nenhuma tela foi vista logada** — o shell exige sessão e eu não entro
+  com a sua senha. O que foi verificado no navegador foi o CSS compilado
+  (cores medidas com `getComputedStyle`) e as rotas novas respondendo 401
+  sem sessão.
+- **Instagram, Messenger, Telegram, Resend e SMS** nunca foram exercitados
+  com credencial real. Espere ajuste fino na primeira rodada.
+- **Mídia recebida** no WhatsApp: nas 100 mensagens de entrada das últimas
+  24 h não veio nenhuma foto, áudio ou documento.

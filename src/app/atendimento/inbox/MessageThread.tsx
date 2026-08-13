@@ -19,8 +19,10 @@ function diaDaMensagem(iso: string): string {
 
 /** Ícone de entrega das mensagens de saída (estilo WhatsApp). */
 function StatusIcon({ status }: { status: MessageStatus }) {
-  if (status === "falha") return <AlertCircle size={11} className="text-red-300" />;
-  if (status === "lida") return <CheckCheck size={12} className="text-sky-300" />;
+  // O tique azul de "lida" precisa aparecer tanto na bolha clara (tema
+  // claro) quanto na escura — por isso a cor muda com o tema, não fixa.
+  if (status === "falha") return <AlertCircle size={11} className="text-red-600 dark:text-red-300" />;
+  if (status === "lida") return <CheckCheck size={12} className="text-sky-600 dark:text-sky-300" />;
   if (status === "entregue") return <CheckCheck size={12} />;
   if (status === "enviada") return <Check size={12} />;
   return null;
@@ -76,7 +78,7 @@ export const MessageThread = forwardRef<
   }, [mensagens]);
 
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto p-4 space-y-1.5 min-h-0">
+    <div ref={ref} className="flex-1 overflow-y-auto p-4 space-y-1.5 min-h-0 bg-chat">
       {carregando && mensagens.length === 0 && (
         <p className="text-center text-xs text-muted-foreground py-6">Carregando…</p>
       )}
@@ -144,14 +146,18 @@ export const MessageThread = forwardRef<
                     <div
                       className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
                         saida
-                          ? "bg-arini text-white dark:bg-gold dark:text-arini rounded-br-sm"
+                          ? "bg-bolha-out text-bolha-out-foreground rounded-br-sm"
                           : "bg-card border rounded-bl-sm"
                       }`}
                     >
                       {citada && (
                         <div
                           className={`mb-1.5 rounded-md border-l-2 px-2 py-1 text-[11px] ${
-                            saida ? "border-white/40 bg-white/10" : "border-arini/40 bg-muted/60"
+                            saida
+                              // Dentro da bolha, a citação se destaca da PRÓPRIA
+                              // cor dela — branco fixo sumia na bolha clara.
+                              ? "border-bolha-out-foreground/40 bg-bolha-out-foreground/10"
+                              : "border-acao/40 bg-muted/60"
                           }`}
                         >
                           <div className="opacity-70 truncate">
@@ -191,7 +197,9 @@ export const MessageThread = forwardRef<
                         {saida && autor && <span className="truncate max-w-[90px]">{autor}</span>}
                         <span>{formatDateTimeBR(m.created_at)}</span>
                         {saida && <StatusIcon status={m.status} />}
-                        {saida && m.status === "falha" && <span className="text-red-300">falhou</span>}
+                        {saida && m.status === "falha" && (
+                          <span className="text-red-600 dark:text-red-300">falhou</span>
+                        )}
                       </div>
                     </div>
                     {!saida && <BotaoResponder onClick={() => onResponder(m)} lado="direita" />}

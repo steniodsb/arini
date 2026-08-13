@@ -65,10 +65,19 @@ export default async function AtendimentoPage() {
   // restringe a leitura à diretoria.
   const { data: canais } = await supabase
     .from("atendimento_channels_safe")
-    .select("id, provedor");
+    .select("id, nome, canal, provedor, telefone")
+    .order("nome");
   const provedorPorCanal: Record<string, string> = {};
+  // Nome de cada conexão: com mais de um número, o atendente precisa
+  // saber por QUAL deles a conversa entrou antes de responder.
+  const canaisPorId: Record<string, { nome: string; canal: string; telefone: string | null }> = {};
   for (const c of canais ?? []) {
     provedorPorCanal[c.id as string] = c.provedor as string;
+    canaisPorId[c.id as string] = {
+      nome: (c.nome as string) ?? "Canal",
+      canal: (c.canal as string) ?? "",
+      telefone: (c.telefone as string) ?? null,
+    };
   }
 
   // ------------------------------------------------------------------
@@ -110,6 +119,7 @@ export default async function AtendimentoPage() {
           labels={(labels ?? []) as AtendimentoLabel[]}
           macros={(macros ?? []) as AtendimentoMacro[]}
           provedorPorCanal={provedorPorCanal}
+          canaisPorId={canaisPorId}
           papel={papel}
           membrosPorEquipe={membrosPorEquipe}
           minhasEquipes={minhasEquipes}

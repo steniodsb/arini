@@ -11,11 +11,29 @@ const OPTIONS: { key: ThemePreference; label: string; icon: typeof Sun }[] = [
   { key: "sistema", label: "Automático (segue o sistema)", icon: Monitor },
 ];
 
-/** Botão de tema com menu (Claro · Escuro · Automático). */
-export function ThemeToggle({ compact = false }: { compact?: boolean }) {
+/**
+ * Botão de tema com menu (Claro · Escuro · Automático).
+ *
+ * `tom="sidebar"` troca só as cores do GATILHO: dentro da sidebar verde,
+ * `text-muted-foreground` (que segue o tema) sumiria no tema claro. O
+ * menu que abre continua neutro — ele flutua sobre o conteúdo, não sobre
+ * o verde.
+ */
+export function ThemeToggle({
+  compact = false,
+  tom = "padrao",
+}: {
+  compact?: boolean;
+  tom?: "padrao" | "sidebar";
+}) {
   const { preference, resolved, setPreference, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const classeGatilho =
+    tom === "sidebar"
+      ? "p-1.5 rounded-md text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-hover transition-colors"
+      : "p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors";
 
   useEffect(() => {
     if (!open) return;
@@ -33,7 +51,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
         type="button"
         onClick={toggle}
         title={resolved === "escuro" ? "Mudar para tema claro" : "Mudar para tema escuro"}
-        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        className={classeGatilho}
       >
         {resolved === "escuro" ? <Sun size={16} /> : <Moon size={16} />}
       </button>
@@ -46,7 +64,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         title="Tema"
-        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        className={classeGatilho}
       >
         {resolved === "escuro" ? <Moon size={16} /> : <Sun size={16} />}
       </button>

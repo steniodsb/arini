@@ -211,13 +211,46 @@ export async function POST(req: Request) {
 
   const nome = (data.pushName as string) || null;
 
-  // 1) Acha-ou-cria a conversa por (canal, external_id do contato).
-  const { data: convExistente } = await admin
+  // 1) Acha-ou-cria a conversa por (canal, external_id do contato, NÚMERO).
+  //
+  // O `channel_id` faz parte da chave desde que passou a existir mais de
+  // um WhatsApp. Sem ele, o mesmo cliente escrevendo para o número
+  // comercial e para o de locação caía numa conversa só — e a resposta
+  // saía sempre pelo número que abriu a conversa primeiro, porque é o
+  // `channel_id` dela que o despacho lê.
+  //
+  // `maybeSingle` viraria erro se houvesse duplicata herdada da regra
+  // antiga; por isso pega a mais recente em vez de exigir unicidade.
+  const { data: achadas } = await admin
     .from("conversations")
     .select("id, lead_id, unread_count")
     .eq("canal", "whatsapp")
     .eq("external_id", telefone)
-    .maybeSingle();
+    .eq("channel_id", canal.id)
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(1);
+  let convExistente = achadas?.[0] ?? null;
+
+  // Conversa órfã (`channel_id` nulo) é adotada por este canal em vez de
+  // duplicada: são as que nasceram antes de o canal existir. Só entra
+  // aqui quando a busca com o número não achou nada.
+  if (!convExistente) {
+    const { data: orfas } = await admin
+      .from("conversations")
+      .select("id, lead_id, unread_count")
+      .eq("canal", "whatsapp")
+      .eq("external_id", telefone)
+      .is("channel_id", null)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(1);
+    if (orfas?.[0]) {
+      convExistente = orfas[0];
+      await admin
+        .from("conversations")
+        .update({ channel_id: canal.id })
+        .eq("id", convExistente.id);
+    }
+  }
 
   let conversationId = convExistente?.id as string | undefined;
   let leadId = (convExistente?.lead_id as string | null) ?? null;

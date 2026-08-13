@@ -1,6 +1,7 @@
 import { requireAtendimentoUser } from "@/lib/atendimento-auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { AtendimentoLabel } from "@/lib/types";
+import { PageShell } from "@/components/atendimento/ui";
 import { LabelsManager } from "./LabelsManager";
 
 export const dynamic = "force-dynamic";
@@ -8,14 +9,26 @@ export const dynamic = "force-dynamic";
 export default async function EtiquetasPage() {
   await requireAtendimentoUser();
   const supabase = createSupabaseServer();
-  const { data } = await supabase.from("atendimento_labels").select("*").order("nome");
+
+  const [{ data }, { data: convs }] = await Promise.all([
+    supabase.from("atendimento_labels").select("*").order("nome"),
+    // Uso real de cada etiqueta. Sem isso, excluir uma etiqueta é decidir
+    // no escuro — e a etiqueta continua gravada em `conversations.tags`
+    // depois de sumir do catálogo, virando um chip cinza sem explicação.
+    supabase.from("conversations").select("tags").not("tags", "is", null),
+  ]);
+
+  const usoPorEtiqueta: Record<string, number> = {};
+  for (const c of (convs ?? []) as { tags: string[] | null }[]) {
+    for (const t of c.tags ?? []) usoPorEtiqueta[t] = (usoPorEtiqueta[t] ?? 0) + 1;
+  }
+
   return (
-    <div className="p-6 space-y-4">
-      <div>
-        <h1 className="font-display text-xl text-arini dark:text-gold">Etiquetas</h1>
-        <p className="text-sm text-muted-foreground mt-1">Catálogo de etiquetas para classificar conversas.</p>
-      </div>
-      <LabelsManager initial={(data ?? []) as AtendimentoLabel[]} />
-    </div>
+    <PageShell>
+      <LabelsManager
+        initial={(data ?? []) as AtendimentoLabel[]}
+        usoPorEtiqueta={usoPorEtiqueta}
+      />
+    </PageShell>
   );
 }

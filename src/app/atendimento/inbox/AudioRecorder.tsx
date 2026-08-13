@@ -525,7 +525,7 @@ export function AudioRecorder({
                 <button
                   type="button"
                   onClick={usar}
-                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-arini text-white dark:bg-gold dark:text-arini hover:opacity-90"
+                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-acao text-acao-foreground hover:opacity-90"
                 >
                   <Check size={13} /> Usar
                 </button>

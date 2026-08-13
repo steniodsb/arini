@@ -16,7 +16,10 @@ export default async function AutomacoesPage() {
   // profiles tem RLS por setor do CRM; o service role garante a lista completa.
   const admin = createSupabaseAdmin();
 
-  const [{ data: regras }, { data: equipes }, { data: etiquetas }, { data: agentes }] =
+  const [
+    { data: regras }, { data: equipes }, { data: etiquetas }, { data: agentes },
+    { data: conexoes },
+  ] =
     await Promise.all([
       supabase.from("atendimento_automations").select("*").order("created_at", { ascending: false }),
       supabase.from("atendimento_teams").select("*").order("nome"),
@@ -27,6 +30,10 @@ export default async function AutomacoesPage() {
         .or("atendimento_access.eq.true,is_admin_central.eq.true")
         .eq("ativo", true)
         .order("nome"),
+      // Conexões cadastradas: com mais de um WhatsApp, a regra precisa
+      // poder distinguir POR QUAL número a mensagem entrou. Vai pela view
+      // saneada — `atendimento_channels` guarda token.
+      supabase.from("atendimento_channels_safe").select("id, nome, telefone").order("nome"),
     ]);
 
   return (
@@ -36,6 +43,7 @@ export default async function AutomacoesPage() {
       equipes={(equipes ?? []) as AtendimentoTeam[]}
       etiquetas={(etiquetas ?? []) as AtendimentoLabel[]}
       agentes={(agentes ?? []) as AgentOption[]}
+      conexoes={(conexoes ?? []) as { id: string; nome: string; telefone: string | null }[]}
     />
   );
 }

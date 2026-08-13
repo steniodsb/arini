@@ -74,7 +74,7 @@ export async function dispararAutomacoes(
   try {
     const { data: conv } = await admin
       .from("conversations")
-      .select("id, canal, status, prioridade, responsavel_id, team_id, tags, contato_nome, contato_telefone, inbox_id")
+      .select("id, canal, channel_id, status, prioridade, responsavel_id, team_id, tags, contato_nome, contato_telefone, inbox_id")
       .eq("id", conversationId)
       .maybeSingle();
     if (!conv) return resumo;
@@ -83,6 +83,9 @@ export async function dispararAutomacoes(
       conversa: {
         id: conv.id as string,
         canal: conv.canal as string | null,
+        // Qual CONEXÃO recebeu — é o que permite a regra "número da
+        // locação → fila Locação" com vários WhatsApps conectados.
+        channel_id: (conv.channel_id as string | null) ?? null,
         status: conv.status as ContextoAutomacao["conversa"]["status"],
         prioridade: conv.prioridade as ContextoAutomacao["conversa"]["prioridade"],
         responsavel_id: conv.responsavel_id as string | null,
@@ -132,7 +135,7 @@ export async function dispararResolucao(
   try {
     const { data: conv } = await admin
       .from("conversations")
-      .select("id, canal, status, prioridade, responsavel_id, team_id, tags, contato_nome, contato_telefone, inbox_id")
+      .select("id, canal, channel_id, status, prioridade, responsavel_id, team_id, tags, contato_nome, contato_telefone, inbox_id")
       .eq("id", conversationId)
       .maybeSingle();
     if (!conv) return;
@@ -141,6 +144,9 @@ export async function dispararResolucao(
       conversa: {
         id: conv.id as string,
         canal: conv.canal as string | null,
+        // Qual CONEXÃO recebeu — é o que permite a regra "número da
+        // locação → fila Locação" com vários WhatsApps conectados.
+        channel_id: (conv.channel_id as string | null) ?? null,
         status: conv.status as ContextoAutomacao["conversa"]["status"],
         prioridade: conv.prioridade as ContextoAutomacao["conversa"]["prioridade"],
         responsavel_id: conv.responsavel_id as string | null,

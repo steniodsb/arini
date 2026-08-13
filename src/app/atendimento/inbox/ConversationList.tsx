@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
+import { CHANNEL_LABELS, type Conversation } from "@/lib/types";
 import {
-  CHANNEL_LABELS, PRIORITY_CLASSES, PRIORITY_LABELS,
-  type Conversation,
-} from "@/lib/types";
+  BotChip, EtiquetaChip, PrioridadeChip, SlaChip, StatusChip,
+} from "@/components/atendimento/Chips";
 import { formatDateTimeBR } from "@/lib/utils";
 import { formatarEspera, minutosEsperando, esperaCritica, LIMITE_ESPERA_MIN } from "./espera";
-import { Check, Inbox, AlarmClock, Paperclip, AlertTriangle, Clock, Hourglass } from "lucide-react";
+import { Inbox, Paperclip, Hourglass } from "lucide-react";
 
 const CHANNEL_DOT: Record<string, string> = {
   whatsapp: "bg-green-500",
@@ -79,6 +79,7 @@ export function ConversationList({
   // Caixa central (0040)
   modoCaixaCentral = false,
   vazio: vazioCustom,
+  nomePorConexao,
 }: {
   conversas: Conversation[];
   selecionadaId: string | null;
@@ -96,6 +97,12 @@ export function ConversationList({
   modoCaixaCentral?: boolean;
   /** Estado vazio próprio da vista; sem ele, o genérico. */
   vazio?: React.ReactNode;
+  /**
+   * Nome da conexão por `channel_id`. Só é passado quando há MAIS DE UMA
+   * conexão: com um número só, repetir "WhatsApp Comercial" em toda linha
+   * gasta espaço sem informar nada.
+   */
+  nomePorConexao?: Record<string, string>;
 }) {
   const vazio = conversas.length === 0;
 
@@ -120,12 +127,11 @@ export function ConversationList({
         const ativa = c.id === selecionadaId;
         const marcada = selecionadas.has(c.id);
         const resp = c.responsavel_id ? agentName.get(c.responsavel_id) : null;
-        const adiada = c.status === "adiada";
         return (
           <div
             key={c.id}
             className={`w-full border-b flex items-stretch ${
-              ativa ? "bg-arini/5 dark:bg-gold/10" : marcada ? "bg-muted/60" : "hover:bg-muted/40"
+              ativa ? "bg-acao/10" : marcada ? "bg-muted/60" : "hover:bg-muted/40"
             }`}
           >
             {modoSelecao && (
@@ -134,7 +140,7 @@ export function ConversationList({
                   type="checkbox"
                   checked={marcada}
                   onChange={() => onAlternarSelecao(c.id)}
-                  className="h-3.5 w-3.5 accent-current text-arini dark:text-gold"
+                  className="h-3.5 w-3.5 accent-current text-acao"
                 />
               </label>
             )}
@@ -142,20 +148,18 @@ export function ConversationList({
               type="button"
               onClick={() => onSelecionar(c.id)}
               className={`flex-1 min-w-0 text-left px-3 py-2.5 flex flex-col gap-1 ${
-                ativa ? "border-l-2 border-l-arini dark:border-l-gold -ml-0.5" : ""
+                ativa ? "border-l-2 border-l-acao -ml-0.5" : ""
               }`}
             >
               <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full shrink-0 ${CHANNEL_DOT[c.canal] ?? "bg-gray-400"}`} />
                 <span className="font-medium text-sm truncate flex-1">{contactName(c)}</span>
-                {c.sla_violado && (
-                  <AlertTriangle size={12} className="text-red-500 shrink-0" aria-label="SLA violado" />
-                )}
-                {adiada && <AlarmClock size={12} className="text-amber-500 shrink-0" />}
-                {c.status === "resolvida" && <Check size={13} className="text-emerald-500 shrink-0" />}
-                {c.status === "pendente" && <Clock size={12} className="text-sky-500 shrink-0" />}
+                {/* Exceções primeiro: é o que o olho precisa achar antes
+                    de ler qualquer nome. */}
+                {c.sla_violado && <SlaChip />}
+                {c.bot_status === "ativo" && <BotChip />}
                 {c.unread_count > 0 && (
-                  <span className="bg-arini text-white dark:bg-gold dark:text-arini text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                  <span className="bg-acao text-acao-foreground text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
                     {c.unread_count}
                   </span>
                 )}
@@ -167,12 +171,15 @@ export function ConversationList({
               </div>
 
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
-                {c.prioridade && (
-                  <span className={`rounded border px-1 py-px font-medium ${PRIORITY_CLASSES[c.prioridade]}`}>
-                    {PRIORITY_LABELS[c.prioridade]}
-                  </span>
-                )}
-                <span>{CHANNEL_LABELS[c.canal]}</span>
+                {c.prioridade && <PrioridadeChip prioridade={c.prioridade} />}
+                {/* "Aberta" é o estado normal: mostrar chip em toda linha
+                    seria ruído. Os outros três são desvio e aparecem. */}
+                {c.status !== "aberta" && <StatusChip status={c.status} />}
+                {/* Com vários números, o rótulo da CONEXÃO diz mais do que
+                    o tipo de canal: "WhatsApp" todas são. */}
+                <span className="truncate max-w-[110px]">
+                  {(c.channel_id && nomePorConexao?.[c.channel_id]) || CHANNEL_LABELS[c.canal]}
+                </span>
                 <span>·</span>
                 <span>{tempoRelativo(c.last_message_at)}</span>
                 {modoCaixaCentral ? (
@@ -188,22 +195,9 @@ export function ConversationList({
 
               {c.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1">
-                  {c.tags.slice(0, 3).map((t) => {
-                    const cor = corDaEtiqueta(t);
-                    return (
-                      <span
-                        key={t}
-                        className="rounded-full text-[9px] px-1.5 py-0.5"
-                        style={
-                          cor
-                            ? { backgroundColor: `${cor}22`, color: cor }
-                            : undefined
-                        }
-                      >
-                        {!cor ? <span className="text-arini dark:text-gold">{t}</span> : t}
-                      </span>
-                    );
-                  })}
+                  {c.tags.slice(0, 3).map((t) => (
+                    <EtiquetaChip key={t} nome={t} cor={corDaEtiqueta(t)} />
+                  ))}
                   {c.tags.length > 3 && (
                     <span className="text-[9px] text-muted-foreground">+{c.tags.length - 3}</span>
                   )}

@@ -34,8 +34,10 @@ import { Alerta, Card, EmptyState, PageHeader, Table, TextInput } from "@/compon
 import {
   CHANNEL_LABELS,
   CONVERSATION_STATUS_LABELS,
+  PRIORITY_HEX,
   PRIORITY_LABELS,
   PRIORITY_ORDER,
+  STATUS_HEX,
   WEEKDAY_LABELS,
   type BotStatus,
   type ConversationChannel,
@@ -1032,7 +1034,7 @@ export function RelatoriosPanel({
               onClick={() => setPeriodo(p.chave)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 periodo === p.chave
-                  ? "bg-arini text-white dark:bg-gold dark:text-arini"
+                  ? "bg-acao text-acao-foreground"
                   : "text-muted-foreground hover:bg-muted"
               }`}
             >
@@ -1233,24 +1235,27 @@ function AbaVisaoGeral({
         <Card titulo="Distribuição" descricao="Status e prioridade das conversas criadas no período.">
           <div className="p-4 space-y-4">
             <div className="space-y-2">
-              {(Object.keys(CONVERSATION_STATUS_LABELS) as ConversationStatus[]).map((s, i) => (
+              {/* Cor semântica, não a da paleta: é a MESMA que o status
+                  tem na caixa de entrada. */}
+              {(Object.keys(CONVERSATION_STATUS_LABELS) as ConversationStatus[]).map((s) => (
                 <BarraProporcao
                   key={s}
                   rotulo={CONVERSATION_STATUS_LABELS[s]}
                   valor={resumo.porStatus[s] ?? 0}
                   total={resumo.total}
-                  cor={PALETA[i % PALETA.length]}
+                  cor={STATUS_HEX[s]}
                 />
               ))}
             </div>
             <div className="border-t pt-3 space-y-2">
-              {prioridades.map((p, i) => (
+              {prioridades.map((p) => (
                 <BarraProporcao
                   key={p.nome}
                   rotulo={p.nome}
                   valor={p.valor}
                   total={resumo.total}
-                  cor={PALETA[(i + 3) % PALETA.length]}
+                  // "sem" não é prioridade: fica cinza, como a ausência dela.
+                  cor={PRIORITY_HEX[p.chave as ConversationPriority] ?? "#94a3b8"}
                 />
               ))}
             </div>

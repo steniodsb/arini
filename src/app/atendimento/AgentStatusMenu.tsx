@@ -16,6 +16,7 @@ export function AgentStatusMenu({
   cargo,
   inicial,
   avatarUrl,
+  tom = "padrao",
 }: {
   nome: string;
   email: string;
@@ -24,7 +25,10 @@ export function AgentStatusMenu({
   inicial: AgentAvailability;
   /** Foto do perfil. Sem ela, cai no círculo com a inicial do nome. */
   avatarUrl?: string | null;
+  /** "sidebar": o gatilho vive sobre o verde e precisa de cor própria. */
+  tom?: "padrao" | "sidebar";
 }) {
+  const naSidebar = tom === "sidebar";
   const [status, setStatus] = useState<AgentAvailability>(inicial);
   const [open, setOpen] = useState(false);
   const [saindo, setSaindo] = useState(false);
@@ -63,7 +67,9 @@ export function AgentStatusMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-1.5 py-1.5 rounded-lg hover:bg-muted text-left min-w-0"
+        className={`w-full flex items-center gap-2 px-1.5 py-1.5 rounded-lg text-left min-w-0 ${
+          naSidebar ? "hover:bg-sidebar-hover" : "hover:bg-muted"
+        }`}
       >
         <span className="relative shrink-0">
           {avatarUrl ? (
@@ -74,20 +80,36 @@ export function AgentStatusMenu({
               className="h-7 w-7 rounded-full object-cover border"
             />
           ) : (
-            <span className="h-7 w-7 rounded-full bg-arini text-white dark:bg-gold dark:text-arini flex items-center justify-center text-[11px] font-semibold">
+            <span
+              className={`h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-semibold ${
+                naSidebar ? "bg-white/20 text-sidebar-foreground" : "bg-acao text-acao-foreground"
+              }`}
+            >
               {(nome || "?").charAt(0).toUpperCase()}
             </span>
           )}
           <span
-            className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-card ${AVAILABILITY_DOT[status]}`}
+            className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ${
+              naSidebar ? "ring-sidebar" : "ring-card"
+            } ${AVAILABILITY_DOT[status]}`}
           />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-xs font-medium truncate">{nome}</span>
+          <span
+            className={`block text-xs font-medium truncate ${
+              naSidebar ? "text-sidebar-foreground" : ""
+            }`}
+          >
+            {nome}
+          </span>
           {/* Com cargo cadastrado, ele vem primeiro: a bolinha colorida
               sobre o avatar já diz a disponibilidade, e o cargo é a
               informação que não está representada em nenhum outro lugar. */}
-          <span className="block text-[10px] text-muted-foreground truncate">
+          <span
+            className={`block text-[10px] truncate ${
+              naSidebar ? "text-sidebar-muted" : "text-muted-foreground"
+            }`}
+          >
             {cargo?.trim() ? `${cargo.trim()} · ${AVAILABILITY_LABELS[status]}` : AVAILABILITY_LABELS[status]}
           </span>
         </span>

@@ -48,25 +48,50 @@ const config: Config = {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+        // As cores da marca são VARIÁVEIS, não hex. O valor padrão (em
+        // globals.css) é o verde/dourado de sempre — o site e o CRM não
+        // mudam. O atendimento redefine as mesmas variáveis no seu escopo
+        // e, com isso, os 340 usos de `bg-arini`/`text-gold` obedecem sem
+        // precisar de uma única troca de classe.
         arini: {
-          DEFAULT: "#092316",
-          dark: "#061a10",
-          light: "#0e3622",
-          50: "#e8f1ec",
-          900: "#092316",
+          DEFAULT: "hsl(var(--marca) / <alpha-value>)",
+          dark: "hsl(var(--marca-dark) / <alpha-value>)",
+          light: "hsl(var(--marca-light) / <alpha-value>)",
+          50: "hsl(var(--marca-50) / <alpha-value>)",
+          900: "hsl(var(--marca-900) / <alpha-value>)",
         },
         gold: {
-          DEFAULT: "#F8BF32",
-          from: "#F8BF32",
-          to: "#D99212",
-          dark: "#D99212",
+          DEFAULT: "hsl(var(--destaque) / <alpha-value>)",
+          from: "hsl(var(--destaque-from) / <alpha-value>)",
+          to: "hsl(var(--destaque-to) / <alpha-value>)",
+          dark: "hsl(var(--destaque-dark) / <alpha-value>)",
+        },
+        // Cor de AÇÃO: botão, link, anel de foco. É o que a paleta troca.
+        acao: {
+          DEFAULT: "hsl(var(--acao) / <alpha-value>)",
+          foreground: "hsl(var(--acao-fg) / <alpha-value>)",
+        },
+        // Bolha da mensagem enviada (a recebida usa `card`).
+        bolha: {
+          out: "hsl(var(--bolha-out) / <alpha-value>)",
+          "out-foreground": "hsl(var(--bolha-out-fg) / <alpha-value>)",
+        },
+        // Fundo da thread de conversa.
+        chat: "hsl(var(--superficie-chat) / <alpha-value>)",
+        // Sidebar do atendimento — verde fixo nos dois temas.
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar) / <alpha-value>)",
+          foreground: "hsl(var(--sidebar-fg) / <alpha-value>)",
+          muted: "hsl(var(--sidebar-muted) / <alpha-value>)",
+          hover: "hsl(var(--sidebar-hover) / <alpha-value>)",
+          border: "hsl(var(--sidebar-border) / <alpha-value>)",
         },
       },
       backgroundImage: {
         "gold-gradient":
-          "linear-gradient(135deg, #F8BF32 0%, #D99212 100%)",
+          "linear-gradient(135deg, hsl(var(--destaque-from)) 0%, hsl(var(--destaque-to)) 100%)",
         "gold-gradient-soft":
-          "linear-gradient(135deg, rgba(248,191,50,0.15) 0%, rgba(217,146,18,0.15) 100%)",
+          "linear-gradient(135deg, hsl(var(--destaque-from) / 0.15) 0%, hsl(var(--destaque-to) / 0.15) 100%)",
         "arini-radial":
           "radial-gradient(ellipse at top, #0e3622 0%, #092316 60%, #061a10 100%)",
       },

@@ -89,7 +89,11 @@ export function MediaBubble({ m, saida }: { m: Message; saida: boolean }) {
       rel="noopener noreferrer"
       download={nome}
       className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 max-w-[260px] transition-colors ${
-        saida ? "border-white/25 hover:bg-white/10" : "hover:bg-muted"
+        saida
+          // Contraste tirado da própria bolha: com a bolha clara do tema
+          // claro, borda branca fixa desaparecia.
+          ? "border-bolha-out-foreground/25 hover:bg-bolha-out-foreground/10"
+          : "hover:bg-muted"
       }`}
     >
       <FileText size={20} className="shrink-0 opacity-80" />

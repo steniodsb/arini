@@ -201,7 +201,7 @@ export function AssistentePrimeirosPassos({ inicial }: { inicial: EstadoOnboardi
           aria-label="Progresso da configuração"
         >
           <div
-            className="h-full rounded-full bg-arini dark:bg-gold transition-all"
+            className="h-full rounded-full bg-acao transition-all"
             style={{ width: `${percentual}%` }}
           />
         </div>

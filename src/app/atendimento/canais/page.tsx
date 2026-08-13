@@ -10,6 +10,7 @@ import {
 } from "@/lib/types";
 import { formatDateTimeBR } from "@/lib/utils";
 import { ConnectChannelWizard } from "./ConnectChannelWizard";
+import { MetaChannels } from "./MetaChannels";
 import { MessageSquare, AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -42,11 +43,21 @@ export default async function CanaisPage() {
           <div>
             <h1 className="font-display text-3xl text-arini dark:text-gold">Canais</h1>
             <p className="text-muted-foreground mt-1 text-sm">
-              Os números de WhatsApp que o atendimento usa para conversar com os clientes.
+              Tudo por onde o cliente fala com a Arini: os números de WhatsApp, as redes da
+              Meta, e-mail, SMS e o chat do site.
             </p>
           </div>
           <ConnectChannelWizard webhookBase={base} />
         </div>
+
+        <section className="space-y-3">
+          <div>
+            <h2 className="font-medium text-arini dark:text-gold">Conexões diretas</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              WhatsApp, Telegram, e-mail, SMS e canal por API. Dá para ter vários números
+              conectados ao mesmo tempo — cada conversa responde pelo número em que entrou.
+            </p>
+          </div>
 
         {channels.length === 0 ? (
           <div className="rounded-lg border border-dashed p-10 text-center">
@@ -93,6 +104,9 @@ export default async function CanaisPage() {
             ))}
           </ul>
         )}
+        </section>
+
+        <MetaChannels webhookBase={base} />
       </div>
     </div>
   );

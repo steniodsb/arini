@@ -8,14 +8,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default:
-          "bg-arini text-white hover:bg-arini-light dark:bg-gold dark:text-arini dark:hover:brightness-110",
+        // `acao` é a cor de ação da paleta (ver globals.css). No site e no
+        // CRM ela vale o verde de sempre; no atendimento, a cor escolhida.
+        default: "bg-acao text-acao-foreground hover:brightness-110",
         gold: "btn-gold",
         outline:
-          "border border-arini text-arini hover:bg-arini hover:text-white dark:border-border dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
+          "border border-acao text-acao hover:bg-acao hover:text-acao-foreground dark:border-border dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-muted hover:text-foreground",
-        link: "text-arini underline-offset-4 hover:underline",
+        link: "text-acao underline-offset-4 hover:underline",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
       },
       size: {

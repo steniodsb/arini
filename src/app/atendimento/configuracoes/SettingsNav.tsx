@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Users, UsersRound, Tag, Zap, Radio, Inbox, Clock, Timer, Star,
-  SlidersHorizontal, Workflow, Webhook, KeyRound, ScrollText, MessageCircle, Filter, Building2, FileText, Code2, Bot, Rocket,
+  SlidersHorizontal, Workflow, Webhook, KeyRound, ScrollText, MessageCircle, Filter, Building2, FileText, Code2, Bot, Rocket, Palette,
 } from "lucide-react";
 
 const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: typeof Users }[] }[] = [
@@ -13,6 +13,7 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: type
     itens: [
       { href: "/atendimento/comecar", label: "Primeiros passos", icon: Rocket },
       { href: "/atendimento/configuracoes/conta", label: "Conta e plataforma", icon: Building2 },
+      { href: "/atendimento/configuracoes/aparencia", label: "Aparência", icon: Palette },
     ],
   },
   {

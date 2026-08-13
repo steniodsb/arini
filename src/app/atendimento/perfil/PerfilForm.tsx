@@ -13,6 +13,11 @@ import {
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { MAX_AVATAR_MB, removeAvatar, uploadAvatar } from "@/lib/upload";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { SeletorPaleta } from "@/components/atendimento/SeletorPaleta";
+import {
+  aplicarCorNoDocumento, guardarEscolhaDoAgente,
+  type EscolhaAgente, type PaletaAtendimento,
+} from "@/lib/atendimento/cores";
 import {
   AVAILABILITY_DOT, AVAILABILITY_LABELS,
   type AgentAvailability, type ThemePreference,
@@ -31,6 +36,8 @@ type CamposPerfil = Partial<{
   assinatura: string | null;
   disponibilidade: AgentAvailability;
   notificacoes: Record<string, boolean>;
+  /** null = seguir a cor padrão da conta (ver migração 0044). */
+  atendimento_cor: string | null;
 }>;
 
 type EstadoSecao = { salvando: boolean; ok: boolean; erro: string | null };
@@ -103,6 +110,8 @@ export function PerfilForm({
   avatarPath: avatarPathInicial,
   assinatura: assinaturaInicial,
   temaInicial,
+  corInicial,
+  corDaConta,
   disponibilidadeInicial,
   notificacoesIniciais,
 }: {
@@ -122,6 +131,10 @@ export function PerfilForm({
   avatarPath: string | null;
   assinatura: string | null;
   temaInicial: ThemePreference;
+  /** A escolha do agente — "auto" quando ele segue a conta. */
+  corInicial: EscolhaAgente;
+  /** O padrão da conta, para o cartão "Seguir o padrão" mostrar qual é. */
+  corDaConta: PaletaAtendimento;
   disponibilidadeInicial: AgentAvailability;
   notificacoesIniciais: Record<string, boolean>;
 }) {
@@ -145,7 +158,10 @@ export function PerfilForm({
     return base;
   });
 
+  const [cor, setCor] = useState<EscolhaAgente>(corInicial);
+
   const secaoDados = useSecao();
+  const secaoCor = useSecao();
   const secaoAvatar = useSecao();
   const secaoAssinatura = useSecao();
   const secaoDisponibilidade = useSecao();
@@ -167,6 +183,20 @@ export function PerfilForm({
   );
 
   const inicial = useMemo(() => (nome.trim() || "?").charAt(0).toUpperCase(), [nome]);
+
+  /**
+   * Cor: aplica na hora e salva em seguida — igual ao tema, que também
+   * não tem botão "Salvar". Escolher cor e ter de confirmar depois faria
+   * a prévia parecer quebrada no intervalo.
+   */
+  function escolherCor(escolha: EscolhaAgente) {
+    setCor(escolha);
+    guardarEscolhaDoAgente(escolha);
+    aplicarCorNoDocumento(escolha === "auto" ? corDaConta : escolha);
+    void secaoCor.executar(() =>
+      salvar({ atendimento_cor: escolha === "auto" ? null : escolha }),
+    );
+  }
 
   /**
    * Sobe a foto escolhida. O uploadAvatar já valida tipo/tamanho, grava
@@ -299,7 +329,7 @@ export function PerfilForm({
                   className="h-16 w-16 rounded-full object-cover border"
                 />
               ) : (
-                <span className="h-16 w-16 rounded-full bg-arini text-white dark:bg-gold dark:text-arini flex items-center justify-center text-xl font-semibold">
+                <span className="h-16 w-16 rounded-full bg-acao text-acao-foreground flex items-center justify-center text-xl font-semibold">
                   {inicial}
                 </span>
               )}
@@ -357,7 +387,7 @@ export function PerfilForm({
               <div className="space-y-1">
                 <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                   <div
-                    className="h-full bg-arini dark:bg-gold transition-all"
+                    className="h-full bg-acao transition-all"
                     style={{ width: `${progresso}%` }}
                   />
                 </div>
@@ -414,8 +444,8 @@ export function PerfilForm({
         </Card>
 
         {/* ---------- Aparência ---------- */}
-        <Card titulo="Aparência" descricao="O tema fica salvo no seu perfil e segue você em qualquer computador.">
-          <div className="p-4 grid grid-cols-3 gap-2">
+        <Card titulo="Aparência" descricao="Tema e cor ficam salvos no seu perfil e seguem você em qualquer computador.">
+          <div className="p-4 pb-0 grid grid-cols-3 gap-2">
             {TEMAS.map((t) => {
               const Icone = t.icone;
               const ativo = temaAtivo === t.chave;
@@ -436,6 +466,29 @@ export function PerfilForm({
                 </button>
               );
             })}
+          </div>
+
+          <div className="p-4 space-y-2.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <div className="text-xs font-medium">Cor</div>
+                <p className="text-[11px] text-muted-foreground">
+                  Muda os botões e a bolha das suas mensagens. A prévia segue o tema em uso.
+                </p>
+              </div>
+              {secaoCor.estado.salvando && (
+                <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                  <Loader2 size={12} className="animate-spin" /> Salvando…
+                </span>
+              )}
+              {secaoCor.estado.ok && (
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
+                  <Check size={12} /> Salvo
+                </span>
+              )}
+            </div>
+            <SeletorPaleta valor={cor} onEscolher={escolherCor} corDaConta={corDaConta} />
+            {secaoCor.estado.erro && <Alerta tipo="erro">{secaoCor.estado.erro}</Alerta>}
           </div>
         </Card>
 

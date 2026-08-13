@@ -189,6 +189,26 @@ export async function logout(cfg: EvolutionConfig): Promise<void> {
   });
 }
 
+/**
+ * Apaga a instância no servidor da Evolution — sessão, contatos e chats
+ * que ela guardava. Irreversível: reconectar depois exige QR novo.
+ *
+ * O logout vem antes porque a Evolution recusa apagar instância conectada
+ * (`instance/delete` responde 403 com "instance is connected"). A falha do
+ * logout é engolida de propósito: se a sessão já estava caída, insistir
+ * nele impediria a limpeza — que é justamente o que se está pedindo.
+ */
+export async function deleteInstance(cfg: EvolutionConfig): Promise<void> {
+  try {
+    await logout(cfg);
+  } catch {
+    /* já estava desconectada */
+  }
+  await call(cfg, `/instance/delete/${encodeURIComponent(cfg.instance_name)}`, {
+    method: "DELETE",
+  });
+}
+
 /** Envia texto. Na v2 o corpo é plano: { number, text }. */
 export async function sendText(
   cfg: EvolutionConfig,
