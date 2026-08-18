@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
 import { ipDaRequisicao, registrarAuditoria } from "@/lib/atendimento/audit";
+import { linhaSocialDaPlataforma } from "@/lib/meta-plataformas";
 
 // =====================================================================
 // Credenciais das redes da Meta (Instagram, Facebook/Messenger) para o
@@ -92,7 +93,7 @@ export async function GET() {
     .select("plataforma, ativo, config, updated_at");
 
   const estado = PLATAFORMAS.map((p) => {
-    const linha = (data ?? []).find((d) => d.plataforma === p);
+    const linha = (data ?? []).find((d) => d.plataforma === linhaSocialDaPlataforma(p));
     const cfg = (linha?.config ?? {}) as Config;
     const token = (cfg.access_token ?? "").trim();
     return {
@@ -134,11 +135,14 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "plataforma inválida" }, { status: 400 });
   }
 
+  // Messenger não tem linha própria — ver `lib/meta-plataformas.ts`.
+  const linha = linhaSocialDaPlataforma(body.plataforma);
+
   const admin = createSupabaseAdmin();
   const { data: atual } = await admin
     .from("social_integrations")
     .select("config")
-    .eq("plataforma", body.plataforma)
+    .eq("plataforma", linha)
     .maybeSingle();
 
   const config: Config = { ...((atual?.config ?? {}) as Config) };
@@ -175,12 +179,23 @@ export async function PUT(req: Request) {
     );
   }
 
-  const { error } = await admin
+  const { data: gravado, error } = await admin
     .from("social_integrations")
     .update({ ativo, config, updated_by: auth.user.id, updated_at: new Date().toISOString() })
-    .eq("plataforma", body.plataforma);
+    .eq("plataforma", linha)
+    .select("plataforma");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Um update que não acha linha nenhuma é sucesso para o Postgres e
+  // mentira para quem clicou em Salvar — foi exatamente o que acontecia
+  // com o Messenger. Nunca mais em silêncio.
+  if (!gravado || gravado.length === 0) {
+    return NextResponse.json(
+      { error: `não existe integração cadastrada para "${linha}" no banco` },
+      { status: 500 },
+    );
+  }
 
   // Nunca `config` nos detalhes: ali moram access_token e app_secret.
   await registrarAuditoria(admin, {
@@ -231,7 +246,7 @@ export async function POST(req: Request) {
   const { data } = await admin
     .from("social_integrations")
     .select("config")
-    .eq("plataforma", body.plataforma)
+    .eq("plataforma", linhaSocialDaPlataforma(body.plataforma))
     .maybeSingle();
 
   const cfg = (data?.config ?? {}) as Config;

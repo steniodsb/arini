@@ -11,6 +11,7 @@ import {
   emitirConversaCriada,
   emitirMensagemCriada,
 } from "@/lib/atendimento/webhook-eventos";
+import { linhaSocialDaPlataforma } from "@/lib/meta-plataformas";
 import type { ConversationChannel, MessageTipo } from "@/lib/types";
 
 // Plataformas suportadas e a origem de lead correspondente.
@@ -94,7 +95,7 @@ export async function GET(req: Request, { params }: { params: { platform: string
   const { data: integ } = await admin
     .from("social_integrations")
     .select("config")
-    .eq("plataforma", params.platform)
+    .eq("plataforma", linhaSocialDaPlataforma(params.platform))
     .maybeSingle();
 
   const esperado = (integ?.config as { verify_token?: string } | null)?.verify_token ?? null;
@@ -170,7 +171,7 @@ export async function POST(req: Request, { params }: { params: { platform: strin
   const { data: integ } = await admin
     .from("social_integrations")
     .select("ativo")
-    .eq("plataforma", params.platform)
+    .eq("plataforma", linhaSocialDaPlataforma(params.platform))
     .maybeSingle();
 
   // Só descarta quando NENHUMA das duas origens quer esta mensagem. Antes
@@ -178,6 +179,65 @@ export async function POST(req: Request, { params }: { params: { platform: strin
   // ignorado em silêncio — o defeito mais caro do fluxo, porque tudo na
   // tela dizia "conectado".
   if (!integ?.ativo && !canalCloud) return NextResponse.json({ ok: true, ignored: true });
+
+  // Comentário em post do Instagram/Facebook: não é conversa (não dá para
+  // responder DM a quem só comentou — a Meta exige que a pessoa escreva
+  // primeiro), então vira LEAD, como o TikTok. Precisa vir antes de
+  // `extractContact`, que só entende payload de mensagem e devolveria
+  // "sem mensagem", descartando o evento em silêncio.
+  const comentario = extrairComentario(payload, params.platform);
+  if (comentario) {
+    // Comentário da própria Página (resposta nossa) não é lead. `entry[].id`
+    // é a Página no Facebook e a conta profissional no Instagram — nos dois
+    // casos, é quem somos nós.
+    if (comentario.autorId && comentario.autorId === comentario.contaId) {
+      return NextResponse.json({ ok: true, ignored: true, reason: "comentário da própria página" });
+    }
+
+    // Dedupe pelo id do comentário: a Meta reenvia o evento em falha de
+    // entrega e manda `edited` quando a pessoa corrige o texto.
+    const { data: jaExiste } = await admin
+      .from("leads")
+      .select("id")
+      .eq("external_id", comentario.id)
+      .limit(1)
+      .maybeSingle();
+    if (jaExiste) {
+      return NextResponse.json({ ok: true, ignored: true, reason: "comentário já registrado" });
+    }
+
+    const { data: novoLead } = await admin
+      .from("leads")
+      .insert({
+        nome: comentario.autorNome || `Comentário ${origem}`,
+        origem,
+        mensagem: comentario.texto,
+        external_id: comentario.id,
+        raw_payload: payload,
+        stage: "novo",
+      })
+      .select("id")
+      .single();
+
+    if (novoLead?.id) {
+      emitirContatoCriado(admin, {
+        id: novoLead.id,
+        nome: comentario.autorNome || `Comentário ${origem}`,
+        telefone: null,
+        origem,
+      });
+    }
+
+    await admin.from("notifications").insert({
+      sector: "recepcao",
+      tipo: "atendimento",
+      titulo: `Novo comentário no ${origem === "instagram" ? "Instagram" : "Facebook"}`,
+      mensagem: comentario.texto?.slice(0, 140) ?? "Comentário sem texto.",
+      link: "/admin/leads",
+    });
+
+    return NextResponse.json({ ok: true, comentario: true, lead_id: novoLead?.id ?? null });
+  }
 
   const extracted = extractContact(payload, params.platform);
 
@@ -417,6 +477,77 @@ async function notifyRecepcao(
     mensagem: mensagem?.slice(0, 140) ?? "Nova mensagem recebida.",
     link: "/admin/atendimento",
   });
+}
+
+/**
+ * Comentário em post do Instagram ou da Página do Facebook.
+ *
+ * Os dois formatos são diferentes o bastante para não valer generalizar:
+ *   · Instagram → changes[].field = "comments", value = { id, text,
+ *     from: { id, username }, media: { id } }
+ *   · Facebook  → changes[].field = "feed", value = { item: "comment",
+ *     verb: "add", comment_id, message, from: { id, name }, post_id }
+ *
+ * Só `verb: "add"` interessa: "edited", "remove" e "hide" não são gente
+ * nova chegando. No Instagram não existe `verb` — cada evento é um
+ * comentário novo, e a repetição é tratada pelo dedupe do id.
+ *
+ * Devolve `null` para qualquer outro payload (inclusive mensagem), o que
+ * mantém o fluxo de conversa exatamente como era.
+ */
+function extrairComentario(
+  payload: Record<string, unknown>,
+  platform: string,
+): {
+  id: string;
+  autorId: string | null;
+  autorNome: string | null;
+  texto: string | null;
+  postId: string | null;
+  contaId: string | null;
+} | null {
+  if (platform !== "instagram" && platform !== "facebook" && platform !== "messenger") return null;
+  try {
+    const entry = (payload.entry as unknown[])?.[0] as Record<string, unknown> | undefined;
+    if (!entry) return null;
+    const contaId = typeof entry.id === "string" ? entry.id : null;
+    const change = (entry.changes as unknown[])?.[0] as Record<string, unknown> | undefined;
+    if (!change) return null;
+    const field = change.field as string | undefined;
+    const value = (change.value ?? {}) as Record<string, unknown>;
+    const from = (value.from ?? {}) as Record<string, unknown>;
+
+    if (field === "comments") {
+      const id = (value.id as string) ?? null;
+      if (!id) return null;
+      const username = from.username as string | undefined;
+      return {
+        id,
+        autorId: (from.id as string) ?? null,
+        autorNome: username ? `@${username}` : null,
+        texto: (value.text as string) ?? null,
+        postId: ((value.media as Record<string, unknown>)?.id as string) ?? null,
+        contaId,
+      };
+    }
+
+    if (field === "feed" && value.item === "comment" && value.verb === "add") {
+      const id = (value.comment_id as string) ?? null;
+      if (!id) return null;
+      return {
+        id,
+        autorId: (from.id as string) ?? null,
+        autorNome: (from.name as string) ?? null,
+        texto: (value.message as string) ?? null,
+        postId: (value.post_id as string) ?? null,
+        contaId,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function extractContact(payload: Record<string, unknown>, platform: string): {

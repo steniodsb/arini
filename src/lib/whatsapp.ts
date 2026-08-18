@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { linhaSocialDaPlataforma } from "./meta-plataformas";
 import type { ConversationChannel } from "./types";
 
 // =====================================================================
@@ -115,7 +116,10 @@ export async function verifyMetaSignature(
   rawBody: string,
   signatureHeader: string | null,
 ): Promise<"ok" | "invalid" | "skip"> {
-  const integ = await getConfig(admin, plataforma);
+  // `messenger` não tem linha própria: o App Secret é o da Página do
+  // Facebook. Sem o alias, a assinatura caía em "skip" e o endpoint
+  // público aceitava qualquer POST.
+  const integ = await getConfig(admin, linhaSocialDaPlataforma(plataforma));
   return conferirAssinaturaMeta(integ?.config.app_secret ?? null, rawBody, signatureHeader);
 }
 

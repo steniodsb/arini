@@ -53,7 +53,7 @@ const META = {
     nome: "Messenger",
     icone: Facebook,
     descricao: "Conversas do Messenger da Página.",
-    exige: "Mesma Página do Facebook; o token pode ser o mesmo.",
+    exige: "É a caixa da Página do Facebook — mesma credencial dos dois.",
   },
   tiktok: {
     nome: "TikTok",
@@ -316,6 +316,15 @@ function ModalCredenciais({
         </Alerta>
       ) : (
         <>
+          {(estado.plataforma === "messenger" || estado.plataforma === "facebook") && (
+            <Alerta tipo="info">
+              <strong>Facebook e Messenger dividem a mesma credencial</strong> — é a mesma
+              Página da Meta. Salvar aqui altera os dois cartões, e as duas URLs de webhook
+              (<code>/facebook</code> e <code>/messenger</code>) passam a valer com este
+              mesmo Verify Token.
+            </Alerta>
+          )}
+
           <div className="rounded-md bg-muted p-3 text-xs space-y-1">
             <div className="font-medium text-arini dark:text-gold">URL do webhook</div>
             <code className="text-[11px] font-mono break-all">{url}</code>
