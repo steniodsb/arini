@@ -12,6 +12,7 @@ import {
   emitirMensagemCriada,
 } from "@/lib/atendimento/webhook-eventos";
 import { linhaSocialDaPlataforma } from "@/lib/meta-plataformas";
+import { ehCanalMeta, perfilDoContatoMeta } from "@/lib/meta-messaging";
 import type { ConversationChannel, MessageTipo } from "@/lib/types";
 
 // Plataformas suportadas e a origem de lead correspondente.
@@ -266,6 +267,16 @@ export async function POST(req: Request, { params }: { params: { platform: strin
 
   const contactId = extracted.contactId ?? extracted.telefone ?? "desconhecido";
 
+  // Quem é essa pessoa? No WhatsApp o nome vem no payload; no Messenger e no
+  // Instagram, não — só o id opaco. Consultamos o perfil e, se a Meta não
+  // deixar, usamos um rótulo que ao menos DISTINGUE uma pessoa da outra.
+  // "Contato" repetido dez vezes na caixa não ajuda ninguém.
+  const perfil =
+    ehCanalMeta(canal) && extracted.contactId
+      ? await perfilDoContatoMeta(admin, canal, extracted.contactId)
+      : null;
+  const nomeContato = extracted.nome || perfil?.nome || rotuloSemNome(canal, contactId);
+
   // 1) Acha-ou-cria a CONVERSA por (canal, external_id do contato) e, no
   //    WhatsApp oficial, também pelo NÚMERO que recebeu.
   //
@@ -276,7 +287,7 @@ export async function POST(req: Request, { params }: { params: { platform: strin
   // nulo, e filtrar por ele não acharia conversa nenhuma.
   let buscaConv = admin
     .from("conversations")
-    .select("id, lead_id, channel_id")
+    .select("id, lead_id, channel_id, contato_nome")
     .eq("canal", canal)
     .eq("external_id", contactId);
   if (canalCloud) buscaConv = buscaConv.eq("channel_id", canalCloud.id);
@@ -291,7 +302,7 @@ export async function POST(req: Request, { params }: { params: { platform: strin
   if (!existingConv && canalCloud) {
     const { data: orfas } = await admin
       .from("conversations")
-      .select("id, lead_id, channel_id")
+      .select("id, lead_id, channel_id, contato_nome")
       .eq("canal", canal)
       .eq("external_id", contactId)
       .is("channel_id", null)
@@ -315,6 +326,23 @@ export async function POST(req: Request, { params }: { params: { platform: strin
       .eq("id", conversationId);
   }
 
+  // Conversa que nasceu sem nome (antes de existir a consulta de perfil, ou
+  // numa hora em que a Meta não respondeu) adota o nome na próxima mensagem.
+  // Sem isto, a conversa fica "Contato" para sempre — o histórico não se
+  // corrige sozinho, e quem abre a caixa amanhã vê o defeito de ontem.
+  if (conversationId && !existingConv?.contato_nome && nomeContato) {
+    await admin
+      .from("conversations")
+      .update({ contato_nome: nomeContato })
+      .eq("id", conversationId);
+    if (leadId && perfil?.nome) {
+      await admin
+        .from("leads")
+        .update({ nome: perfil.nome, avatar_url: perfil.avatarUrl ?? null })
+        .eq("id", leadId);
+    }
+  }
+
   if (!conversationId) {
     // 2) Dedupe do LEAD: no WhatsApp casa pelo telefone; senão cria um novo.
     if (extracted.telefone) {
@@ -327,7 +355,7 @@ export async function POST(req: Request, { params }: { params: { platform: strin
       leadId = lead?.id ?? null;
     }
     if (!leadId) {
-      const nomeLead = extracted.nome || `Contato ${origem}`;
+      const nomeLead = nomeContato;
       const { data: novoLead } = await admin
         .from("leads")
         .insert({
@@ -338,6 +366,7 @@ export async function POST(req: Request, { params }: { params: { platform: strin
           mensagem: extracted.mensagem,
           external_id: contactId,
           raw_payload: payload,
+          avatar_url: perfil?.avatarUrl ?? null,
           stage: "novo",
         })
         .select("id")
@@ -364,7 +393,7 @@ export async function POST(req: Request, { params }: { params: { platform: strin
         // Amarra a conversa ao número que recebeu — é o que faz a resposta
         // sair pelo mesmo canal, e não por qualquer WhatsApp conectado.
         channel_id: canalCloud?.id ?? null,
-        contato_nome: extracted.nome,
+        contato_nome: nomeContato,
         contato_telefone: extracted.telefone,
         // `setor_responsavel` NÃO é mais escrito: até a migração 0040 ele
         // decidia quem via a conversa (pelo setor do CRM). Agora quem decide
@@ -382,7 +411,7 @@ export async function POST(req: Request, { params }: { params: { platform: strin
         id: conversationId,
         canal,
         status: "aberta",
-        contato_nome: extracted.nome,
+        contato_nome: nomeContato,
         contato_telefone: extracted.telefone,
         lead_id: leadId,
       });
@@ -495,6 +524,25 @@ async function notifyRecepcao(
  * Devolve `null` para qualquer outro payload (inclusive mensagem), o que
  * mantém o fluxo de conversa exatamente como era.
  */
+/**
+ * Rótulo de quem a Meta não deixou identificar.
+ *
+ * Os quatro últimos dígitos do id bastam para diferenciar pessoas na lista
+ * (o id inteiro tem 17 dígitos e não cabe na coluna da caixa). É feio de
+ * propósito: parece um provisório, que é exatamente o que é — quando o
+ * acesso ao perfil for aprovado, o nome real entra no lugar.
+ */
+function rotuloSemNome(canal: ConversationChannel, contactId: string): string {
+  const rotulo: Record<string, string> = {
+    messenger: "Messenger",
+    facebook: "Facebook",
+    instagram: "Instagram",
+    whatsapp: "WhatsApp",
+  };
+  const fim = contactId.slice(-4);
+  return `${rotulo[canal] ?? "Contato"} · ${fim}`;
+}
+
 function extrairComentario(
   payload: Record<string, unknown>,
   platform: string,

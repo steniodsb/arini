@@ -111,6 +111,58 @@ async function carregarCredencial(
 }
 
 /**
+ * Nome e foto de quem escreveu, pela User Profile API da Messenger Platform.
+ *
+ * POR QUE ISTO EXISTE
+ * -------------------
+ * O payload de mensagem do Messenger/Instagram traz APENAS o id opaco do
+ * remetente (PSID/IGSID) — não vem nome, não vem foto. Sem esta consulta,
+ * toda conversa dessas redes nascia chamada "Contato": com dois clientes
+ * escrevendo, a caixa vira uma lista de "Contato", "Contato", "Contato",
+ * e o atendente precisa abrir uma por uma para saber com quem fala.
+ *
+ * É uma consulta a mais por conversa NOVA (não por mensagem), e falhar
+ * aqui não pode derrubar o recebimento: sem perfil, o webhook segue com
+ * um rótulo identificável. A permissão pode simplesmente não estar no
+ * token — o recurso "Business Asset User Profile Access" precisa ser
+ * aprovado pela Meta — e isso não é motivo para perder a mensagem.
+ */
+export async function perfilDoContatoMeta(
+  admin: SupabaseClient,
+  canal: ConversationChannel,
+  externalId: string,
+): Promise<{ nome: string | null; avatarUrl: string | null } | null> {
+  const cred = await carregarCredencial(admin, canal);
+  if (!cred.ok) return null;
+
+  // Pedir campo inexistente derruba a chamada inteira: `username` só existe
+  // no Instagram.
+  const campos = canal === "instagram" ? "name,username,profile_pic" : "name,profile_pic";
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(externalId)}` +
+        `?fields=${encodeURIComponent(campos)}&access_token=${encodeURIComponent(cred.cred.accessToken)}`,
+      { signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok) return null;
+    const json = (await res.json().catch(() => ({}))) as {
+      name?: string;
+      username?: string;
+      profile_pic?: string;
+      error?: unknown;
+    };
+    if (json.error) return null;
+
+    // No Instagram o @ é como a pessoa se identifica; o nome pode nem existir.
+    const nome = json.username ? `@${json.username}` : (json.name?.trim() || null);
+    return { nome, avatarUrl: json.profile_pic ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Tipos de anexo aceitos pela Messenger Platform.
  * O Instagram NÃO aceita `file`: mandar um PDF por lá volta erro da Meta
  * com mensagem obscura, então recusamos antes com um motivo legível.
