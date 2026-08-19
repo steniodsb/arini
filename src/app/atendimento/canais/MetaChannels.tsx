@@ -212,7 +212,9 @@ function ModalCredenciais({
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [teste, setTeste] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [teste, setTeste] = useState<{ ok: boolean; texto: string; aviso?: string | null } | null>(
+    null,
+  );
 
   const url = `${webhookBase}/api/webhooks/${estado.plataforma}`;
 
@@ -260,6 +262,7 @@ function ModalCredenciais({
               texto: json.instagram
                 ? `Página "${json.pagina}", Instagram @${json.instagram}`
                 : `Página "${json.pagina}"`,
+              aviso: json.aviso ?? null,
             }
           : { ok: false, texto: json.motivo ?? json.error ?? "falhou" },
       );
@@ -308,6 +311,8 @@ function ModalCredenciais({
           {teste.ok ? `Credencial válida — ${teste.texto}` : `Falhou: ${teste.texto}`}
         </Alerta>
       )}
+      {/* Aviso ≠ falha: o token conversa, só não deu para confirmar um detalhe. */}
+      {teste?.aviso && <Alerta tipo="info">{teste.aviso}</Alerta>}
 
       {estado.plataforma === "tiktok" ? (
         <Alerta tipo="info">

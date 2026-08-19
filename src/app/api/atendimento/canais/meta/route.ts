@@ -219,8 +219,24 @@ export async function PUT(req: Request) {
  * POST: testa a credencial contra a Graph API de verdade.
  *
  * Sem isto, o primeiro sinal de token errado seria o cliente escrevendo e
- * ninguém conseguindo responder. O teste é de leitura (`GET /<page_id>`),
- * então não manda mensagem para ninguém.
+ * ninguém conseguindo responder. O teste é de leitura, então não manda
+ * mensagem para ninguém.
+ *
+ * POR QUE `GET /me` E NÃO `GET /<page_id>`
+ * ----------------------------------------
+ * Com um token de PÁGINA, `/me` É a Página: devolve id e nome sem exigir
+ * permissão alguma além de o token ser válido. Já `GET /<page_id>` exige
+ * `pages_read_engagement` — que não tem NADA a ver com trocar mensagem.
+ *
+ * Isso não é teoria: na conexão da Arini (19/08/2026) o teste voltou
+ * vermelho com `(#100) ... requires pages_read_engagement` enquanto o
+ * canal recebia e respondia normalmente. Um teste que reprova credencial
+ * boa é pior que teste nenhum — manda desfazer o que está certo.
+ *
+ * De quebra, `/me` detecta um erro que o teste antigo não via: token de
+ * OUTRA Página. Antes, pedir `/<page_id>` com token de outra Página
+ * respondia 200 sempre que o token tivesse acesso de leitura, e o cadastro
+ * seguia apontando para a Página errada.
  */
 export async function POST(req: Request) {
   const auth = await exigirDiretoria();
@@ -260,25 +276,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, motivo: "sem Page ID cadastrado" }, { status: 400 });
   }
 
-  // `instagram_business_account` só volta quando a conta do Instagram está
-  // de fato vinculada à Página — que é o erro mais comum e o mais difícil
-  // de diagnosticar pela mensagem crua da Meta.
-  const campos =
-    body.plataforma === "instagram"
-      ? "id,name,instagram_business_account{id,username}"
-      : "id,name";
+  type RespostaGraph = {
+    id?: string;
+    name?: string;
+    instagram_business_account?: { id: string; username?: string };
+    error?: { message?: string; code?: number; type?: string };
+  };
 
-  try {
+  async function consultarMe(campos: string): Promise<{ res: Response; json: RespostaGraph }> {
     const res = await fetch(
-      `https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(pageId)}?fields=${encodeURIComponent(campos)}&access_token=${encodeURIComponent(token)}`,
+      `https://graph.facebook.com/${GRAPH_VERSION}/me?fields=${encodeURIComponent(campos)}&access_token=${encodeURIComponent(token)}`,
       { signal: AbortSignal.timeout(10_000) },
     );
-    const json = (await res.json().catch(() => ({}))) as {
-      id?: string;
-      name?: string;
-      instagram_business_account?: { id: string; username?: string };
-      error?: { message?: string; code?: number; type?: string };
-    };
+    return { res, json: (await res.json().catch(() => ({}))) as RespostaGraph };
+  }
+
+  try {
+    // 1) A credencial vale? E fala por qual Página?
+    const { res, json } = await consultarMe("id,name");
 
     if (!res.ok || json.error) {
       return NextResponse.json({
@@ -288,20 +303,46 @@ export async function POST(req: Request) {
       });
     }
 
-    if (body.plataforma === "instagram" && !json.instagram_business_account) {
+    // 2) É a Página CADASTRADA? Token de outra Página autentica normalmente
+    // e depois responde no lugar errado — melhor barrar aqui.
+    if (json.id && json.id !== pageId) {
       return NextResponse.json({
         ok: false,
         motivo:
-          "o token é válido, mas esta Página não tem conta do Instagram vinculada — " +
-          "vincule em Configurações da Página › Contas vinculadas e confirme que o " +
-          "Instagram está como conta Profissional",
+          `este token fala pela Página "${json.name ?? json.id}" (id ${json.id}), ` +
+          `mas o Page ID cadastrado é ${pageId} — corrija um dos dois`,
       });
+    }
+
+    // 3) Só o Instagram precisa de mais: a conta profissional vinculada.
+    // Se a permissão de leitura não estiver no token, isso NÃO reprova a
+    // credencial — vira aviso, porque mensagem não depende dela.
+    let instagram: string | null = null;
+    let aviso: string | null = null;
+    if (body.plataforma === "instagram") {
+      const ig = await consultarMe("instagram_business_account{id,username}");
+      if (ig.json.error) {
+        aviso =
+          "não deu para confirmar a conta do Instagram: falta `instagram_basic` neste token. " +
+          "Mensagem não depende disso, mas o vínculo segue sem verificação.";
+      } else if (!ig.json.instagram_business_account) {
+        return NextResponse.json({
+          ok: false,
+          motivo:
+            "o token é válido, mas esta Página não tem conta do Instagram vinculada — " +
+            "vincule em Configurações da Página › Contas vinculadas e confirme que o " +
+            "Instagram está como conta Profissional",
+        });
+      } else {
+        instagram = ig.json.instagram_business_account.username ?? null;
+      }
     }
 
     return NextResponse.json({
       ok: true,
       pagina: json.name ?? pageId,
-      instagram: json.instagram_business_account?.username ?? null,
+      instagram,
+      aviso,
     });
   } catch (e) {
     const msg =
