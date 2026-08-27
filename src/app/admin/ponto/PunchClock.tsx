@@ -18,7 +18,21 @@ const NEXT: Record<string, TimeEntryType> = {
 
 const ALL: TimeEntryType[] = ["entrada", "intervalo_inicio", "intervalo_fim", "saida"];
 
-export function PunchClock({ userId, lastType }: { userId: string; lastType?: TimeEntryType }) {
+export function PunchClock({
+  userId,
+  lastType,
+  colaboradorId = null,
+}: {
+  userId: string;
+  lastType?: TimeEntryType;
+  /**
+   * O colaborador ligado a este login, quando existe. Sem ele o registro
+   * fica só com `user_id` e NÃO aparece no relatório individual — que
+   * agrupa por colaborador. É o que liga o ponto batido aqui ao mesmo
+   * histórico do ponto batido no terminal.
+   */
+  colaboradorId?: string | null;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -28,7 +42,9 @@ export function PunchClock({ userId, lastType }: { userId: string; lastType?: Ti
     setBusy(true);
     setMsg(null);
     const supabase = createSupabaseBrowser();
-    const { error } = await supabase.from("time_entries").insert({ user_id: userId, tipo, origem: "web" });
+    const { error } = await supabase
+      .from("time_entries")
+      .insert({ user_id: userId, colaborador_id: colaboradorId, tipo, origem: "web" });
     setBusy(false);
     if (error) { setMsg(`Erro: ${error.message}`); return; }
     setMsg(`${TIME_ENTRY_LABELS[tipo]} registrada às ${new Date().toLocaleTimeString("pt-BR")}.`);
