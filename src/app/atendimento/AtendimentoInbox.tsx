@@ -9,7 +9,8 @@ import {
   CHANNEL_LABELS, PRIORITY_LABELS, PRIORITY_ORDER,
   CONVERSATION_STATUS_LABELS,
   type Conversation, type Message, type CannedResponse, type AgentOption,
-  type ConversationStatus, type ConversationPriority, type AtendimentoTeam,
+  type ConversationStatus, type ConversationPriority, type ConversationChannel,
+  type AtendimentoTeam,
   type AtendimentoLabel, type AtendimentoMacro, type MacroAction, type Profile,
   type AtendimentoPapel,
   rotuloAgente,
@@ -18,7 +19,7 @@ import {
   EtiquetaChip, PrioridadeChip, StatusChip,
 } from "@/components/atendimento/Chips";
 import { ContactPanel } from "./ContactPanel";
-import { ConversationList } from "./inbox/ConversationList";
+import { ConversationList, CHANNEL_DOT } from "./inbox/ConversationList";
 import { MessageThread } from "./inbox/MessageThread";
 import { Composer } from "./inbox/Composer";
 import { SnoozeMenu } from "./inbox/SnoozeMenu";
@@ -148,8 +149,25 @@ export function AtendimentoInbox({
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [modalMassa, setModalMassa] = useState<null | "agente" | "equipe" | "etiqueta" | "prioridade" | "excluir">(null);
 
-  // Painel de contato
-  const [painelAberto, setPainelAberto] = useState(true);
+  // Painel de contato. Nasce RECOLHIDO: aberto por padrão ele come a largura
+  // da conversa, que é o que o atendente lê o tempo todo — a informação do
+  // contato é consulta pontual, não leitura contínua. A preferência de quem
+  // prefere vê-lo sempre aberto sobrevive ao recarregar.
+  const [painelAberto, setPainelAberto] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("atendimento:painelContato") === "aberto") setPainelAberto(true);
+    } catch {
+      // Navegador com storage bloqueado: segue recolhido, sem quebrar a tela.
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("atendimento:painelContato", painelAberto ? "aberto" : "recolhido");
+    } catch {
+      /* idem */
+    }
+  }, [painelAberto]);
   const [novaTag, setNovaTag] = useState("");
 
   // Busca dentro da thread + copiloto de IA
@@ -312,6 +330,56 @@ export function AtendimentoInbox({
     nao_atribuidas: byStatus.filter((c) => !c.responsavel_id).length,
     todas: byStatus.length,
   }), [byStatus, currentUser.id]);
+
+  // Todos os filtros MENOS o de canal.
+  //
+  // Separado porque as abas de canal precisam mostrar quantas conversas há
+  // em cada uma. Se a contagem viesse da lista já filtrada por canal, toda
+  // aba não-selecionada marcaria zero — e o número perderia a única função
+  // que tem, que é dizer onde vale a pena clicar. As outras condições
+  // continuam valendo: com "não atribuídas" ligado, a aba do WhatsApp conta
+  // as não atribuídas do WhatsApp, não o total dele.
+  const passaSemCanal = useCallback((c: Conversation) => {
+    if (assignFilter === "minhas" && c.responsavel_id !== currentUser.id) return false;
+    if (assignFilter === "nao_atribuidas" && c.responsavel_id) return false;
+    if (conexaoFiltro !== "todas" && c.channel_id !== conexaoFiltro) return false;
+    if (prioridadeFiltro !== "todas") {
+      if (prioridadeFiltro === "sem" ? c.prioridade !== null : c.prioridade !== prioridadeFiltro) return false;
+    }
+    if (equipeFiltro !== "todas") {
+      if (equipeFiltro === "sem" ? c.team_id !== null : c.team_id !== equipeFiltro) return false;
+    }
+    if (etiquetaFiltro !== "todas" && !c.tags.includes(etiquetaFiltro)) return false;
+    if (busca.trim()) {
+      const q = busca.toLowerCase();
+      const hay = `${c.contato_nome ?? ""} ${c.contato_telefone ?? ""} ${c.last_message_preview ?? ""} ${c.tags.join(" ")}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }, [assignFilter, currentUser.id, conexaoFiltro, prioridadeFiltro, equipeFiltro, etiquetaFiltro, busca]);
+
+  /** Quantas conversas por canal, para o número na aba. */
+  const contagemPorCanal = useMemo(() => {
+    const acc: Record<string, number> = {};
+    for (const c of byStatus) if (passaSemCanal(c)) acc[c.canal] = (acc[c.canal] ?? 0) + 1;
+    return acc;
+  }, [byStatus, passaSemCanal]);
+
+  /**
+   * Quais abas desenhar. Sai de `porVista` — não de `byStatus` — porque o
+   * filtro de status não deve fazer uma aba SUMIR: resolver a última
+   * conversa do Instagram apagaria a aba dele no meio do expediente, e a
+   * pessoa concluiria que a integração caiu.
+   *
+   * O canal selecionado entra na lista mesmo sem conversa, senão a aba se
+   * apaga debaixo do próprio clique e o filtro fica ligado sem nada na tela
+   * indicando isso.
+   */
+  const canaisComConversa = useMemo(() => {
+    const vistos = new Set(porVista.map((c) => c.canal));
+    if (canalFiltro !== "todos") vistos.add(canalFiltro as ConversationChannel);
+    return (Object.keys(CHANNEL_LABELS) as ConversationChannel[]).filter((ch) => vistos.has(ch));
+  }, [porVista, canalFiltro]);
 
   const filtered = useMemo(() => {
     const lista = byStatus.filter((c) => {
@@ -891,6 +959,58 @@ export function AtendimentoInbox({
                 WhatsApp, Instagram, Messenger e site. A conversa sai desta lista assim que
                 você atribui uma fila.
               </p>
+            </div>
+          )}
+
+          {/*
+            Abas por canal. O pedido do Carlos (21/08): "se a gente [tivesse]
+            abas igual aba do WhatsApp e aba do Messenger, aba do Instagram,
+            tudo no mesmo segmento" — porque com tudo integrado a lista única
+            "tá ficando muito tumultuado".
+
+            É SÓ A TELA, e isso foi explícito: "não precisa separar ela dentro
+            do CRM nem nada, só a tela". Por isso a aba escreve no MESMO
+            `canalFiltro` que o painel de filtros já usava — nada de caixa
+            nova, fila nova ou coluna nova. Trocar de aba é trocar um filtro.
+
+            Só aparece canal que tem conversa (mais "Todos"): abas fixas para
+            os cinco canais deixariam três zeradas para sempre em quem usa
+            só WhatsApp, que é ruído no lugar de organização.
+          */}
+          {canaisComConversa.length > 1 && (
+            <div className="px-3 pb-1.5">
+              <div
+                role="tablist"
+                aria-label="Filtrar conversas por canal"
+                className="flex items-center gap-1 overflow-x-auto scrollbar-none"
+              >
+                {(["todos", ...canaisComConversa] as ("todos" | ConversationChannel)[]).map((ch) => {
+                  const ativo = canalFiltro === ch;
+                  const n = ch === "todos"
+                    ? Object.values(contagemPorCanal).reduce((a, b) => a + b, 0)
+                    : contagemPorCanal[ch] ?? 0;
+                  return (
+                    <button
+                      key={ch}
+                      type="button"
+                      role="tab"
+                      aria-selected={ativo}
+                      onClick={() => setCanalFiltro(ch)}
+                      className={`shrink-0 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+                        ativo
+                          ? "bg-arini text-white border-arini dark:bg-gold dark:text-arini dark:border-gold"
+                          : "bg-transparent text-muted-foreground border-transparent hover:bg-muted"
+                      }`}
+                    >
+                      {ch !== "todos" && (
+                        <span className={`h-1.5 w-1.5 rounded-full ${CHANNEL_DOT[ch] ?? "bg-muted-foreground"}`} />
+                      )}
+                      {ch === "todos" ? "Todos" : CHANNEL_LABELS[ch]}
+                      <span className={ativo ? "opacity-80" : "opacity-60"}>{n}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
