@@ -31,9 +31,32 @@ export function PageHeader({
   );
 }
 
-/** Casca de página com padding e rolagem — use em toda tela do atendimento. */
+/**
+ * Casca de página do atendimento — margem, container central e rolagem.
+ *
+ * POR QUE DUAS CAMADAS
+ * --------------------
+ * A rolagem e o fundo ficam FORA; a largura máxima e o padding, DENTRO.
+ * Invertido, a barra de rolagem apareceria no meio da tela (grudada na
+ * borda do container e não na da janela) e o fundo tingido terminaria
+ * junto com o conteúdo, deixando duas faixas claras nas laterais.
+ *
+ * `max-w-6xl` não é enfeite: em monitor largo, uma tabela de configuração
+ * esticada até 2000px separa o rótulo do valor por meio metro de vazio, e
+ * o olho perde a linha. Em tela normal o limite nunca é atingido, então
+ * não custa nada. Telas que precisam de mais largura — Relatórios, com
+ * gráficos lado a lado — passam `className="max-w-none"`.
+ *
+ * O fundo levemente tingido é o que faz os blocos `bg-card` de dentro
+ * lerem como cartões sobrepostos, em vez de se dissolverem numa parede
+ * branca só.
+ */
 export function PageShell({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("p-6 space-y-5 h-full overflow-y-auto", className)}>{children}</div>;
+  return (
+    <div className="h-full overflow-y-auto bg-muted/30">
+      <div className={cn("mx-auto w-full max-w-6xl p-6 space-y-5", className)}>{children}</div>
+    </div>
+  );
 }
 
 /** Modal centralizado com overlay. Fecha no Esc e no clique fora. */

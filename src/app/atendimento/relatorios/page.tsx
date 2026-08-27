@@ -106,7 +106,7 @@ export default async function RelatoriosPage() {
   ]);
 
   return (
-    <PageShell>
+    <PageShell className="max-w-none">
       <RelatoriosPanel
         conversas={(conversas ?? []) as RelConversa[]}
         mensagens={(mensagens ?? []) as RelMensagem[]}
