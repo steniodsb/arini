@@ -186,7 +186,7 @@ export function ContactPanel({
   const responsavel = conversation.responsavel_id ? agentName?.get(conversation.responsavel_id) : null;
 
   return (
-    <aside className="w-72 shrink-0 border-l bg-card overflow-y-auto">
+    <aside className="w-72 shrink-0 rounded-2xl border bg-card shadow-sm overflow-y-auto">
       <div className="p-4 border-b text-center">
         <div className="mx-auto h-14 w-14 rounded-full bg-arini/10 text-arini dark:text-gold dark:bg-gold/15 flex items-center justify-center text-lg font-semibold">
           {nome.charAt(0).toUpperCase()}

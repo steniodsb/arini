@@ -863,9 +863,26 @@ export function AtendimentoInbox({
   })();
 
   return (
-    <div className="flex h-full min-h-0">
+    /*
+      LAYOUT EM CARTÕES
+      -----------------
+      Os três painéis eram colados de borda a borda, separados só por uma
+      linha de 1px — a tela inteira lia como um bloco só, sem hierarquia.
+      Agora cada um é um cartão com respiro em volta, sobre o fundo tingido
+      da página.
+
+      `max-w` + `mx-auto`: em monitor largo, a coluna da conversa esticava
+      até o infinito e a linha de texto ficava longa demais para acompanhar
+      com o olho. O container central segura isso sem prejudicar telas
+      normais, onde o limite simplesmente nunca é atingido.
+
+      `min-h-0` continua em cada nível: sem ele, um filho com scroll próprio
+      estoura a altura do pai em vez de rolar dentro dele — é o que faz a
+      lista e a thread rolarem cada uma no seu cartão.
+    */
+    <div className="flex h-full min-h-0 gap-3 p-3 bg-muted/30 mx-auto w-full max-w-[1800px]">
       {/* ================= Lista ================= */}
-      <aside className="w-[340px] shrink-0 border-r bg-card flex flex-col min-h-0">
+      <aside className="w-[340px] shrink-0 rounded-2xl border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
         <div className="border-b shrink-0">
           <div className="px-3 pt-2.5 pb-1 flex items-center gap-2">
             <h1 className="font-semibold text-[15px] flex-1 truncate">{tituloVista}</h1>
@@ -1131,7 +1148,10 @@ export function AtendimentoInbox({
       </aside>
 
       {/* ================= Thread ================= */}
-      <section className="flex-1 min-w-0 flex flex-col bg-muted/20 min-h-0">
+      {/* O fundo levemente tingido fica: a bolha RECEBIDA usa `card`, então
+          um cartão branco puro aqui faria a mensagem do cliente sumir
+          dentro do painel. */}
+      <section className="flex-1 min-w-0 flex flex-col bg-muted/20 min-h-0 rounded-2xl border shadow-sm overflow-hidden">
         {!selected ? (
           naCaixaCentral ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted-foreground">
