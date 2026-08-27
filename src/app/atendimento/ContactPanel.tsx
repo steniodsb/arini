@@ -203,6 +203,9 @@ export function ContactPanel({
         )}
       </div>
 
+      {/* Só CONTATO nasce aberto — telefone e início são o que se olha de
+          relance. O resto abre a pedido: sete blocos abertos de uma vez
+          transformavam o painel numa parede de texto para rolar. */}
       <Bloco titulo="Contato" inicialAberto>
         {conversation.contato_telefone && <Linha icone={<Phone size={13} />} texto={conversation.contato_telefone} />}
         {lead?.email && <Linha icone={<Mail size={13} />} texto={lead.email} />}
@@ -210,7 +213,7 @@ export function ContactPanel({
         <Linha icone={<User size={13} />} texto={`Início: ${formatDateTimeBR(conversation.created_at)}`} />
       </Bloco>
 
-      <Bloco titulo="Conversa" inicialAberto>
+      <Bloco titulo="Conversa">
         <Linha icone={<MessageSquare size={13} />} texto={`Status: ${CONVERSATION_STATUS_LABELS[conversation.status]}`} />
         {responsavel && <Linha icone={<User size={13} />} texto={`Responsável: ${responsavel}`} />}
         {conversation.primeira_resposta_em ? (
@@ -234,7 +237,7 @@ export function ContactPanel({
         )}
       </Bloco>
 
-      <Bloco titulo="CRM" inicialAberto>
+      <Bloco titulo="CRM">
         {!leadId ? (
           <p className="text-xs text-muted-foreground">Sem contato do CRM vinculado.</p>
         ) : !lead ? (
@@ -327,7 +330,7 @@ export function ContactPanel({
       )}
 
       {leadId && (
-        <Bloco titulo="Notas do contato" inicialAberto>
+        <Bloco titulo="Notas do contato">
           <div className="flex items-start gap-1.5">
             <textarea
               value={novaNota}

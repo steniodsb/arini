@@ -128,7 +128,10 @@ export function AtendimentoNav({
 }) {
   const pathname = usePathname();
   const [colapsada, setColapsada] = useState(false);
-  const [conversasAbertas, setConversasAbertas] = useState(true);
+  // Submenu de Conversas nasce fechado: "Todas / Menções / Não atendidas"
+  // ocupavam três linhas permanentes na sidebar para atalhos que quase
+  // ninguém usa no dia a dia — a lista em si já é a tela inicial.
+  const [conversasAbertas, setConversasAbertas] = useState(false);
 
   const ITEMS = itensDoPapel(papel);
 
