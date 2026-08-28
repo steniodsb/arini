@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Send, AlertTriangle } from "lucide-react";
+import { ArrowRight, Send, AlertTriangle, ChevronDown, UserPlus, X } from "lucide-react";
 import { rotuloAgente, type AgentOption, type AtendimentoTeam, type Conversation } from "@/lib/types";
 import { formatarEspera, minutosEsperando, esperaCritica } from "./espera";
 
@@ -42,6 +42,11 @@ export function PainelTriagem({
   onTriada: (conversa: Conversation) => void;
   onErro: (mensagem: string) => void;
 }) {
+  // Nasce FECHADO. Com nove filas em grade, o painel aberto comia metade
+  // da altura útil da conversa antes de qualquer clique — quem só queria
+  // LER a mensagem para decidir o destino precisava rolar para vê-la. O
+  // botão "Atribuir" é o que revela as opções.
+  const [aberto, setAberto] = useState(false);
   const [filaId, setFilaId] = useState<string | null>(null);
   const [responsavelId, setResponsavelId] = useState<string>("");
   const [observacao, setObservacao] = useState("");
@@ -92,6 +97,7 @@ export function PainelTriagem({
       setFilaId(null);
       setResponsavelId("");
       setObservacao("");
+      setAberto(false);
       onTriada(json.conversa);
     } catch {
       onErro("Erro de rede ao atribuir a conversa.");
@@ -109,8 +115,10 @@ export function PainelTriagem({
           Triagem
         </span>
         <span className="text-xs text-muted-foreground flex-1 min-w-0 truncate">
-          Escolha a fila e encaminhe. Enquanto isso, ninguém está atendendo.
+          Ninguém está atendendo até você encaminhar.
         </span>
+        {/* A espera fica visível FECHADO também: é o sinal de urgência, e
+            escondê-lo atrás do clique derrotaria o propósito do painel. */}
         <span
           className={`text-[11px] rounded-full px-2 py-0.5 font-medium ${
             critico
@@ -122,8 +130,23 @@ export function PainelTriagem({
           {critico && <AlertTriangle size={10} className="inline mr-1 -mt-px" />}
           esperando {formatarEspera(minutos)}
         </span>
+        <Button
+          type="button"
+          variant={aberto ? "outline" : "gold"}
+          size="sm"
+          onClick={() => setAberto((v) => !v)}
+          aria-expanded={aberto}
+        >
+          {aberto ? (
+            <><X size={14} /> Fechar</>
+          ) : (
+            <><UserPlus size={14} /> Atribuir</>
+          )}
+        </Button>
       </div>
 
+      {!aberto ? null : (
+      <>
       <div className="p-3 space-y-3 max-h-[46vh] overflow-y-auto">
         {teams.length === 0 ? (
           <p className="text-xs text-muted-foreground">
@@ -229,9 +252,14 @@ export function PainelTriagem({
           disabled={!filaId || enviando}
           onClick={() => void atribuir()}
         >
-          <Send size={14} /> {enviando ? "Atribuindo…" : "Atribuir"}
+          {/* "Encaminhar", não "Atribuir": o botão que ABRE o painel já se
+              chama Atribuir, e dois botões com o mesmo nome fazendo coisas
+              diferentes na mesma tela é como se clica no errado. */}
+          <Send size={14} /> {enviando ? "Encaminhando…" : "Encaminhar"}
         </Button>
       </div>
+      </>
+      )}
     </div>
   );
 }

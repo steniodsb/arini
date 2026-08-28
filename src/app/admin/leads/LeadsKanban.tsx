@@ -17,12 +17,29 @@ import {
 import { LEAD_STAGES, type Lead, type LeadStage } from "@/lib/types";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { formatDateBR } from "@/lib/utils";
-import { Phone, MessageCircle, Mail } from "lucide-react";
+import { Phone, MessageCircle, Mail, X } from "lucide-react";
+
+// Quantos cartões cada coluna mostra antes do "ver mais".
+//
+// Existe porque o quadro abria os 300+ leads de uma vez ("tá abrindo tudo
+// uma vez" — call de 21/08). Cada cartão é um `useDraggable`, ou seja um
+// listener e um nó no contexto do dnd-kit: 300 cartões custam bem mais que
+// 300 divs. O corte é POR COLUNA, não no total, senão uma etapa cheia
+// engoliria a cota das outras e as colunas do fim apareceriam vazias.
+const PAGINA = 10;
 
 // Cartão arrastável de um lead. Usa @dnd-kit (ponteiro + toque) em vez do
 // drag-and-drop nativo do HTML5 — que não funciona em telas de toque e
 // conflitava com o <a> interno do cartão.
-function LeadCard({ lead }: { lead: Lead }) {
+function LeadCard({
+  lead,
+  podeDescartar,
+  onDescartar,
+}: {
+  lead: Lead;
+  podeDescartar: boolean;
+  onDescartar: (lead: Lead) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: lead.id });
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
@@ -32,13 +49,36 @@ function LeadCard({ lead }: { lead: Lead }) {
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
-      {...attributes}
-      className={`bg-white rounded-md border p-3 shadow-sm cursor-grab active:cursor-grabbing hover:border-gold transition-colors touch-none ${
+      className={`group relative bg-white rounded-md border p-3 shadow-sm hover:border-gold transition-colors ${
         isDragging ? "opacity-40" : ""
       }`}
     >
-      <CardBody lead={lead} />
+      {/*
+        O arraste fica no CORPO, não no cartão inteiro. Com os listeners no
+        elemento externo, o botão "não é lead" herdava o `touch-none` e o
+        sensor de ponteiro — no toque ele virava início de arraste em vez de
+        clique, e no mouse o clique só passava por acidente.
+      */}
+      <div {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing touch-none">
+        <CardBody lead={lead} />
+      </div>
+
+      {podeDescartar && (
+        <button
+          type="button"
+          onClick={() => onDescartar(lead)}
+          // Aparece no hover no mouse; no toque não existe hover, então fica
+          // sempre visível em tela pequena — escondê-lo ali seria escondê-lo
+          // para sempre.
+          className="absolute top-1.5 right-1.5 p-1 rounded text-muted-foreground/50
+                     hover:bg-red-50 hover:text-red-600 opacity-100 sm:opacity-0
+                     sm:group-hover:opacity-100 transition-opacity"
+          title="Não é lead — remover do funil"
+          aria-label={`Marcar ${lead.nome} como "não é lead"`}
+        >
+          <X size={13} />
+        </button>
+      )}
     </div>
   );
 }
@@ -79,7 +119,15 @@ function Column({ col, count, children }: { col: (typeof LEAD_STAGES)[number]; c
         isOver ? "bg-gold/10 border-gold" : "bg-muted/40"
       }`}
     >
-      <div className="flex items-center justify-between mb-3">
+      {/*
+        Cabeçalho grudado no topo. É o que responde "não sei qual que é esse
+        setor" (call de 21/08): rolando a lista, o nome da etapa saía da tela
+        e os cartões viravam uma coluna anônima. `bg-*` opaco é obrigatório —
+        sem fundo, os cartões passam por baixo e o texto fica ilegível.
+      */}
+      <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-3 px-3 pt-3 pb-2 rounded-t-lg
+                      bg-muted/95 supports-[backdrop-filter]:bg-muted/80 backdrop-blur
+                      flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${col.color}`} />
           <h3 className="font-semibold text-arini text-sm">{col.label}</h3>
@@ -91,9 +139,33 @@ function Column({ col, count, children }: { col: (typeof LEAD_STAGES)[number]; c
   );
 }
 
-export function LeadsKanban({ initial }: { initial: Lead[] }) {
+export function LeadsKanban({
+  initial,
+  podeDescartar = false,
+}: {
+  initial: Lead[];
+  /** Recepção e diretoria. O banco também barra — ver 0048_leads_descarte.sql. */
+  podeDescartar?: boolean;
+}) {
   const [leads, setLeads] = useState<Lead[]>(initial);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [visiveis, setVisiveis] = useState<Record<string, number>>({});
+
+  const limite = (stage: string) => visiveis[stage] ?? PAGINA;
+  const verMais = (stage: string) =>
+    setVisiveis((v) => ({ ...v, [stage]: (v[stage] ?? PAGINA) + PAGINA }));
+
+  async function descartar(lead: Lead) {
+    if (!confirm(`Marcar "${lead.nome}" como não é lead?\n\nEle sai do funil, mas continua no banco — dá para reverter.`)) return;
+    const previous = leads;
+    setLeads((curr) => curr.filter((l) => l.id !== lead.id));
+    const supabase = createSupabaseBrowser();
+    const { error } = await supabase.from("leads").update({ descartado: true }).eq("id", lead.id);
+    if (error) {
+      setLeads(previous);
+      alert("Não foi possível descartar: " + error.message);
+    }
+  }
 
   // Ponteiro para mouse (arrasta após 6px) e toque com long-press (200ms) para
   // não conflitar com o scroll horizontal do quadro nem com o toque/clique.
@@ -147,11 +219,30 @@ export function LeadsKanban({ initial }: { initial: Lead[] }) {
         <div className="flex gap-3 min-w-max">
           {LEAD_STAGES.map((col) => {
             const items = leads.filter((l) => l.stage === col.key);
+            const mostrados = items.slice(0, limite(col.key));
+            const restantes = items.length - mostrados.length;
             return (
+              // O contador do cabeçalho é o TOTAL da etapa, não o que está
+              // desenhado: é o número que ele usa para ler o funil.
               <Column key={col.key} col={col} count={items.length}>
-                {items.map((lead) => (
-                  <LeadCard key={lead.id} lead={lead} />
+                {mostrados.map((lead) => (
+                  <LeadCard
+                    key={lead.id}
+                    lead={lead}
+                    podeDescartar={podeDescartar}
+                    onDescartar={descartar}
+                  />
                 ))}
+                {restantes > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => verMais(col.key)}
+                    className="w-full text-xs text-arini/80 hover:text-arini hover:bg-white
+                               border border-dashed rounded-md py-2 transition-colors"
+                  >
+                    Ver mais {Math.min(PAGINA, restantes)} de {restantes}
+                  </button>
+                )}
                 {items.length === 0 && (
                   <div className="text-xs text-muted-foreground/60 italic py-4 text-center">Vazio</div>
                 )}

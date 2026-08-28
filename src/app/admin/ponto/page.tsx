@@ -4,51 +4,13 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, Clock } from "lucide-react";
+import { Users, Clock, MonitorSmartphone, FileText } from "lucide-react";
 import { TIME_ENTRY_LABELS, type TimeEntry, type TimeEntryType } from "@/lib/types";
+import { fmtHours, workedMs, groupByDay } from "@/lib/ponto";
 import { PunchClock } from "./PunchClock";
 
 function fmt(ts: string) {
   return new Date(ts).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
-
-function fmtHours(ms: number) {
-  if (ms <= 0) return "—";
-  const totalMin = Math.round(ms / 60000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return `${h}h${String(m).padStart(2, "0")}`;
-}
-
-/**
- * Horas trabalhadas de um dia: (última saída − primeira entrada) menos o
- * intervalo (primeiro início → último fim). Se o dia está em aberto (sem
- * saída), considera até agora.
- */
-function workedMs(entries: TimeEntry[]): { ms: number; aberto: boolean } {
-  const sorted = [...entries].sort((a, b) => +new Date(a.registrado_em) - +new Date(b.registrado_em));
-  const first = (t: TimeEntryType) => sorted.find((e) => e.tipo === t);
-  const last = (t: TimeEntryType) => [...sorted].reverse().find((e) => e.tipo === t);
-  const entrada = first("entrada");
-  if (!entrada) return { ms: 0, aberto: false };
-  const saida = last("saida");
-  const fim = saida ? +new Date(saida.registrado_em) : Date.now();
-  let ms = fim - +new Date(entrada.registrado_em);
-  const pIni = first("intervalo_inicio");
-  const pFim = last("intervalo_fim");
-  if (pIni && pFim && +new Date(pFim.registrado_em) > +new Date(pIni.registrado_em)) {
-    ms -= +new Date(pFim.registrado_em) - +new Date(pIni.registrado_em);
-  }
-  return { ms: Math.max(0, ms), aberto: !saida };
-}
-
-function groupByDay(entries: TimeEntry[]): Record<string, TimeEntry[]> {
-  const byDay: Record<string, TimeEntry[]> = {};
-  for (const e of entries) {
-    const key = new Date(e.registrado_em).toLocaleDateString("pt-BR");
-    (byDay[key] = byDay[key] ?? []).push(e);
-  }
-  return byDay;
 }
 
 export default async function PontoPage() {
@@ -75,6 +37,15 @@ export default async function PontoPage() {
         .order("registrado_em", { ascending: false })
         .limit(2000)
     : { data: null };
+
+  // Colaborador ligado a este login, se houver. `maybeSingle` porque o
+  // vínculo é opcional: quem só tem login (e não bate ponto) não tem linha.
+  const { data: meuColab } = await supabase
+    .from("colaboradores")
+    .select("id")
+    .eq("profile_id", user.id)
+    .maybeSingle();
+  const meuColaborador = (meuColab?.id as string | undefined) ?? null;
 
   const myEntries = (mine ?? []) as TimeEntry[];
   const lastType = myEntries[0]?.tipo as TimeEntryType | undefined;
@@ -106,13 +77,33 @@ export default async function PontoPage() {
           <p className="text-muted-foreground mt-1">Registre entrada, intervalos e saída. Os horários não podem ser editados.</p>
         </div>
         {admin && (
-          <Button asChild variant="outline" size="sm">
-            <Link href="/admin/ponto/funcionarios"><Users size={14} /> Funcionários</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="gold" size="sm">
+              <Link href="/admin/ponto/terminal"><MonitorSmartphone size={14} /> Terminal</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/ponto/colaboradores"><Users size={14} /> Colaboradores</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/ponto/relatorio"><FileText size={14} /> Relatório</Link>
+            </Button>
+          </div>
         )}
       </div>
 
-      <PunchClock userId={user.id} lastType={lastType} />
+      {admin && !meuColaborador && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="pt-6 text-sm">
+            Este login não está ligado a nenhum colaborador, então o que você bater aqui
+            não entra no relatório individual.{" "}
+            <Link href="/admin/ponto/colaboradores" className="underline text-arini">
+              Vincule em Colaboradores
+            </Link>.
+          </CardContent>
+        </Card>
+      )}
+
+      <PunchClock userId={user.id} lastType={lastType} colaboradorId={meuColaborador} />
 
       <Card>
         <CardHeader>

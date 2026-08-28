@@ -1,4 +1,4 @@
-import { requireSector } from "@/lib/auth";
+import { requireSector, isDiretoria } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { LeadsKanban } from "./LeadsKanban";
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,24 @@ import { Plus } from "lucide-react";
 import { LEAD_STAGES, LEAD_ORIGINS, type Lead } from "@/lib/types";
 
 export default async function LeadsPage({ searchParams }: { searchParams: { origem?: string } }) {
-  await requireSector(["recepcao", "administrativo", "admin_central"]);
+  const { profile } = await requireSector(["recepcao", "administrativo", "admin_central"]);
   const supabase = createSupabaseServer();
   const origem = searchParams.origem ?? "";
-  let q = supabase.from("leads").select("*").order("ultima_interacao_em", { ascending: false }).limit(500);
+  let q = supabase
+    .from("leads")
+    .select("*")
+    // Quem foi marcado como "não é lead" some do funil e das estatísticas —
+    // deixá-lo contando no total inflaria a base e afundaria a conversão.
+    .eq("descartado", false)
+    .order("ultima_interacao_em", { ascending: false })
+    .limit(500);
   if (origem) q = q.eq("origem", origem);
   const { data } = await q;
   const leads = (data ?? []) as Lead[];
+
+  // Espelha 0048_leads_descarte.sql. A restrição de verdade é a do banco;
+  // isto só evita oferecer um botão que vai falhar.
+  const podeDescartar = isDiretoria(profile) || profile?.sector === "recepcao";
 
   // Stats
   const byStage = LEAD_STAGES.map((s) => ({
@@ -94,7 +105,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: { orig
       <Card>
         <CardHeader><CardTitle>Kanban</CardTitle></CardHeader>
         <CardContent>
-          <LeadsKanban initial={leads} />
+          <LeadsKanban initial={leads} podeDescartar={podeDescartar} />
         </CardContent>
       </Card>
     </div>

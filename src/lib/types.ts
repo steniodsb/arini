@@ -200,6 +200,10 @@ export interface Lead {
   observacoes: string | null;
   created_at: string;
   ultima_interacao_em: string;
+  /** "Não é lead": sai do funil sem sair do banco. Ver 0048_leads_descarte.sql. */
+  descartado: boolean;
+  descartado_em: string | null;
+  descartado_por: string | null;
 }
 
 export interface Approval {
@@ -1009,13 +1013,55 @@ export interface BankAccountBalance {
 
 export interface TimeEntry {
   id: string;
+  /** QUEM OPEROU. No terminal central é a conta da recepção, não a pessoa. */
   user_id: string;
+  /** DE QUEM é o ponto. Ver 0049_ponto_colaboradores.sql. */
+  colaborador_id: string | null;
   tipo: TimeEntryType;
   registrado_em: string;
   origem: string;
   observacoes: string | null;
   created_at: string;
 }
+
+/**
+ * Pessoa que bate ponto — separada de `profiles` porque bater ponto não
+ * exige login (o terminal central é uma máquina só, compartilhada).
+ */
+export interface Colaborador {
+  id: string;
+  nome: string;
+  cpf: string | null;
+  setor: Sector | null;
+  cargo: string | null;
+  profile_id: string | null;
+  carga_horaria_min: number;
+  almoco_inicio: string | null;
+  almoco_min: number;
+  pausa_inicio: string | null;
+  pausa_min: number;
+  /** 0 = domingo … 6 = sábado. */
+  dias_semana: number[];
+  codigo: string | null;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** O que o terminal enxerga: tudo menos o CPF. Ver a view `colaboradores_terminal`. */
+export type ColaboradorTerminal = Pick<
+  Colaborador,
+  "id" | "nome" | "codigo" | "setor" | "cargo" | "carga_horaria_min" | "dias_semana"
+>;
+
+export const DIAS_SEMANA_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"] as const;
+
+/** Escalas prontas — cobrem o que o Carlos citou ("segunda a sexta ou segunda a domingo"). */
+export const ESCALAS: { key: string; label: string; dias: number[] }[] = [
+  { key: "seg_sex", label: "Segunda a sexta", dias: [1, 2, 3, 4, 5] },
+  { key: "seg_sab", label: "Segunda a sábado", dias: [1, 2, 3, 4, 5, 6] },
+  { key: "seg_dom", label: "Segunda a domingo", dias: [0, 1, 2, 3, 4, 5, 6] },
+];
 
 export const TIME_ENTRY_LABELS: Record<TimeEntryType, string> = {
   entrada: "Entrada",

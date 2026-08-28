@@ -186,7 +186,7 @@ export function ContactPanel({
   const responsavel = conversation.responsavel_id ? agentName?.get(conversation.responsavel_id) : null;
 
   return (
-    <aside className="w-72 shrink-0 border-l bg-card overflow-y-auto">
+    <aside className="w-72 shrink-0 rounded-2xl border bg-card shadow-sm overflow-y-auto">
       <div className="p-4 border-b text-center">
         <div className="mx-auto h-14 w-14 rounded-full bg-arini/10 text-arini dark:text-gold dark:bg-gold/15 flex items-center justify-center text-lg font-semibold">
           {nome.charAt(0).toUpperCase()}
@@ -203,6 +203,9 @@ export function ContactPanel({
         )}
       </div>
 
+      {/* Só CONTATO nasce aberto — telefone e início são o que se olha de
+          relance. O resto abre a pedido: sete blocos abertos de uma vez
+          transformavam o painel numa parede de texto para rolar. */}
       <Bloco titulo="Contato" inicialAberto>
         {conversation.contato_telefone && <Linha icone={<Phone size={13} />} texto={conversation.contato_telefone} />}
         {lead?.email && <Linha icone={<Mail size={13} />} texto={lead.email} />}
@@ -210,7 +213,7 @@ export function ContactPanel({
         <Linha icone={<User size={13} />} texto={`Início: ${formatDateTimeBR(conversation.created_at)}`} />
       </Bloco>
 
-      <Bloco titulo="Conversa" inicialAberto>
+      <Bloco titulo="Conversa">
         <Linha icone={<MessageSquare size={13} />} texto={`Status: ${CONVERSATION_STATUS_LABELS[conversation.status]}`} />
         {responsavel && <Linha icone={<User size={13} />} texto={`Responsável: ${responsavel}`} />}
         {conversation.primeira_resposta_em ? (
@@ -234,7 +237,7 @@ export function ContactPanel({
         )}
       </Bloco>
 
-      <Bloco titulo="CRM" inicialAberto>
+      <Bloco titulo="CRM">
         {!leadId ? (
           <p className="text-xs text-muted-foreground">Sem contato do CRM vinculado.</p>
         ) : !lead ? (
@@ -327,7 +330,7 @@ export function ContactPanel({
       )}
 
       {leadId && (
-        <Bloco titulo="Notas do contato" inicialAberto>
+        <Bloco titulo="Notas do contato">
           <div className="flex items-start gap-1.5">
             <textarea
               value={novaNota}

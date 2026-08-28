@@ -9,7 +9,9 @@ import { formatDateTimeBR } from "@/lib/utils";
 import { formatarEspera, minutosEsperando, esperaCritica, LIMITE_ESPERA_MIN } from "./espera";
 import { Inbox, Paperclip, Hourglass } from "lucide-react";
 
-const CHANNEL_DOT: Record<string, string> = {
+/** Cor do canal. Exportado para as abas de canal usarem a MESMA bolinha da
+ *  lista — duas paletas para a mesma coisa seria pedir para divergirem. */
+export const CHANNEL_DOT: Record<string, string> = {
   whatsapp: "bg-green-500",
   instagram: "bg-pink-500",
   facebook: "bg-blue-600",
