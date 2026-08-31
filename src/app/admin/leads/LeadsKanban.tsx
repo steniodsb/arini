@@ -115,18 +115,26 @@ function Column({ col, count, children }: { col: (typeof LEAD_STAGES)[number]; c
   return (
     <div
       ref={setNodeRef}
-      className={`w-72 flex-shrink-0 rounded-lg p-3 border transition-colors ${
+      className={`w-72 flex-shrink-0 rounded-lg border flex flex-col transition-colors ${
         isOver ? "bg-gold/10 border-gold" : "bg-muted/40"
       }`}
     >
       {/*
-        Cabeçalho grudado no topo. É o que responde "não sei qual que é esse
-        setor" (call de 21/08): rolando a lista, o nome da etapa saía da tela
-        e os cartões viravam uma coluna anônima. `bg-*` opaco é obrigatório —
-        sem fundo, os cartões passam por baixo e o texto fica ilegível.
+        Cabeçalho sempre visível. É o que responde "não sei qual que é esse
+        setor" (call de 21/08).
+
+        Antes isto era `sticky top-0` e NÃO funcionava: o quadro inteiro vive
+        dentro de um `overflow-x-auto`, e o CSS promove o eixo Y desse
+        contêiner a `auto` junto. O grudento passa a se orientar por esse
+        contêiner — que nunca rola na vertical, porque cresce com o conteúdo.
+        Resultado: quem rolava era a PÁGINA, e o título subia junto e sumia
+        (medido: rolando 600px o título ia para y=-169).
+
+        A correção é dar rolagem de verdade a quem precisa: a lista de cartões
+        tem altura máxima e rola sozinha, e o cabeçalho fica fora dela, como
+        irmão de cima num flex. Aí ele não depende de `sticky` para nada.
       */}
-      <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-3 px-3 pt-3 pb-2 rounded-t-lg
-                      bg-muted/95 supports-[backdrop-filter]:bg-muted/80 backdrop-blur
+      <div className="shrink-0 px-3 pt-3 pb-2 rounded-t-lg bg-muted/95 border-b border-black/5
                       flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${col.color}`} />
@@ -134,7 +142,11 @@ function Column({ col, count, children }: { col: (typeof LEAD_STAGES)[number]; c
         </div>
         <span className="text-xs text-muted-foreground">{count}</span>
       </div>
-      <div className="space-y-2 min-h-[60px]">{children}</div>
+      {/* `overscroll-contain`: chegar ao fim da coluna não passa a rolagem
+          para a página, senão a tela dá um salto no meio do arraste. */}
+      <div className="p-3 space-y-2 min-h-[60px] max-h-[62vh] overflow-y-auto overscroll-contain">
+        {children}
+      </div>
     </div>
   );
 }
