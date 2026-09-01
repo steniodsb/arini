@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrencyBRL } from "@/lib/utils";
+import { formatCurrencyBRL, formatArea } from "@/lib/utils";
 import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Property } from "@/lib/types";
 import { Bed, Bath, Car, Maximize2 } from "lucide-react";
 import { PropertyCardCarousel } from "./PropertyCardCarousel";
@@ -61,7 +61,7 @@ export function PropertyCard({ property, coverUrl, images }: Props) {
             <span className="inline-flex items-center gap-1"><Car size={14} /> {property.vagas}</span>
           )}
           {property.area_total != null && (
-            <span className="inline-flex items-center gap-1"><Maximize2 size={14} /> {property.area_total} m²</span>
+            <span className="inline-flex items-center gap-1"><Maximize2 size={14} /> {formatArea(property.area_total, property.type)}</span>
           )}
         </div>
       </div>

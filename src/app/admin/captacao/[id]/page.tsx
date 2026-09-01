@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/crm/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
+import { formatCurrencyBRL, formatDateBR, formatArea } from "@/lib/utils";
 import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Approval, type ClientType, type MarketingMedia, type Property, type PropertyMedia, type SectorObservation } from "@/lib/types";
 import { Pencil, ExternalLink, MapPin } from "lucide-react";
 import Image from "next/image";
@@ -264,7 +264,7 @@ export default async function PropertyDetailAdminPage({ params }: { params: { id
             <div>Dorm: {p.dormitorios ?? "—"}</div>
             <div>Banh: {p.banheiros ?? "—"}</div>
             <div>Vagas: {p.vagas ?? "—"}</div>
-            <div>Área total: {p.area_total ? `${p.area_total} m²` : "—"}</div>
+            <div>Área total: {formatArea(p.area_total, p.type) ?? "—"}</div>
             <div>Área const.: {p.area_construida ? `${p.area_construida} m²` : "—"}</div>
             <div>Data entrada: {formatDateBR(p.data_entrada)}</div>
           </CardContent>

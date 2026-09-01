@@ -53,3 +53,24 @@ export function errMessage(e: unknown): string {
   }
   return String(e);
 }
+
+/**
+ * Unidade da área total conforme o tipo do imóvel.
+ *
+ * O cadastro sempre pediu HECTARE para terra ("Área total (ha)" em
+ * NovaCaptacaoForm), mas a regra vivia só naquele formulário: todo lugar que
+ * EXIBIA a área escrevia "m²" fixo. Uma fazenda de 147,62 ha aparecia como
+ * "147,62 m²" — no detalhe do imóvel, no card e no anúncio público.
+ *
+ * A regra é a mesma de `caracConfig` no formulário de captação; se um tipo
+ * novo entrar lá, entra aqui também.
+ */
+export function unidadeArea(type: string): "ha" | "m²" {
+  return ["rural", "terreno", "fazenda", "sitio", "chacara", "rancho"].includes(type) ? "ha" : "m²";
+}
+
+/** Área já formatada com a unidade certa para o tipo. */
+export function formatArea(valor: number | null | undefined, type: string) {
+  if (valor == null) return null;
+  return `${valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${unidadeArea(type)}`;
+}

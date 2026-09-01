@@ -1,5 +1,6 @@
 "use client";
 
+import { unidadeArea } from "@/lib/utils";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
@@ -122,7 +123,7 @@ export function EditPropertyForm({
           <div><Label>Valor (R$)</Label><Input name="valor" type="number" step="0.01" defaultValue={property.valor ?? ""} /></div>
           <div><Label>Valor fechado (R$)</Label><Input name="valor_fechado" type="number" step="0.01" defaultValue={property.valor_fechado ?? ""} /></div>
           <div><Label>Ano construção</Label><Input name="ano_construcao" type="number" defaultValue={property.ano_construcao ?? ""} /></div>
-          <div><Label>Área total (m²)</Label><Input name="area_total" type="number" step="0.01" defaultValue={property.area_total ?? ""} /></div>
+          <div><Label>Área total ({unidadeArea(property.type)})</Label><Input name="area_total" type="number" step="0.01" defaultValue={property.area_total ?? ""} /></div>
           <div><Label>Área construída</Label><Input name="area_construida" type="number" step="0.01" defaultValue={property.area_construida ?? ""} /></div>
           <div><Label>Dormitórios</Label><Input name="dormitorios" type="number" defaultValue={property.dormitorios ?? ""} /></div>
           <div><Label>Suítes</Label><Input name="suites" type="number" defaultValue={property.suites ?? ""} /></div>

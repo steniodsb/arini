@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrencyBRL } from "@/lib/utils";
+import { formatCurrencyBRL, formatArea } from "@/lib/utils";
 import {
   CATEGORY_LABELS,
   PROPERTY_TYPE_LABELS,
@@ -62,7 +62,7 @@ export default async function PropertyDetailPage({
   if (p.suites) diferenciais.push(`${p.suites} ${p.suites === 1 ? "suíte" : "suítes"}`);
   if (p.banheiros) diferenciais.push(`${p.banheiros} ${p.banheiros === 1 ? "banheiro" : "banheiros"}`);
   if (p.vagas) diferenciais.push(`${p.vagas} ${p.vagas === 1 ? "vaga de garagem" : "vagas de garagem"}`);
-  if (p.area_total) diferenciais.push(`${p.area_total} m² de área total`);
+  if (p.area_total) diferenciais.push(`${formatArea(p.area_total, p.type)} de área total`);
   if (p.area_construida) diferenciais.push(`${p.area_construida} m² construídos`);
   if (p.ano_construcao) diferenciais.push(`Construído em ${p.ano_construcao}`);
   if (p.exclusividade) diferenciais.push("Imóvel exclusivo");
@@ -172,7 +172,7 @@ export default async function PropertyDetailPage({
                 <QuickStat icon={<Car size={18} />} label="Vagas" value={String(p.vagas)} />
               )}
               {p.area_total != null && (
-                <QuickStat icon={<Maximize2 size={18} />} label="Área" value={`${p.area_total} m²`} />
+                <QuickStat icon={<Maximize2 size={18} />} label="Área" value={formatArea(p.area_total, p.type) ?? ""} />
               )}
             </div>
 
