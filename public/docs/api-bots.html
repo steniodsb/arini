@@ -1,0 +1,1226 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="description" content="Como receber as mensagens dos leads da Arini no n8n e responder pela API do Atendimento: cadastro do bot, payload do evento, HMAC e os endpoints /api/bot/v1.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="API de Bots do Atendimento Arini">
+<meta property="og:description" content="Documentação de integração: receber as mensagens dos leads no n8n e responder pela API do Atendimento Arini.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%A4%96%3C/text%3E%3C/svg%3E">
+<title>API de Bots do Atendimento Arini</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+  :root {
+    --ground: #f5f7f3;
+    --surface: #ffffff;
+    --surface-2: #eef2ec;
+    --ink: #15201a;
+    --ink-2: #3d4d44;
+    --muted: #62726a;
+    --line: #dde3dc;
+    --line-strong: #c5cfc4;
+    --accent: #0c5c3b;
+    --accent-ink: #0c5c3b;
+    --accent-soft: #e0efe6;
+    --warn: #8a5312;
+    --warn-soft: #f6ecdc;
+    --danger: #8f2f22;
+    --code-bg: #0d1a14;
+    --code-ink: #dce7df;
+    --code-line: #1e3128;
+    --code-muted: #7d9488;
+    --code-str: #a8d8b4;
+    --code-key: #8fc8e8;
+    --shadow: 0 1px 2px rgba(20, 40, 30, .06), 0 8px 24px -16px rgba(20, 40, 30, .3);
+
+    --f-display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+    --f-body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0c1310;
+      --surface: #131c17;
+      --surface-2: #182219;
+      --ink: #e7ede9;
+      --ink-2: #bdcac3;
+      --muted: #90a297;
+      --line: #253229;
+      --line-strong: #38493e;
+      --accent: #52b585;
+      --accent-ink: #6fc79a;
+      --accent-soft: #172c22;
+      --warn: #d9a95f;
+      --warn-soft: #2a2216;
+      --danger: #e08a7c;
+      --code-bg: #08110d;
+      --code-ink: #dce7df;
+      --code-line: #1a2a22;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0c1310;
+    --surface: #131c17;
+    --surface-2: #182219;
+    --ink: #e7ede9;
+    --ink-2: #bdcac3;
+    --muted: #90a297;
+    --line: #253229;
+    --line-strong: #38493e;
+    --accent: #52b585;
+    --accent-ink: #6fc79a;
+    --accent-soft: #172c22;
+    --warn: #d9a95f;
+    --warn-soft: #2a2216;
+    --danger: #e08a7c;
+    --code-bg: #08110d;
+    --code-ink: #dce7df;
+    --code-line: #1a2a22;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--accent-soft); color: var(--ink); }
+
+  a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  /* ---------- shell ---------- */
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 30px;
+    margin-bottom: 44px;
+  }
+
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.05;
+    letter-spacing: -.022em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+    max-width: 16ch;
+  }
+
+  .lede {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 17.5px;
+    color: var(--ink-2);
+  }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin-top: 26px;
+    padding-top: 22px;
+    border-top: 1px dashed var(--line);
+  }
+
+  .fact { display: flex; flex-direction: column; gap: 2px; }
+
+  .fact dt {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .fact dd {
+    margin: 0;
+    font-family: var(--f-mono);
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  /* ---------- nav rail ---------- */
+
+  nav.rail {
+    position: sticky;
+    top: 24px;
+    font-size: 14px;
+  }
+
+  .rail-title {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+
+  .rail ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    counter-reset: sec;
+  }
+
+  .rail a {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 8px;
+    padding: 5px 8px 5px 4px;
+    color: var(--ink-2);
+    text-decoration: none;
+    border-radius: 5px;
+    line-height: 1.35;
+  }
+
+  .rail a::before {
+    counter-increment: sec;
+    content: counter(sec);
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    padding-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rail a:hover { background: var(--surface-2); color: var(--ink); }
+
+  /* ---------- content ---------- */
+
+  main { min-width: 0; }
+
+  section { scroll-margin-top: 20px; }
+
+  section + section { margin-top: 60px; }
+
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 25px;
+    letter-spacing: -.015em;
+    line-height: 1.2;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+
+  h2 .num {
+    font-family: var(--f-mono);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--accent-ink);
+    margin-right: 10px;
+    letter-spacing: 0;
+  }
+
+  h3 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: -.008em;
+    margin: 32px 0 8px;
+  }
+
+  h4 {
+    font-family: var(--f-body);
+    font-weight: 600;
+    font-size: 14px;
+    margin: 22px 0 6px;
+  }
+
+  p { margin: 0 0 14px; max-width: 68ch; }
+
+  main ul, main ol { max-width: 68ch; padding-left: 20px; margin: 0 0 14px; }
+  main li { margin-bottom: 6px; }
+
+  .section-rule {
+    height: 1px;
+    background: var(--line);
+    margin: 0 0 22px;
+  }
+
+  strong { font-weight: 600; }
+
+  code {
+    font-family: var(--f-mono);
+    font-size: .875em;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .08em .34em;
+    white-space: nowrap;
+  }
+
+  /* ---------- code blocks ---------- */
+
+  .code {
+    position: relative;
+    background: var(--code-bg);
+    border: 1px solid var(--code-line);
+    border-radius: 8px;
+    margin: 14px 0 20px;
+    overflow: hidden;
+  }
+
+  .code-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px 8px 14px;
+    border-bottom: 1px solid var(--code-line);
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--code-muted);
+  }
+
+  .code pre {
+    margin: 0;
+    padding: 14px;
+    overflow-x: auto;
+    font-family: var(--f-mono);
+    font-size: 12.8px;
+    line-height: 1.68;
+    color: var(--code-ink);
+    tab-size: 2;
+  }
+
+  .copy {
+    font: inherit;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--code-muted);
+    background: transparent;
+    border: 1px solid var(--code-line);
+    border-radius: 4px;
+    padding: 3px 9px;
+    cursor: pointer;
+  }
+
+  .copy:hover { color: var(--code-ink); border-color: var(--code-muted); }
+
+  .k { color: var(--code-key); }
+  .s { color: var(--code-str); }
+  .c { color: var(--code-muted); font-style: italic; }
+
+  /* ---------- endpoints ---------- */
+
+  .endpoint {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 18px 20px 4px;
+    margin: 18px 0 24px;
+    box-shadow: var(--shadow);
+  }
+
+  .endpoint > h3 { margin-top: 0; }
+
+  .sig {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .method {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .08em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border: 1px solid var(--line);
+  }
+
+  .method.get { background: var(--surface-2); color: var(--ink-2); }
+
+  .path {
+    font-family: var(--f-mono);
+    font-size: 13.5px;
+    color: var(--ink);
+    word-break: break-all;
+  }
+
+  /* ---------- tables ---------- */
+
+  .tablewrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin: 14px 0 20px;
+    background: var(--surface);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+    min-width: 460px;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+
+  th {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 400;
+    white-space: nowrap;
+    background: var(--surface-2);
+  }
+
+  tbody tr:last-child td { border-bottom: 0; }
+
+  td code { background: transparent; border: 0; padding: 0; white-space: normal; }
+
+  /* ---------- callouts ---------- */
+
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 18px 0;
+  }
+
+  .note.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+
+  .note p { margin: 0; max-width: 64ch; }
+  .note p + p { margin-top: 8px; }
+
+  .note-label {
+    display: block;
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+
+  /* ---------- flow diagram ---------- */
+
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 20px 0 24px;
+    max-width: 560px;
+  }
+
+  .flow-step {
+    display: grid;
+    grid-template-columns: 92px 1fr;
+    gap: 16px;
+    align-items: baseline;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .flow-step:last-child { border-bottom: 0; }
+
+  .flow-who {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .flow-what { font-size: 14.5px; }
+
+  .flow-what em {
+    display: block;
+    font-style: normal;
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+
+  /* ---------- diagnostic checklist ---------- */
+
+  .checks { list-style: none; padding: 0; margin: 18px 0; counter-reset: chk; max-width: 68ch; }
+
+  .checks li {
+    counter-increment: chk;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    margin-bottom: 8px;
+    padding: 0;
+  }
+
+  .checks label {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    align-items: start;
+  }
+
+  .checks input { margin: 4px 0 0; accent-color: var(--accent); width: 15px; height: 15px; }
+
+  .checks .q { font-weight: 600; display: block; }
+
+  .checks .a { color: var(--ink-2); font-size: 14.5px; display: block; margin-top: 2px; }
+
+  .checks input:checked ~ span .q,
+  .checks input:checked ~ span .a { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+
+  /* ---------- footer ---------- */
+
+  footer {
+    grid-column: 1 / -1;
+    margin-top: 72px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+    font-size: 13.5px;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    justify-content: space-between;
+  }
+
+  footer span { font-family: var(--f-mono); font-size: 12px; }
+
+  /* ---------- responsive ---------- */
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 18px 72px; }
+    nav.rail {
+      position: static;
+      margin-bottom: 40px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .rail ol { flex-direction: row; flex-wrap: wrap; gap: 4px 6px; }
+    .rail a { border: 1px solid var(--line); background: var(--surface); padding: 4px 10px 4px 8px; }
+    .masthead { padding-top: 32px; margin-bottom: 30px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">Documentação de integração · v1 · setembro de 2026</p>
+    <h1>API de Bots do Atendimento Arini</h1>
+    <p class="lede">
+      Como plugar um fluxo do n8n (ou qualquer sistema próprio) nas conversas dos leads:
+      receber cada mensagem por webhook assinado e responder ao cliente pelo mesmo canal —
+      WhatsApp, Instagram, Messenger, Telegram ou o chat do site.
+    </p>
+    <dl class="facts">
+      <div class="fact"><dt>Host da API</dt><dd>atendimento.arininegociosimobiliarios.com.br</dd></div>
+      <div class="fact"><dt>Modelo</dt><dd>Agent Bot (padrão Chatwoot)</dd></div>
+      <div class="fact"><dt>Autenticação</dt><dd>Bearer token · HMAC-SHA256</dd></div>
+    </dl>
+  </header>
+
+  <nav class="rail" aria-label="Seções">
+    <p class="rail-title">Nesta página</p>
+    <ol>
+      <li><a href="#como-funciona">Como funciona</a></li>
+      <li><a href="#cadastro">Cadastro do bot</a></li>
+      <li><a href="#recebendo">Recebendo as mensagens</a></li>
+      <li><a href="#respondendo">API <code>/api/bot/v1</code></a></li>
+      <li><a href="#ciclo">Ciclo de vida na conversa</a></li>
+      <li><a href="#diagnostico">Não chega evento nenhum</a></li>
+      <li><a href="#webhooks">Webhooks de saída</a></li>
+      <li><a href="#seguranca">Segurança</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- 1 -->
+    <section id="como-funciona">
+      <h2><span class="num">01</span>Como funciona</h2>
+      <div class="section-rule"></div>
+      <p>
+        O bot é registrado como se fosse um agente de uma <strong>caixa de entrada</strong>.
+        Toda mensagem que o cliente manda naquela caixa é enviada por <code>POST</code> para a
+        URL do bot; o bot responde chamando a API de volta com o token dele.
+        São dois canais de comunicação, em direções opostas.
+      </p>
+
+      <div class="flow">
+        <div class="flow-step">
+          <span class="flow-who">Cliente</span>
+          <span class="flow-what">Manda mensagem pelo WhatsApp, Instagram, Messenger, Telegram, e-mail, SMS ou chat do site</span>
+        </div>
+        <div class="flow-step">
+          <span class="flow-who">Arini</span>
+          <span class="flow-what">Grava na conversa e faz POST assinado na sua URL
+            <em>X-Arini-Signature · timeout 10 s</em></span>
+        </div>
+        <div class="flow-step">
+          <span class="flow-who">Seu n8n</span>
+          <span class="flow-what">Responde 2xx e processa o payload
+            <em>Webhook node · Respond Immediately</em></span>
+        </div>
+        <div class="flow-step">
+          <span class="flow-who">Seu n8n</span>
+          <span class="flow-what">Chama <code>/api/bot/v1/mensagens</code> com o token do bot
+            <em>Authorization: Bearer …</em></span>
+        </div>
+        <div class="flow-step">
+          <span class="flow-who">Arini</span>
+          <span class="flow-what">Entrega ao cliente pelo canal original e grava no histórico</span>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Direção</th><th>Quem chama</th><th>Autenticação</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Arini → bot</strong><br>recebe os eventos</td>
+              <td>A Arini chama a <code>outgoing_url</code> cadastrada</td>
+              <td>Header <code>X-Arini-Signature</code> — HMAC-SHA256 do corpo, com o <code>secret</code></td>
+            </tr>
+            <tr>
+              <td><strong>Bot → Arini</strong><br>responde, transfere, etiqueta</td>
+              <td>O bot chama <code>/api/bot/v1/*</code></td>
+              <td>Header <code>Authorization: Bearer &lt;token&gt;</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section id="cadastro">
+      <h2><span class="num">02</span>Cadastro do bot</h2>
+      <div class="section-rule"></div>
+      <p>
+        Feito pela diretoria da Arini em <strong>Atendimento › Configurações › Bots</strong>.
+        O integrador não tem acesso a essa tela — peça o cadastro informando a URL do seu webhook.
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Campo</th><th>O que é</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Nome</strong></td><td>Identificação interna, ex.: “Bot n8n — Triagem”</td></tr>
+            <tr><td><strong>URL do bot</strong><br><code>outgoing_url</code></td><td>A URL do Webhook do n8n. Precisa ser <code>https://</code> e pública</td></tr>
+            <tr><td><strong>Caixa de entrada</strong></td><td>É o vínculo que faz as mensagens serem entregues. Uma caixa aceita <strong>um</strong> bot</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Ao salvar, a tela devolve três coisas:</p>
+      <ul>
+        <li><code>token</code> — exibido <strong>uma única vez</strong>. É o que vai no <code>Authorization: Bearer</code>. O sistema guarda só o hash sha256; nem a Arini recupera depois.</li>
+        <li><code>secret</code> — continua visível na tela do bot. Serve para você <strong>conferir</strong> a assinatura do que recebe.</li>
+        <li><code>bot_id</code> — chega em todo evento no header <code>X-Arini-Bot</code>.</li>
+      </ul>
+
+      <div class="note">
+        <span class="note-label">Comece por aqui</span>
+        <p>
+          A tela de Bots tem um botão <strong>Testar</strong>: dispara um payload de exemplo, com a
+          mesma forma e a mesma assinatura do evento real, e mostra o status HTTP e o tempo de
+          resposta. Se o teste chega no n8n e a mensagem real não, o problema é vínculo de caixa
+          ou estado da conversa — veja a seção 6.
+        </p>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section id="recebendo">
+      <h2><span class="num">03</span>Arini → bot: recebendo as mensagens</h2>
+      <div class="section-rule"></div>
+
+      <h3>A requisição que chega no seu webhook</h3>
+      <div class="code">
+        <div class="code-head"><span>HTTP</span><button class="copy" type="button">Copiar</button></div>
+<pre>POST &lt;a sua outgoing_url&gt;
+Content-Type: application/json
+X-Arini-Signature: sha256=&lt;hmac-sha256 hex do corpo cru&gt;
+X-Arini-Bot: &lt;uuid do bot&gt;
+X-Arini-Evento: mensagem      <span class="c"># ou "teste", no botão Testar</span></pre>
+      </div>
+
+      <h3>Corpo do evento</h3>
+      <div class="code">
+        <div class="code-head"><span>JSON</span><button class="copy" type="button">Copiar</button></div>
+<pre>{
+  <span class="k">"evento"</span>: <span class="s">"mensagem"</span>,
+  <span class="k">"enviado_em"</span>: <span class="s">"2026-09-09T19:41:07.512Z"</span>,
+  <span class="k">"conversa"</span>: {
+    <span class="k">"id"</span>: <span class="s">"0f2b9d4e-1c3a-4b77-9f21-b0a5e6d84c10"</span>,
+    <span class="k">"canal"</span>: <span class="s">"whatsapp"</span>,
+    <span class="k">"status"</span>: <span class="s">"aberta"</span>,
+    <span class="k">"prioridade"</span>: null,
+    <span class="k">"etiquetas"</span>: [<span class="s">"locacao"</span>],
+    <span class="k">"inbox_id"</span>: <span class="s">"7a1c0f88-4b2d-4a0e-9f55-2e1d3c4b5a6f"</span>,
+    <span class="k">"bot_status"</span>: <span class="s">"ativo"</span>,
+    <span class="k">"criada_em"</span>: <span class="s">"2026-09-09T19:40:55.108Z"</span>,
+    <span class="k">"atributos"</span>: {}
+  },
+  <span class="k">"contato"</span>: {
+    <span class="k">"id"</span>: <span class="s">"3d9e7c21-88f4-4a1b-9c33-5e7a2b1d0f44"</span>,
+    <span class="k">"nome"</span>: <span class="s">"Gabriel Souza"</span>,
+    <span class="k">"telefone"</span>: <span class="s">"+5534999998888"</span>,
+    <span class="k">"email"</span>: <span class="s">"gabriel@exemplo.com.br"</span>
+  },
+  <span class="k">"mensagem"</span>: {
+    <span class="k">"id"</span>: <span class="s">"c11a2b33-4455-4677-8899-aabbccddeeff"</span>,
+    <span class="k">"direcao"</span>: <span class="s">"in"</span>,
+    <span class="k">"remetente"</span>: <span class="s">"cliente"</span>,
+    <span class="k">"tipo"</span>: <span class="s">"texto"</span>,
+    <span class="k">"texto"</span>: <span class="s">"Oi, vi o anúncio do apartamento no centro. Ainda está disponível?"</span>,
+    <span class="k">"media_url"</span>: null,
+    <span class="k">"media_nome"</span>: null,
+    <span class="k">"media_mime"</span>: null,
+    <span class="k">"criada_em"</span>: <span class="s">"2026-09-09T19:41:07.480Z"</span>
+  }
+}</pre>
+      </div>
+
+      <h3>Campos</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Campo</th><th>Valores</th><th>Observação</th></tr></thead>
+          <tbody>
+            <tr><td><code>evento</code></td><td><code>mensagem</code> · <code>teste</code></td><td><code>teste</code> vem do botão Testar, com ids zerados</td></tr>
+            <tr><td><code>conversa.id</code></td><td>uuid</td><td>É o <code>conversationId</code> de todas as chamadas de volta</td></tr>
+            <tr><td><code>conversa.canal</code></td><td><code>whatsapp</code> · <code>instagram</code> · <code>facebook</code> · <code>messenger</code> · <code>telegram</code> · <code>email</code> · <code>sms</code> · <code>site</code> · <code>api</code></td><td>Canal de origem da conversa</td></tr>
+            <tr><td><code>conversa.status</code></td><td><code>aberta</code> · <code>pendente</code> · <code>adiada</code> · <code>resolvida</code></td><td></td></tr>
+            <tr><td><code>conversa.bot_status</code></td><td><code>ativo</code> · <code>transferida</code> · <code>sem_bot</code></td><td>Só chega evento quando é <code>ativo</code></td></tr>
+            <tr><td><code>conversa.etiquetas</code></td><td><code>string[]</code></td><td>Sempre minúsculas</td></tr>
+            <tr><td><code>contato.id</code></td><td>uuid · null</td><td>É o <code>lead_id</code> no CRM — a chave para casar com a ficha</td></tr>
+            <tr><td><code>mensagem.direcao</code></td><td><code>in</code> · <code>out</code></td><td>Hoje o bot só recebe <code>in</code> (cliente falando)</td></tr>
+            <tr><td><code>mensagem.tipo</code></td><td><code>texto</code> · <code>imagem</code> · <code>audio</code> · <code>video</code> · <code>documento</code></td><td></td></tr>
+            <tr><td><code>mensagem.texto</code></td><td>string · null</td><td>null quando é mídia sem legenda</td></tr>
+            <tr><td><code>mensagem.media_url</code></td><td>string · null</td><td>URL pública do arquivo no storage</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <span class="note-label">O que nunca sai para o bot</span>
+        <p>
+          Nota interna da equipe, o payload cru do provedor, tokens, segredos de canal e a ficha
+          completa do lead (valores de negociação, anotações internas). É lista branca fechada.
+        </p>
+      </div>
+
+      <h3>Conferindo a assinatura</h3>
+      <p>
+        <code>X-Arini-Signature</code> é <code>sha256=</code> seguido do HMAC-SHA256 do
+        <strong>corpo cru</strong> da requisição — o texto exatamente como chegou, antes de
+        qualquer <code>JSON.parse</code> — usando o <code>secret</code> do bot como chave.
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>Node · Code node do n8n</span><button class="copy" type="button">Copiar</button></div>
+<pre><span class="k">const</span> crypto = require(<span class="s">"crypto"</span>);
+<span class="k">const</span> esperado = <span class="s">"sha256="</span> + crypto
+  .createHmac(<span class="s">"sha256"</span>, SECRET_DO_BOT)
+  .update(corpoBruto)        <span class="c">// string crua, NÃO o objeto já parseado</span>
+  .digest(<span class="s">"hex"</span>);
+crypto.timingSafeEqual(Buffer.from(esperado), Buffer.from(headerRecebido));</pre>
+      </div>
+
+      <p>
+        No n8n, para ter o corpo cru é preciso ligar <strong>Options → Raw Body</strong> no node
+        Webhook (o corpo chega em base64 na propriedade binária <code>data</code>). Sem isso,
+        re-serializar o JSON funciona na maioria dos casos — o corpo é gerado com
+        <code>JSON.stringify</code> e a ordem das chaves se mantém — mas não é garantido.
+        Alternativa mais simples: usar uma URL de webhook com path aleatório e tratar a
+        assinatura como conferência extra, não como única defesa.
+      </p>
+
+      <h3>Regras de entrega</h3>
+      <ul>
+        <li><strong>Timeout de 10 segundos.</strong> Fluxo mais lento que isso conta como falha. Deixe o Webhook em <strong>Respond: Immediately</strong> sempre que o fluxo for longo.</li>
+        <li><strong>10 falhas seguidas desativam o bot</strong> automaticamente. O motivo fica em <code>ultimo_erro</code>, visível na tela de Bots; basta reativar depois de corrigir.</li>
+        <li><strong>Toda tentativa vira log</strong> — payload, status HTTP, erro e duração. É por onde se prova “chegou / não chegou”.</li>
+        <li>Qualquer resposta <strong>2xx</strong> é sucesso. O corpo da resposta é ignorado: o bot responde ao cliente pela API, não pelo retorno do webhook.</li>
+      </ul>
+    </section>
+
+    <!-- 4 -->
+    <section id="respondendo">
+      <h2><span class="num">04</span>Bot → Arini: a API <code>/api/bot/v1</code></h2>
+      <div class="section-rule"></div>
+
+      <div class="code">
+        <div class="code-head"><span>Base e autenticação</span><button class="copy" type="button">Copiar</button></div>
+<pre>https://atendimento.arininegociosimobiliarios.com.br
+
+Authorization: Bearer &lt;token do bot&gt;
+Content-Type: application/json</pre>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Status</th><th>Significa</th></tr></thead>
+          <tbody>
+            <tr><td><code>401</code></td><td>Token ausente, inválido ou bot desativado</td></tr>
+            <tr><td><code>404</code></td><td>A conversa não existe <em>ou</em> não pertence a uma caixa deste bot</td></tr>
+            <tr><td><code>400</code></td><td>Corpo inválido ou campo obrigatório faltando</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="endpoint">
+        <div class="sig">
+          <span class="method">POST</span>
+          <span class="path">/api/bot/v1/mensagens</span>
+        </div>
+        <h3>Responder ao cliente</h3>
+        <div class="code">
+          <div class="code-head"><span>Requisição</span><button class="copy" type="button">Copiar</button></div>
+<pre>{
+  <span class="k">"conversationId"</span>: <span class="s">"0f2b9d4e-1c3a-4b77-9f21-b0a5e6d84c10"</span>,
+  <span class="k">"texto"</span>: <span class="s">"Olá, Gabriel! Sim, está disponível. Posso agendar uma visita?"</span>,
+  <span class="k">"mediaUrl"</span>: null,
+  <span class="k">"mediaTipo"</span>: null,
+  <span class="k">"privada"</span>: false
+}</pre>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo</th><th>Obrigatório</th><th>Observação</th></tr></thead>
+            <tbody>
+              <tr><td><code>conversationId</code></td><td>sim</td><td>O <code>conversa.id</code> do evento</td></tr>
+              <tr><td><code>texto</code></td><td><code>texto</code> ou <code>mediaUrl</code></td><td>Texto da resposta</td></tr>
+              <tr><td><code>mediaUrl</code></td><td>—</td><td>URL pública do arquivo</td></tr>
+              <tr><td><code>mediaTipo</code></td><td>—</td><td><code>imagem</code> · <code>audio</code> · <code>video</code> · <code>documento</code> (padrão: <code>documento</code>)</td></tr>
+              <tr><td><code>privada</code></td><td>—</td><td><code>true</code> grava <strong>nota interna</strong> — o cliente não vê e nada é enviado</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code">
+          <div class="code-head"><span>Resposta</span><button class="copy" type="button">Copiar</button></div>
+<pre>{ <span class="k">"ok"</span>: true, <span class="k">"mensagemId"</span>: <span class="s">"…"</span>, <span class="k">"entregue"</span>: true,
+  <span class="k">"via"</span>: <span class="s">"evolution"</span>, <span class="k">"motivo"</span>: null }</pre>
+        </div>
+        <p>
+          <code>entregue: false</code> com <code>motivo</code> preenchido significa que a mensagem
+          foi <strong>gravada no histórico</strong> mas o canal recusou o envio: número inválido,
+          janela de 24 h da Meta fechada, canal desconectado. Nada some — o time enxerga a
+          tentativa e o motivo.
+        </p>
+        <p>
+          Use <code>privada: true</code> para deixar contexto ao atendente que vai assumir:
+          <em>“cliente já informou o CPF”</em>, <em>“não entendi a intenção em 3 tentativas”</em>.
+        </p>
+      </div>
+
+      <div class="endpoint">
+        <div class="sig">
+          <span class="method">POST</span>
+          <span class="path">/api/bot/v1/transferir</span>
+        </div>
+        <h3>Passar para um humano</h3>
+        <div class="code">
+          <div class="code-head"><span>Requisição</span><button class="copy" type="button">Copiar</button></div>
+<pre>{
+  <span class="k">"conversationId"</span>: <span class="s">"0f2b9d4e-1c3a-4b77-9f21-b0a5e6d84c10"</span>,
+  <span class="k">"motivo"</span>: <span class="s">"Cliente pediu falar com corretor"</span>,
+  <span class="k">"equipeId"</span>: null,
+  <span class="k">"agenteId"</span>: null
+}</pre>
+        </div>
+        <p>Três efeitos, nesta ordem:</p>
+        <ul>
+          <li><code>bot_status</code> vira <strong><code>transferida</code></strong> e o sistema <strong>para de entregar eventos</strong> ao bot nessa conversa — é a trava que impede o bot de falar por cima do atendente;</li>
+          <li>a conversa <strong>reabre</strong> (sai de resolvida ou adiada) e volta para a fila;</li>
+          <li>fica uma <strong>nota interna</strong> com o motivo, para o atendente entender por que a conversa caiu no colo dele.</li>
+        </ul>
+        <p>
+          <code>equipeId</code> e <code>agenteId</code> são opcionais: sem eles a conversa volta
+          para a fila geral. Se o id não existir ou o agente não tiver acesso ao atendimento, a
+          transferência <strong>acontece do mesmo jeito</strong> e o aviso vem em
+          <code>avisos[]</code> — o essencial, sair do bot, não é desfeito por um id errado.
+        </p>
+        <div class="note warn">
+          <span class="note-label">Sem volta automática</span>
+          <p>
+            Devolver a conversa ao bot é ação manual, feita por uma pessoa no inbox.
+            O cliente escrever de novo <strong>não</strong> reativa o bot.
+          </p>
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="sig">
+          <span class="method">POST</span>
+          <span class="path">/api/bot/v1/etiquetas</span>
+        </div>
+        <h3>Classificar a conversa</h3>
+        <div class="code">
+          <div class="code-head"><span>Requisição</span><button class="copy" type="button">Copiar</button></div>
+<pre>{
+  <span class="k">"conversationId"</span>: <span class="s">"0f2b9d4e-1c3a-4b77-9f21-b0a5e6d84c10"</span>,
+  <span class="k">"adicionar"</span>: [<span class="s">"locacao"</span>, <span class="s">"urgente"</span>],
+  <span class="k">"remover"</span>: [<span class="s">"sem_classificacao"</span>]
+}</pre>
+        </div>
+        <ul>
+          <li>Máximo 20 etiquetas por chamada, até 40 caracteres cada, sempre minúsculas.</li>
+          <li>Etiqueta nova entra automaticamente no catálogo, com cor neutra, para aparecer nos filtros do inbox.</li>
+          <li>Se a mesma etiqueta vier em <code>adicionar</code> e <code>remover</code>, <strong>remover ganha</strong>.</li>
+        </ul>
+        <p>Resposta: <code>{ "ok": true, "etiquetas": ["locacao", "urgente"] }</code></p>
+      </div>
+
+      <div class="endpoint">
+        <div class="sig">
+          <span class="method get">GET</span>
+          <span class="path">/api/bot/v1/conversas/{id}</span>
+        </div>
+        <h3>Ler o contexto</h3>
+        <p>
+          Devolve a conversa, o contato e as <strong>últimas 30 mensagens não internas</strong>,
+          em ordem cronológica. É o que você usa para montar o histórico antes de chamar um LLM.
+        </p>
+        <div class="code">
+          <div class="code-head"><span>Resposta</span><button class="copy" type="button">Copiar</button></div>
+<pre>{
+  <span class="k">"ok"</span>: true,
+  <span class="k">"conversa"</span>: { <span class="k">"id"</span>: <span class="s">"…"</span>, <span class="k">"canal"</span>: <span class="s">"whatsapp"</span>, <span class="k">"status"</span>: <span class="s">"aberta"</span>,
+                <span class="k">"prioridade"</span>: null, <span class="k">"etiquetas"</span>: [], <span class="k">"inbox_id"</span>: <span class="s">"…"</span>,
+                <span class="k">"bot_status"</span>: <span class="s">"ativo"</span>, <span class="k">"criada_em"</span>: <span class="s">"…"</span>, <span class="k">"atributos"</span>: {} },
+  <span class="k">"contato"</span>: { <span class="k">"id"</span>: <span class="s">"…"</span>, <span class="k">"nome"</span>: <span class="s">"Gabriel Souza"</span>,
+               <span class="k">"telefone"</span>: <span class="s">"+5534999998888"</span>, <span class="k">"email"</span>: null },
+  <span class="k">"mensagens"</span>: [
+    { <span class="k">"id"</span>: <span class="s">"…"</span>, <span class="k">"direcao"</span>: <span class="s">"in"</span>, <span class="k">"remetente"</span>: <span class="s">"cliente"</span>, <span class="k">"tipo"</span>: <span class="s">"texto"</span>,
+      <span class="k">"texto"</span>: <span class="s">"Oi, vi o anúncio…"</span>, <span class="k">"media_url"</span>: null, <span class="k">"media_nome"</span>: null,
+      <span class="k">"media_mime"</span>: null, <span class="k">"status"</span>: <span class="s">"recebida"</span>, <span class="k">"apagada"</span>: false,
+      <span class="k">"criada_em"</span>: <span class="s">"…"</span> }
+  ]
+}</pre>
+        </div>
+        <p>
+          Mensagem apagada aparece com <code>apagada: true</code> e <code>texto: null</code> —
+          o rastro fica, o conteúdo some. Nota interna nunca é retornada.
+        </p>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section id="ciclo">
+      <h2><span class="num">05</span>Ciclo de vida do bot na conversa</h2>
+      <div class="section-rule"></div>
+      <p>O campo <code>bot_status</code> da conversa manda em tudo:</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Estado</th><th>Significa</th><th>Chega evento?</th></tr></thead>
+          <tbody>
+            <tr><td><code>sem_bot</code></td><td>A caixa da conversa não tem bot ativo</td><td><strong>não</strong></td></tr>
+            <tr><td><code>ativo</code></td><td>O bot está conduzindo</td><td><strong>sim</strong></td></tr>
+            <tr><td><code>transferida</code></td><td>Um humano assumiu, ou o bot transferiu</td><td><strong>não</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note warn">
+        <span class="note-label">A regra que mais pega quem está integrando</span>
+        <p>
+          A ativação acontece <strong>na criação da conversa</strong>. Conversas que já existiam
+          antes de o bot ser vinculado à caixa continuam em <code>sem_bot</code> para sempre —
+          elas não passam a disparar eventos.
+        </p>
+        <p>
+          Para testar, use um número ou contato que ainda não tenha conversa aberta, ou peça à
+          Arini para resolver a conversa antiga antes.
+        </p>
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section id="diagnostico">
+      <h2><span class="num">06</span>Não chega evento nenhum</h2>
+      <div class="section-rule"></div>
+      <p>
+        Checklist na ordem do mais provável para o menos. As quatro primeiras causas acontecem
+        <em>antes</em> de qualquer chamada de rede — nelas não existe nem tentativa registrada.
+      </p>
+
+      <ol class="checks">
+        <li><label>
+          <input type="checkbox">
+          <span>
+            <span class="q">O bot está vinculado a uma caixa de entrada?</span>
+            <span class="a">Sem o vínculo em Configurações › Bots → campo <strong>Caixa de entrada</strong>, nada é entregue. É a causa nº 1.</span>
+          </span>
+        </label></li>
+        <li><label>
+          <input type="checkbox">
+          <span>
+            <span class="q">A caixa está ligada ao canal certo, e ativa?</span>
+            <span class="a">Conversas de WhatsApp, Telegram e e-mail nascem sem <code>inbox_id</code>; o sistema descobre a caixa pelo canal conectado em Atendimento › Canais. Caixa sem canal amarrado só funciona para o chat do site.</span>
+          </span>
+        </label></li>
+        <li><label>
+          <input type="checkbox">
+          <span>
+            <span class="q">A conversa é nova?</span>
+            <span class="a">Conversa que já existia antes do vínculo fica em <code>sem_bot</code> para sempre. Ver seção 5.</span>
+          </span>
+        </label></li>
+        <li><label>
+          <input type="checkbox">
+          <span>
+            <span class="q">Alguém já assumiu a conversa?</span>
+            <span class="a"><code>bot_status = transferida</code> interrompe a entrega de forma definitiva.</span>
+          </span>
+        </label></li>
+        <li><label>
+          <input type="checkbox">
+          <span>
+            <span class="q">O bot foi desativado sozinho?</span>
+            <span class="a">10 falhas seguidas desligam. Veja <code>ultimo_status</code> e <code>ultimo_erro</code> na tela de Bots — costuma ser <code>TimeoutError</code> (fluxo acima de 10 s) ou <code>HTTP 404</code>.</span>
+          </span>
+        </label></li>
+        <li><label>
+          <input type="checkbox">
+          <span>
+            <span class="q">A URL cadastrada é a de produção do n8n?</span>
+            <span class="a">A <em>Test URL</em> (<code>/webhook-test/…</code>) só aceita chamada enquanto o “Listen for test event” está aberto na tela; fora disso devolve 404. Use a <strong>Production URL</strong> (<code>/webhook/…</code>) com o fluxo ativado.</span>
+          </span>
+        </label></li>
+        <li><label>
+          <input type="checkbox">
+          <span>
+            <span class="q">A URL é https e alcançável pela internet?</span>
+            <span class="a"><code>http://</code>, IP local, <code>localhost</code> e túnel expirado não passam — o cadastro exige <code>https://</code> e o servidor precisa resolver o DNS.</span>
+          </span>
+        </label></li>
+        <li><label>
+          <input type="checkbox">
+          <span>
+            <span class="q">O n8n responde 2xx em menos de 10 segundos?</span>
+            <span class="a">Com o Webhook em <em>Respond: When Last Node Finishes</em> e um fluxo demorado, a Arini registra falha mesmo tendo o fluxo rodado. Troque para <strong>Respond Immediately</strong>.</span>
+          </span>
+        </label></li>
+        <li><label>
+          <input type="checkbox">
+          <span>
+            <span class="q">Ainda em dúvida? Peça o log de entregas do bot.</span>
+            <span class="a">Ele mostra payload, status HTTP, erro e duração de cada tentativa. Nenhuma linha: o problema está nos itens 1 a 4, nem chegou a sair. Linha com erro: o problema está do lado do n8n.</span>
+          </span>
+        </label></li>
+      </ol>
+    </section>
+
+    <!-- 7 -->
+    <section id="webhooks">
+      <h2><span class="num">07</span>Alternativa: webhooks de saída</h2>
+      <div class="section-rule"></div>
+      <p>
+        Se a automação <strong>não precisa responder</strong> ao cliente — só quer ser avisada —
+        existe um caminho mais simples, em <strong>Atendimento › Configurações › Webhooks</strong>:
+        cadastra-se uma URL e escolhem-se os eventos.
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Evento</th><th>Quando dispara</th></tr></thead>
+          <tbody>
+            <tr><td><code>conversa_criada</code></td><td>Nasce uma conversa, em qualquer canal</td></tr>
+            <tr><td><code>conversa_atualizada</code></td><td>Muda status, responsável, prioridade</td></tr>
+            <tr><td><code>conversa_resolvida</code></td><td>A conversa é resolvida</td></tr>
+            <tr><td><code>mensagem_criada</code></td><td>Qualquer mensagem, de entrada ou de saída — nota interna não</td></tr>
+            <tr><td><code>contato_criado</code></td><td>Um contato novo nasce pelo atendimento</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="code">
+        <div class="code-head"><span>JSON · corpo do webhook de saída</span><button class="copy" type="button">Copiar</button></div>
+<pre>{
+  <span class="k">"evento"</span>: <span class="s">"mensagem_criada"</span>,
+  <span class="k">"enviado_em"</span>: <span class="s">"2026-09-09T19:41:07.512Z"</span>,
+  <span class="k">"dados"</span>: {
+    <span class="k">"conversa"</span>: {
+      <span class="k">"id"</span>: <span class="s">"…"</span>, <span class="k">"canal"</span>: <span class="s">"whatsapp"</span>, <span class="k">"status"</span>: <span class="s">"aberta"</span>,
+      <span class="k">"contato"</span>: { <span class="k">"id"</span>: <span class="s">"…"</span>, <span class="k">"nome"</span>: <span class="s">"Gabriel Souza"</span>,
+                   <span class="k">"telefone"</span>: <span class="s">"+5534999998888"</span> }
+    },
+    <span class="k">"mensagem"</span>: {
+      <span class="k">"id"</span>: <span class="s">"…"</span>, <span class="k">"direcao"</span>: <span class="s">"in"</span>, <span class="k">"remetente"</span>: <span class="s">"cliente"</span>,
+      <span class="k">"tipo"</span>: <span class="s">"texto"</span>, <span class="k">"texto"</span>: <span class="s">"…"</span>, <span class="k">"criada_em"</span>: <span class="s">"…"</span>
+    }
+  }
+}</pre>
+      </div>
+
+      <p>
+        Mesmas regras de assinatura (<code>X-Arini-Signature</code>), timeout de 10 s e
+        desativação após 10 falhas. Headers: <code>X-Arini-Signature</code> e
+        <code>X-Arini-Evento</code>.
+      </p>
+
+      <div class="note">
+        <span class="note-label">Qual escolher</span>
+        <p>
+          O webhook de saída avisa sobre <strong>tudo</strong>, mas não dá acesso à API de
+          resposta. O Agent Bot recebe só a caixa dele e <strong>pode responder, transferir e
+          etiquetar</strong>. Para um fluxo de atendimento no n8n, o Agent Bot é o caminho certo.
+        </p>
+      </div>
+    </section>
+
+    <!-- 8 -->
+    <section id="seguranca">
+      <h2><span class="num">08</span>Segurança</h2>
+      <div class="section-rule"></div>
+      <ul>
+        <li>Guarde o <code>token</code> como senha — em credencial do n8n, nunca no corpo do fluxo.</li>
+        <li>Confira o <code>X-Arini-Signature</code> antes de agir no payload.</li>
+        <li>Use URL de webhook com path aleatório e não publique a URL.</li>
+        <li>Nunca devolva ao cliente conteúdo vindo de nota interna. O bot não a recebe, mas vale para o que o seu fluxo montar.</li>
+        <li>Responda 2xx rápido e processe depois.</li>
+        <li>Token comprometido: avise a Arini. O bot é desativado e recriado com token novo — não há rotação do token existente, por desenho.</li>
+      </ul>
+
+      <div class="note">
+        <span class="note-label">Suporte</span>
+        <p>
+          Para pedir o cadastro do bot, o vínculo com a caixa ou o log de entregas, fale com a
+          equipe técnica da Arini. Para diagnosticar, tenha em mãos o <strong>nome do bot</strong>,
+          o <strong>horário aproximado</strong> do teste e o <strong>número ou contato</strong> usado.
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <span>Atendimento Arini · API de Bots v1</span>
+    <span>Arini Negócios Imobiliários</span>
+  </footer>
+</div>
+
+<script>
+  // Copiar bloco de código. clipboard pode estar bloqueado no sandbox —
+  // nesse caso selecionamos o texto para o leitor copiar à mão.
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = btn.closest(".code").querySelector("pre");
+      var texto = pre.innerText;
+      function feedback(msg) {
+        var antes = btn.textContent;
+        btn.textContent = msg;
+        setTimeout(function () { btn.textContent = antes; }, 1600);
+      }
+      try {
+        navigator.clipboard.writeText(texto).then(
+          function () { feedback("Copiado"); },
+          function () { selecionar(pre); feedback("Selecionado"); }
+        );
+      } catch (e) {
+        selecionar(pre);
+        feedback("Selecionado");
+      }
+    });
+  });
+
+  function selecionar(pre) {
+    try {
+      var range = document.createRange();
+      range.selectNodeContents(pre);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) { /* sem seleção: o leitor copia à mão */ }
+  }
+
+  // Checklist de diagnóstico: conveniência de quem está depurando, guardada
+  // só no navegador de quem lê.
+  var checks = document.querySelectorAll(".checks input");
+  try {
+    var salvo = JSON.parse(localStorage.getItem("arini-bots-checks") || "[]");
+    checks.forEach(function (c, i) { c.checked = salvo[i] === true; });
+  } catch (e) { /* sem storage: começa tudo desmarcado */ }
+
+  checks.forEach(function (c) {
+    c.addEventListener("change", function () {
+      try {
+        var estado = Array.prototype.map.call(checks, function (x) { return x.checked; });
+        localStorage.setItem("arini-bots-checks", JSON.stringify(estado));
+      } catch (e) { /* sem storage: só não persiste */ }
+    });
+  });
+</script>
+</body>
+</html>
