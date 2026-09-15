@@ -44,6 +44,7 @@ import {
   type ConversationPriority,
   type ConversationStatus,
 } from "@/lib/types";
+import { fmtDiaBR } from "@/lib/fuso";
 import { AoVivoPanel } from "./AoVivoPanel";
 import { BotsPanel, type RelBot, type RelEntregaBot, type RelMensagemBot } from "./BotsPanel";
 
@@ -1050,7 +1051,7 @@ export function RelatoriosPanel({
           </div>
         )}
         <span className="ml-auto text-[11px] text-muted-foreground">
-          {inicio.toLocaleDateString("pt-BR")} — {fim.toLocaleDateString("pt-BR")}
+          {fmtDiaBR(inicio)} — {fmtDiaBR(fim)}
         </span>
       </Card>
 

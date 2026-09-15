@@ -5,6 +5,7 @@ import { StickyNote, CornerUpLeft, Bot, Settings2, AlertCircle, Check, CheckChec
 import { formatDateTimeBR } from "@/lib/utils";
 import { MediaBubble } from "./MediaBubble";
 import type { Message, MessageStatus } from "@/lib/types";
+import { fmtBR } from "@/lib/fuso";
 
 function diaDaMensagem(iso: string): string {
   const d = new Date(iso);
@@ -14,7 +15,7 @@ function diaDaMensagem(iso: string): string {
     a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
   if (mesmoDia(d, hoje)) return "Hoje";
   if (mesmoDia(d, ontem)) return "Ontem";
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+  return fmtBR(d, { day: "2-digit", month: "long", year: "numeric" });
 }
 
 /** Ícone de entrega das mensagens de saída (estilo WhatsApp). */

@@ -12,6 +12,7 @@ import {
   Bot, Sparkles, Route, BookOpen, KeyRound, Inbox, FileText, Check,
   FlaskConical, BarChart3,
 } from "lucide-react";
+import { fmtBR } from "@/lib/fuso";
 
 // =====================================================================
 // Recursos de IA do Atendimento.
@@ -90,8 +91,7 @@ const INTENCAO_LABELS: Record<string, string> = {
 type AcaoPlayground = "sugerir" | "resumir" | "classificar";
 
 function dataCurta(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return fmtBR(iso, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 export function AgentesIA({

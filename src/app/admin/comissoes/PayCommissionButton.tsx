@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
+import { isoDiaBR } from "@/lib/fuso";
 
 export function PayCommissionButton({
   id,
@@ -24,7 +25,7 @@ export function PayCommissionButton({
     if (!confirm("Marcar comissão como paga?")) return;
     setLoading(true);
     const supabase = createSupabaseBrowser();
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = isoDiaBR();
     const { error } = await supabase
       .from("commissions")
       .update({ status: "pago", pago_em: hoje })

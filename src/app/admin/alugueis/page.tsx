@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
 import { NewLeaseContractDialog } from "./NewLeaseContractDialog";
 import { KeyRound, AlertTriangle, ArrowRightLeft } from "lucide-react";
+import { isoDiaBR, primeiroDiaDoMesBR, ultimoDiaDoMesBR } from "@/lib/fuso";
 
 const CONTRATO_STATUS: Record<string, { label: string; variant: "success" | "muted" | "warning" }> = {
   ativo: { label: "Ativo", variant: "success" },
@@ -22,9 +23,12 @@ export default async function AlugueisPage() {
   const supabase = createSupabaseServer();
 
   const hoje = new Date();
-  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10);
-  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
-  const hojeStr = hoje.toISOString().slice(0, 10);
+  // Mês e "hoje" pelo calendário de São Paulo. `toISOString()` devolve o dia
+  // em UTC: das 21h em diante ele já virou, e a tela passava a mostrar o mês
+  // seguinte / marcar vencimentos com a data de amanhã.
+  const inicioMes = primeiroDiaDoMesBR(0, hoje);
+  const fimMes = ultimoDiaDoMesBR(hoje);
+  const hojeStr = isoDiaBR(hoje);
 
   const [{ data: contracts }, { data: pendentes }, { data: repassesPend }, { data: properties }, { data: owners }, { data: clients }, { data: accounts }] = await Promise.all([
     supabase

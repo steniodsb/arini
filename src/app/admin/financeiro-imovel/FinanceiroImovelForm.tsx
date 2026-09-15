@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { isoDiaBR } from "@/lib/fuso";
 
 interface Props {
   properties: { id: string; codigo: string; titulo: string | null }[];
@@ -32,7 +33,7 @@ export function FinanceiroImovelForm({ properties }: Props) {
       property_id: fd.get("property_id"),
       operation_type: fd.get("operation_type"),
       valor_fechado,
-      data_fechamento: fd.get("data_fechamento") || new Date().toISOString().slice(0, 10),
+      data_fechamento: fd.get("data_fechamento") || isoDiaBR(),
       forma_pagamento: fd.get("forma_pagamento"),
       comissao_pct,
       comissao_valor,
@@ -59,7 +60,7 @@ export function FinanceiroImovelForm({ properties }: Props) {
     await supabase.from("incomes").insert({
       origem: fd.get("operation_type") === "locacao" ? "locacao" : "comissao",
       valor: comissao_valor ?? 0,
-      data: fd.get("data_fechamento") || new Date().toISOString().slice(0, 10),
+      data: fd.get("data_fechamento") || isoDiaBR(),
       ref_property_id: fd.get("property_id"),
       descricao: `Fechamento ${fd.get("operation_type")} — comissão ${comissao_pct ?? "—"}%`,
       criado_por: user?.id,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Bot, UserCheck } from "lucide-react";
 import { Spinner } from "@/components/atendimento/ui";
 import { BOT_STATUS_LABELS, type Conversation } from "@/lib/types";
+import { fmtDataHoraBR } from "@/lib/fuso";
 
 // =====================================================================
 // Selo do estado do Agent Bot NA CONVERSA.
@@ -73,7 +74,7 @@ export function BotBadge({
           conduzindo
             ? "Um bot externo está respondendo esta conversa. Assuma para ele parar."
             : conversation.bot_transferida_em
-              ? `O bot deixou esta conversa com a equipe em ${new Date(conversation.bot_transferida_em).toLocaleString("pt-BR")}.`
+              ? `O bot deixou esta conversa com a equipe em ${fmtDataHoraBR(conversation.bot_transferida_em)}.`
               : "O bot deixou esta conversa com a equipe."
         }
       >

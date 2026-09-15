@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
 import { CATEGORY_LABELS, PROPERTY_TYPE_LABELS, type Property } from "@/lib/types";
 import { AlertTriangle } from "lucide-react";
+import { isoDiaBR } from "@/lib/fuso";
 
 export default async function MarketingListPage() {
   await requireSector(["marketing", "administrativo", "admin_central"]);
@@ -30,7 +31,7 @@ export default async function MarketingListPage() {
       .in("property_id", list.map((p) => p.id));
     for (const c of campaigns ?? []) prazoByProp[c.property_id] = c.data_publicacao_prevista;
   }
-  const hojeStr = new Date().toISOString().slice(0, 10);
+  const hojeStr = isoDiaBR();
   const isAtrasado = (p: Property) =>
     p.status !== "publicado" && !!prazoByProp[p.id] && (prazoByProp[p.id] as string) < hojeStr;
 

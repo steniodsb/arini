@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { SECTOR_LABELS, type Sector, type SectorObservation } from "@/lib/types";
 import { MessageCircle, Send, X } from "lucide-react";
+import { fmtBR } from "@/lib/fuso";
 
 const TARGET_SECTORS: Sector[] = [
   "captacao", "marketing", "administrativo", "juridico", "financeiro", "recepcao", "admin_central",
@@ -109,7 +110,7 @@ export function ChatWidget({ userId, sector }: { userId: string; sector: Sector 
                 <div className="flex items-center justify-between mb-1">
                   {o.autor_sector && <Badge variant="outline">{SECTOR_LABELS[o.autor_sector]}</Badge>}
                   <span className="text-[10px] text-muted-foreground">
-                    {new Date(o.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                    {fmtBR(o.created_at, { day: "2-digit", month: "2-digit" })}
                   </span>
                 </div>
                 <div className="whitespace-pre-line">{o.texto}</div>

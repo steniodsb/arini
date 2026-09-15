@@ -2,10 +2,11 @@ import { requireDiretoria } from "@/lib/auth";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { fmtDataHoraBR } from "@/lib/fuso";
 
-function fmt(ts: string) {
-  return new Date(ts).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
+// Fuso fixo de São Paulo: esta página é renderizada no servidor (UTC), então
+// `toLocaleString()` sem fuso mostrava todo o histórico com 3 horas a mais.
+const fmt = fmtDataHoraBR;
 
 const ACTION_LABELS: Record<string, string> = {
   INSERT: "Criou", UPDATE: "Atualizou", DELETE: "Removeu",

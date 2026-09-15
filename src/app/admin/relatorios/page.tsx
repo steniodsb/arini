@@ -3,11 +3,12 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { DateRangeForm } from "./DateRangeForm";
+import { isoDiaBR, primeiroDiaDoMesBR } from "@/lib/fuso";
 
 function defaultRange() {
   const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const to = now.toISOString().slice(0, 10);
+  const from = primeiroDiaDoMesBR(0, now);
+  const to = isoDiaBR(now);
   return { from, to };
 }
 

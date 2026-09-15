@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Card, Table, Alerta, Spinner } from "@/components/atendimento/ui";
 import type { AgentOption, CsatResponse } from "@/lib/types";
 import { Star } from "lucide-react";
+import { fmtDataHoraBR } from "@/lib/fuso";
 
 const PERIODOS = [7, 30, 90] as const;
 type Periodo = (typeof PERIODOS)[number];
@@ -28,8 +29,7 @@ function Estrelas({ nota, tamanho = 16 }: { nota: number; tamanho?: number }) {
 }
 
 function formatarData(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  return fmtDataHoraBR(iso);
 }
 
 export function CsatPanel({ agents }: { agents: AgentOption[] }) {

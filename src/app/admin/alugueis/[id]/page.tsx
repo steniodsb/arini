@@ -9,6 +9,7 @@ import { formatCurrencyBRL, formatDateBR } from "@/lib/utils";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import type { LeasePayment } from "@/lib/types";
 import { LeasePaymentActions } from "./LeasePaymentActions";
+import { isoDiaBR } from "@/lib/fuso";
 
 const MANAGE_SECTORS = ["administrativo", "financeiro", "aluguel", "admin_central"];
 
@@ -37,7 +38,7 @@ export default async function LeaseContractPage({ params }: { params: { id: stri
     .eq("contract_id", params.id)
     .order("competencia", { ascending: true });
   const pays = (payments ?? []) as LeasePayment[];
-  const hojeStr = new Date().toISOString().slice(0, 10);
+  const hojeStr = isoDiaBR();
 
   const recebido = pays.filter((p) => p.status === "pago").reduce((s, p) => s + Number(p.valor), 0);
   const aReceber = pays.filter((p) => p.status === "pendente" || p.status === "atrasado").reduce((s, p) => s + Number(p.valor), 0);

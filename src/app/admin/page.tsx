@@ -3,6 +3,7 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Users, FileCheck2, AlertTriangle, TrendingUp, Banknote } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
+import { inicioDoMesBR } from "@/lib/fuso";
 import { SECTOR_LABELS, STATUS_LABELS, type PropertyStatus } from "@/lib/types";
 import Link from "next/link";
 
@@ -48,7 +49,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: {
     supabase.from("leads").select("*", { count: "exact", head: true }).neq("stage", "perdido"),
     apprQuery,
     supabase.from("expenses").select("*", { count: "exact", head: true }).eq("status", "vencido"),
-    supabase.from("property_financials").select("valor_fechado").gte("data_fechamento", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+    supabase.from("property_financials").select("valor_fechado").gte("data_fechamento", inicioDoMesBR().toISOString()),
     supabase.from("properties").select("status"),
   ]);
 

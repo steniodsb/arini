@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
+import { isoDiaBR } from "@/lib/fuso";
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
     } else if (stage === "marketing") {
       if (status === "aprovado") {
         await admin.from("properties").update({ status: "publicado", publicado_no_site: true }).eq("id", entityId);
-        await admin.from("marketing_campaigns").update({ status: "publicado", data_publicacao_realizada: new Date().toISOString().slice(0, 10) }).eq("property_id", entityId);
+        await admin.from("marketing_campaigns").update({ status: "publicado", data_publicacao_realizada: isoDiaBR() }).eq("property_id", entityId);
       } else {
         // reprovado ou corrigir → volta para em_marketing para o marketing reajustar e reenviar
         await admin.from("properties").update({ status: "em_marketing" }).eq("id", entityId);

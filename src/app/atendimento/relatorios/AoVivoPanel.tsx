@@ -19,6 +19,7 @@ import {
   type ConversationChannel,
 } from "@/lib/types";
 import { tempoDecorrido, type AoVivoSnapshot } from "./relatorios-utils";
+import { fmtBR } from "@/lib/fuso";
 
 // =====================================================================
 // Aba "Ao vivo" — painel de parede do atendimento.
@@ -235,11 +236,7 @@ export function AoVivoPanel() {
         </span>
         <span className={`text-muted-foreground ${clsSecundario}`}>
           atualizado às{" "}
-          {new Date(dados.agora).toLocaleTimeString("pt-BR", {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          })}
+          {fmtBR(dados.agora, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           {atualizando && " · sincronizando…"}
         </span>
         <div className="ml-auto flex items-center gap-2">

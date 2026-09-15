@@ -6,6 +6,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Check, Undo2 } from "lucide-react";
 import { errMessage } from "@/lib/utils";
+import { isoDiaBR } from "@/lib/fuso";
 
 /**
  * Marca/desmarca uma despesa como paga (admin central). Pagar alimenta o
@@ -23,7 +24,7 @@ export function MarkPaidButton({ id, paid }: { id: string; paid: boolean }) {
       .update(
         paid
           ? { status: "pendente", pago_em: null }
-          : { status: "pago", pago_em: new Date().toISOString().slice(0, 10) },
+          : { status: "pago", pago_em: isoDiaBR() },
       )
       .eq("id", id);
     setBusy(false);

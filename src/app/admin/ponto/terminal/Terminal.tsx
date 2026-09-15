@@ -9,6 +9,7 @@ import { Clock, Search, UserRound, Check } from "lucide-react";
 import {
   TIME_ENTRY_LABELS, type ColaboradorTerminal, type TimeEntryType,
 } from "@/lib/types";
+import { fmtHoraBR } from "@/lib/fuso";
 
 // Próximo registro sugerido a partir do último batido pela PESSOA.
 const NEXT: Record<string, TimeEntryType> = {
@@ -76,17 +77,20 @@ export function Terminal({
     setBusy(true);
     setErro(null);
     const supabase = createSupabaseBrowser();
-    const { error } = await supabase.from("time_entries").insert({
+    // `select` depois do insert: a hora exibida é a que o BANCO gravou
+    // (`now()`), não a do relógio do terminal — se o aparelho da recepção
+    // estiver com a hora errada, quem manda continua sendo o servidor.
+    const { data, error } = await supabase.from("time_entries").insert({
       user_id: operadorId,
       colaborador_id: sel.id,
       tipo,
       origem: "terminal",
-    });
+    }).select("registrado_em").single();
     setBusy(false);
     if (error) { setErro(`Não foi possível registrar: ${error.message}`); return; }
 
     setUltimos((u) => ({ ...u, [sel.id]: tipo }));
-    setOk(`${TIME_ENTRY_LABELS[tipo]} de ${sel.nome} às ${new Date().toLocaleTimeString("pt-BR")}`);
+    setOk(`${TIME_ENTRY_LABELS[tipo]} de ${sel.nome} às ${fmtHoraBR(data?.registrado_em ?? new Date())}`);
     setBusca("");
     setSel(null);
     // O aviso some sozinho — num terminal ninguém fecha caixinha.

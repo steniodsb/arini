@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { isoDiaBR } from "@/lib/fuso";
 
 interface Initial {
   id?: string;
@@ -34,7 +35,7 @@ export function JuridicoForm({ propertyId, initial }: { propertyId: string; init
       apto_juridicamente: fd.get("apto") === "on",
       observacoes: fd.get("obs"),
       responsavel_id: user?.id,
-      data_analise: new Date().toISOString().slice(0, 10),
+      data_analise: isoDiaBR(),
     };
     if (initial?.id) await supabase.from("legal_records").update(payload).eq("id", initial.id);
     else await supabase.from("legal_records").insert(payload);

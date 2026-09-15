@@ -14,6 +14,7 @@ import {
   type AgendamentoRow,
   type EventoRow,
 } from "./shared";
+import { isoDiaBR } from "@/lib/fuso";
 
 const VISTAS: AgendaVista[] = ["kanban", "timeline", "mes", "semana", "lista"];
 const AGRUPAMENTOS: AgendaAgrupamento[] = ["dia", "status", "tipo", "setor", "responsavel"];
@@ -56,9 +57,11 @@ function periodoDaVista(vista: AgendaVista, base: Date): { inicio: Date; dias: n
  * imune a horário de verão, caso ele volte algum dia.
  */
 function lerDataBase(valor: string | undefined): Date {
-  if (!valor) return new Date();
-  const partes = valor.split("-").map(Number);
-  if (partes.length !== 3 || partes.some((n) => Number.isNaN(n))) return new Date();
+  // Sem `?data=` na URL, o "hoje" é o de SÃO PAULO — não o do relógio de
+  // quem renderiza. Como esta página roda no servidor (UTC), `new Date()`
+  // cru fazia a agenda abrir já no dia seguinte a partir das 21h.
+  const partes = (valor || isoDiaBR()).split("-").map(Number);
+  if (partes.length !== 3 || partes.some((n) => Number.isNaN(n))) return inicioDoDia(new Date());
   return new Date(partes[0], partes[1] - 1, partes[2], 12, 0, 0, 0);
 }
 

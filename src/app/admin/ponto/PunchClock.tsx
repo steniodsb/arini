@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Clock } from "lucide-react";
 import { TIME_ENTRY_LABELS, type TimeEntryType } from "@/lib/types";
+import { fmtHoraBR } from "@/lib/fuso";
 
 // Próximo registro sugerido a partir do último tipo batido.
 const NEXT: Record<string, TimeEntryType> = {
@@ -42,12 +43,17 @@ export function PunchClock({
     setBusy(true);
     setMsg(null);
     const supabase = createSupabaseBrowser();
-    const { error } = await supabase
+    // Devolve `registrado_em` para confirmar a hora QUE FOI GRAVADA (o
+    // `now()` do banco), e não a do relógio deste aparelho — num tablet com
+    // hora errada as duas não batem, e é a do banco que vale no relatório.
+    const { data, error } = await supabase
       .from("time_entries")
-      .insert({ user_id: userId, colaborador_id: colaboradorId, tipo, origem: "web" });
+      .insert({ user_id: userId, colaborador_id: colaboradorId, tipo, origem: "web" })
+      .select("registrado_em")
+      .single();
     setBusy(false);
     if (error) { setMsg(`Erro: ${error.message}`); return; }
-    setMsg(`${TIME_ENTRY_LABELS[tipo]} registrada às ${new Date().toLocaleTimeString("pt-BR")}.`);
+    setMsg(`${TIME_ENTRY_LABELS[tipo]} registrada às ${fmtHoraBR(data?.registrado_em ?? new Date())}.`);
     router.refresh();
   }
 

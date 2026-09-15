@@ -14,6 +14,7 @@ import {
   Table,
 } from "@/components/atendimento/ui";
 import type { ContatoRow } from "../tipos";
+import { fmtDataHoraBR } from "@/lib/fuso";
 
 // =====================================================================
 // Lista de CONTATOS BLOQUEADOS.
@@ -34,10 +35,7 @@ export type ContatoBloqueado = Pick<
 >;
 
 function formatarData(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  return fmtDataHoraBR(iso);
 }
 
 export function BloqueadosList({ initial }: { initial: ContatoBloqueado[] }) {

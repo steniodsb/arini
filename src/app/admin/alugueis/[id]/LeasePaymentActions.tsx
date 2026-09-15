@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
+import { isoDiaBR } from "@/lib/fuso";
 
 interface Props {
   id: string;
@@ -26,7 +27,7 @@ export function LeasePaymentActions({ id, status, repasseStatus }: Props) {
     router.refresh();
   }
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = isoDiaBR();
 
   return (
     <div className="flex items-center gap-1 justify-end">

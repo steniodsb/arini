@@ -9,6 +9,7 @@
 // =====================================================================
 
 import type { TimeEntry, TimeEntryType, Colaborador } from "./types";
+import { diaSemanaBR, fmtDiaBR, inicioDoDiaBR, proximoDiaBR } from "./fuso";
 
 export function fmtHours(ms: number): string {
   if (ms <= 0) return "—";
@@ -48,11 +49,18 @@ export function workedMs(entries: TimeEntry[]): { ms: number; aberto: boolean } 
   return { ms: Math.max(0, ms), aberto: !saida };
 }
 
-/** Chave "dd/mm/aaaa" — a mesma que a tela mostra, para bater com o olho. */
+/**
+ * Chave "dd/mm/aaaa" — a mesma que a tela mostra, para bater com o olho.
+ *
+ * O dia é o dia em SÃO PAULO, não o do relógio de quem está rodando. Com
+ * `toLocaleDateString()` sem fuso, o servidor (que roda em UTC) jogava tudo
+ * que foi batido depois das 21h para o dia seguinte — e as horas do dia
+ * saíam partidas em dois.
+ */
 export function groupByDay(entries: TimeEntry[]): Record<string, TimeEntry[]> {
   const byDay: Record<string, TimeEntry[]> = {};
   for (const e of entries) {
-    const key = new Date(e.registrado_em).toLocaleDateString("pt-BR");
+    const key = fmtDiaBR(e.registrado_em);
     (byDay[key] = byDay[key] ?? []).push(e);
   }
   return byDay;
@@ -66,15 +74,20 @@ export function groupByDay(entries: TimeEntry[]): Record<string, TimeEntry[]> {
  * Feriado não entra na conta (o sistema não tem calendário de feriados).
  * Um feriado no meio do mês aparece como saldo negativo de um dia — está
  * documentado aqui para ninguém tratar isso como bug depois.
+ *
+ * O passeio é pelo calendário de SÃO PAULO. Com `getDate()`/`getDay()` cru,
+ * o servidor (UTC) lia o fim do período — 23:59 de SP, já 02:59 do dia
+ * seguinte em UTC — como mais um dia de escala, e o relatório cobrava uma
+ * jornada que não existia.
  */
 export function diasDeEscalaNoPeriodo(dias: number[], de: Date, ate: Date): number {
   const set = new Set(dias);
   let n = 0;
-  const cur = new Date(de.getFullYear(), de.getMonth(), de.getDate());
-  const fim = new Date(ate.getFullYear(), ate.getMonth(), ate.getDate());
+  let cur = inicioDoDiaBR(de);
+  const fim = inicioDoDiaBR(ate);
   while (cur <= fim) {
-    if (set.has(cur.getDay())) n++;
-    cur.setDate(cur.getDate() + 1);
+    if (set.has(diaSemanaBR(cur))) n++;
+    cur = proximoDiaBR(cur);
   }
   return n;
 }

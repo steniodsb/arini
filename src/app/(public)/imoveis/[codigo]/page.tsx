@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrencyBRL, formatArea } from "@/lib/utils";
+import { formatCurrencyBRL, formatArea, formatDateBR } from "@/lib/utils";
 import {
   CATEGORY_LABELS,
   PROPERTY_TYPE_LABELS,
@@ -233,7 +233,7 @@ export default async function PropertyDetailPage({
 
             <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
               <Calendar size={12} /> Imóvel anunciado em{" "}
-              {new Date(p.data_entrada).toLocaleDateString("pt-BR")}
+              {formatDateBR(p.data_entrada)}
             </div>
           </div>
 

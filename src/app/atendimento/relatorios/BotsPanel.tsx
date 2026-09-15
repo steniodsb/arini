@@ -31,6 +31,7 @@ import {
   rotuloDia,
   type CelulaCsv,
 } from "./relatorios-utils";
+import { fmtDataHoraBR } from "@/lib/fuso";
 
 // =====================================================================
 // Aba "Bots" — o bot está ajudando ou atrapalhando?
@@ -353,7 +354,7 @@ export function BotsPanel({
         nomePorBot.get(f.bot_id) ?? "Bot removido",
         f.status ?? "sem resposta",
         f.erro ?? "",
-        new Date(f.created_at).toLocaleString("pt-BR"),
+        fmtDataHoraBR(f.created_at),
       ]),
     ];
     baixarCsv(`relatorio_bots_${sufixo}.csv`, dados);
@@ -696,7 +697,7 @@ function SaudeDaEntrega({
                     {f.duracao_ms === null ? "—" : `${f.duracao_ms} ms`}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                    {new Date(f.created_at).toLocaleString("pt-BR")}
+                    {fmtDataHoraBR(f.created_at)}
                   </td>
                 </tr>
               ))}

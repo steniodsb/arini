@@ -7,18 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Users, Clock, MonitorSmartphone, FileText } from "lucide-react";
 import { TIME_ENTRY_LABELS, type TimeEntry, type TimeEntryType } from "@/lib/types";
 import { fmtHours, workedMs, groupByDay } from "@/lib/ponto";
+import { fmtDataHoraBR, inicioDoMesBR } from "@/lib/fuso";
 import { PunchClock } from "./PunchClock";
-
-function fmt(ts: string) {
-  return new Date(ts).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
 
 export default async function PontoPage() {
   const { user, profile } = await requireUser();
   const supabase = createSupabaseServer();
   const admin = isDiretoria(profile) || profile?.sector === "administrativo";
 
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  // Mês corrente pelo calendário de São Paulo. Montado com `new Date(ano, mes, 1)`
+  // ele saía no fuso do servidor (UTC): dia 1º às 00:00 UTC é 21:00 do último dia
+  // do mês anterior aqui, e o mês começava três horas cedo demais.
+  const monthStart = inicioDoMesBR().toISOString();
 
   const { data: mine } = await supabase
     .from("time_entries")
@@ -139,7 +139,7 @@ export default async function PontoPage() {
             <tbody>
               {myEntries.slice(0, 50).map((t) => (
                 <tr key={t.id} className="border-t">
-                  <td className="py-2">{fmt(t.registrado_em)}</td>
+                  <td className="py-2">{fmtDataHoraBR(t.registrado_em)}</td>
                   <td><Badge variant="outline">{TIME_ENTRY_LABELS[t.tipo] ?? t.tipo}</Badge></td>
                   <td className="text-xs text-muted-foreground">{t.origem}</td>
                 </tr>

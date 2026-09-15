@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { fmtDataHoraBR, fmtDiaBR } from "./fuso";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -14,21 +15,15 @@ export function formatCurrencyBRL(value: number | null | undefined) {
   }).format(value);
 }
 
+// Data e hora SEMPRE no relógio de São Paulo — ver `lib/fuso.ts` para o
+// porquê. Estas duas funções são o caminho que quase toda a interface usa,
+// então é aqui que o fuso precisa estar certo.
 export function formatDateBR(d: string | Date | null | undefined) {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-  }).format(date);
+  return fmtDiaBR(d);
 }
 
 export function formatDateTimeBR(d: string | Date | null | undefined) {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
+  return fmtDataHoraBR(d);
 }
 
 /**

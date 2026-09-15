@@ -10,17 +10,19 @@ import {
   type Colaborador, type TimeEntry,
 } from "@/lib/types";
 import { fmtHours, fmtSaldo, fmtCarga, resumoDoPeriodo } from "@/lib/ponto";
+import { fimDoDiaBR, inicioDoDiaBR, inicioDoMesBR, isoDiaBR } from "@/lib/fuso";
 
 export const dynamic = "force-dynamic";
 
-/** "2026-08-01" → Date local. `new Date("2026-08-01")` seria UTC e voltaria um dia. */
+/**
+ * "2026-08-01" → o instante em que o relógio de SÃO PAULO marca esse dia.
+ * Antes a conversão era `new Date(y, m-1, d)`, que usa o fuso de quem está
+ * rodando: no servidor (UTC) o período começava às 21h do dia anterior e
+ * terminava às 20:59 do último dia — três horas de registros entravam e
+ * saíam do relatório sem motivo.
+ */
 function dataLocal(iso: string, fimDoDia = false): Date {
-  const [y, m, d] = iso.split("-").map(Number);
-  return fimDoDia ? new Date(y, m - 1, d, 23, 59, 59, 999) : new Date(y, m - 1, d);
-}
-
-function iso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return fimDoDia ? fimDoDiaBR(iso) : inicioDoDiaBR(iso);
 }
 
 export default async function RelatorioPontoPage({
@@ -31,9 +33,8 @@ export default async function RelatorioPontoPage({
   await requireSector(["administrativo", "admin_central"]);
   const supabase = createSupabaseServer();
 
-  const hoje = new Date();
-  const padraoDe = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
-  const padraoAte = iso(hoje);
+  const padraoDe = isoDiaBR(inicioDoMesBR());
+  const padraoAte = isoDiaBR();
   const de = searchParams.de || padraoDe;
   const ate = searchParams.ate || padraoAte;
 
