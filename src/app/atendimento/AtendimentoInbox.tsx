@@ -36,6 +36,7 @@ import {
   AlarmClock, Trash2, MessageSquareDot, MailOpen, Volume2, VolumeX, Sparkles,
   Inbox as InboxIcon, Hand, PartyPopper,
 } from "lucide-react";
+import { fmtDataHoraBR } from "@/lib/fuso";
 
 type StatusFilter = "todas" | ConversationStatus;
 type AssignFilter = "todas" | "minhas" | "nao_atribuidas";
@@ -554,7 +555,7 @@ export function AtendimentoInbox({
     setNotice({
       tipo: "info",
       texto: ate
-        ? `Conversa adiada até ${ate.toLocaleString("pt-BR")}.`
+        ? `Conversa adiada até ${fmtDataHoraBR(ate)}.`
         : "Conversa adiada até o cliente responder.",
     });
   }
@@ -638,8 +639,21 @@ export function AtendimentoInbox({
             }),
           });
           const json = await res.json();
-          if (!res.ok) setNotice({ tipo: "erro", texto: json.error ?? "Falha ao enviar o anexo." });
-          else if (json.message) setMessages((prev) => [...prev, json.message as Message]);
+          if (!res.ok) {
+            setNotice({ tipo: "erro", texto: json.error ?? "Falha ao enviar o anexo." });
+          } else {
+            if (json.message) setMessages((prev) => [...prev, json.message as Message]);
+            // `delivered === false` = gravamos a mensagem mas o canal não
+            // entregou. O caminho do texto já avisava; o do anexo não, e o
+            // atendente via a foto na tela achando que tinha ido — enquanto
+            // o cliente não recebia nada. Falha silenciosa é pior que erro.
+            if (json.delivered === false) {
+              setNotice({
+                tipo: "erro",
+                texto: `Anexo "${file.name}" registrado, mas NÃO entregue ao cliente (${json.reason}). Verifique o canal em Canais.`,
+              });
+            }
+          }
         } catch (e) {
           setNotice({
             tipo: "erro",
@@ -1215,7 +1229,7 @@ export function AtendimentoInbox({
                     </span>
                   )}
                   {selected.status === "adiada" && selected.snoozed_until &&
-                    ` · adiada até ${new Date(selected.snoozed_until).toLocaleString("pt-BR")}`}
+                    ` · adiada até ${fmtDataHoraBR(selected.snoozed_until)}`}
                   {!selected.triada_em && (
                     <span className="ml-1.5 rounded-full bg-arini/10 text-arini dark:bg-gold/15 dark:text-gold px-1.5 py-0.5 text-[10px] font-medium">
                       na caixa central
