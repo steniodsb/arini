@@ -68,13 +68,16 @@ export function ChatApp({
   // ------------------------------------------------------------------
   // Carregamento
   // ------------------------------------------------------------------
-  const carregarMensagens = useCallback(async (convId: string) => {
+  /** Devolve o `created_at` da última mensagem — o carimbo de "li até aqui". */
+  const carregarMensagens = useCallback(async (convId: string): Promise<string | null> => {
     const { data } = await supa()
       .from("chat_mensagens")
       .select("*")
       .eq("conversa_id", convId)
       .order("created_at", { ascending: true });
-    setMensagens((data ?? []) as ChatMensagem[]);
+    const lista = (data ?? []) as ChatMensagem[];
+    setMensagens(lista);
+    return lista.length > 0 ? lista[lista.length - 1].created_at : null;
   }, [supa]);
 
   const recarregarLista = useCallback(async () => {
@@ -82,12 +85,24 @@ export function ChatApp({
     setItens(novos);
   }, [supa, meuId, pessoas]);
 
-  /** Marca como lida ATÉ AGORA — não até a última mensagem carregada. */
-  const marcarLida = useCallback(async (convId: string) => {
+  /**
+   * Marca como lida até o `created_at` da última mensagem vista.
+   *
+   * Por que NÃO `new Date()`: esse timestamp vem do relógio do navegador,
+   * e o `created_at` das mensagens vem do banco. Máquina adiantada faria
+   * mensagem nova nascer "lida" (o carimbo estaria no futuro dela);
+   * máquina atrasada deixaria mensagem lida contando como não lida para
+   * sempre. Comparar dois relógios diferentes é o bug — usar o carimbo do
+   * próprio banco elimina a comparação.
+   *
+   * Sem mensagem nenhuma (conversa vazia) cai no relógio local, que aí é
+   * inofensivo: não há o que contar.
+   */
+  const marcarLida = useCallback(async (convId: string, ate?: string | null) => {
     await supa()
       .from("chat_participantes")
       .upsert(
-        { conversa_id: convId, profile_id: meuId, lido_em: new Date().toISOString() },
+        { conversa_id: convId, profile_id: meuId, lido_em: ate ?? new Date().toISOString() },
         { onConflict: "conversa_id,profile_id" },
       );
     setItens((prev) =>
@@ -97,10 +112,15 @@ export function ChatApp({
 
   useEffect(() => {
     if (!selecionada) return;
+    const conv = selecionada;
     setCarregando(true);
     setRespondendoA(null);
-    carregarMensagens(selecionada).finally(() => setCarregando(false));
-    void marcarLida(selecionada);
+    // Marca lida DEPOIS de carregar, com o carimbo da última mensagem que
+    // de fato apareceu na tela — nunca antes, senão marcaria como lido o
+    // que ainda não foi mostrado.
+    carregarMensagens(conv)
+      .then((ultima) => marcarLida(conv, ultima))
+      .finally(() => setCarregando(false));
   }, [selecionada, carregarMensagens, marcarLida]);
 
   // Rola para o fim quando a thread muda.
@@ -128,7 +148,9 @@ export function ChatApp({
             setMensagens((prev) =>
               prev.some((m) => m.id === nova.id) ? prev : [...prev, nova],
             );
-            if (nova.autor_id !== meuId) void marcarLida(nova.conversa_id);
+            // Carimbo da própria mensagem que acabou de chegar, pelo mesmo
+            // motivo: é hora do banco, não do navegador.
+            if (nova.autor_id !== meuId) void marcarLida(nova.conversa_id, nova.created_at);
           }
           void recarregarLista();
         },
