@@ -134,6 +134,18 @@ export function ChatApp({
   // ------------------------------------------------------------------
   useEffect(() => {
     const supabase = supa();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    // Debounce na RECARGA DA LISTA — nunca no fio, que precisa ser
+    // instantâneo. `montarLista` faz três consultas, e sem isto cada
+    // mensagem do canal da Recepção (3 pessoas) dispararia as três em
+    // todos os clientes abertos, em rajada. O mesmo padrão do painel ao
+    // vivo do Atendimento.
+    const agendarLista = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { timer = null; void recarregarLista(); }, 400);
+    };
+
     const canal = supabase
       .channel("chat-interno")
       .on(
@@ -141,9 +153,10 @@ export function ChatApp({
         { event: "INSERT", schema: "public", table: "chat_mensagens" },
         (payload) => {
           const nova = payload.new as ChatMensagem;
-          // Mensagem da conversa aberta entra no fio na hora. A checagem
-          // de duplicata existe porque quem envia já insere localmente
-          // para a bolha aparecer sem esperar a ida ao servidor.
+          // Mensagem da conversa aberta entra no fio NA HORA, sem debounce:
+          // atraso aqui é o que fazia o widget antigo não parecer chat.
+          // A checagem de duplicata existe porque quem envia já insere
+          // localmente para a bolha aparecer sem esperar a ida ao servidor.
           if (nova.conversa_id === selecionada) {
             setMensagens((prev) =>
               prev.some((m) => m.id === nova.id) ? prev : [...prev, nova],
@@ -152,11 +165,15 @@ export function ChatApp({
             // motivo: é hora do banco, não do navegador.
             if (nova.autor_id !== meuId) void marcarLida(nova.conversa_id, nova.created_at);
           }
-          void recarregarLista();
+          agendarLista();
         },
       )
       .subscribe();
-    return () => { void supabase.removeChannel(canal); };
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      void supabase.removeChannel(canal);
+    };
   }, [supa, selecionada, meuId, marcarLida, recarregarLista]);
 
   // ------------------------------------------------------------------
