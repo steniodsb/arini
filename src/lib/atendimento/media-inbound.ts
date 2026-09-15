@@ -67,10 +67,37 @@ export async function guardarMidiaRecebida(
     if (declarado > MAX_BYTES) return null;
 
     const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength > MAX_BYTES) return null;
-
     const mime = res.headers.get("content-type")?.split(";")[0].trim()
       || "application/octet-stream";
+
+    return guardarBufferRecebido(admin, { buffer, mime, conversationId, nomeOriginal });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mesma gravação, para quem JÁ tem os bytes em mãos — o caso da Evolution
+ * sem S3, em que a mídia não vem por URL nenhuma e sim em base64 pelo
+ * `/chat/getBase64FromMediaMessage`.
+ *
+ * Também devolve `null` em qualquer falha, pelo mesmo motivo: quem chama é
+ * webhook e precisa responder 200 de qualquer jeito.
+ */
+export async function guardarBufferRecebido(
+  admin: SupabaseClient,
+  args: {
+    buffer: Buffer;
+    mime: string;
+    conversationId: string;
+    nomeOriginal?: string | null;
+  },
+): Promise<MidiaGuardada | null> {
+  const { buffer, conversationId, nomeOriginal } = args;
+  try {
+    if (buffer.byteLength === 0 || buffer.byteLength > MAX_BYTES) return null;
+
+    const mime = args.mime?.split(";")[0].trim() || "application/octet-stream";
     const ext = extensaoDoMime(mime, nomeOriginal);
     // Sem Date.now() no nome não daria para receber dois arquivos iguais
     // na mesma conversa sem um sobrescrever o outro.

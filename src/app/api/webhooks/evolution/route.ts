@@ -1,7 +1,11 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
-import { toChannelStatus, type EvolutionState } from "@/lib/evolution";
+import {
+  getMediaBase64, toChannelStatus,
+  type EvolutionConfig, type EvolutionState,
+} from "@/lib/evolution";
+import { guardarBufferRecebido } from "@/lib/atendimento/media-inbound";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
 import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import {
@@ -40,6 +44,13 @@ type CanalRow = {
   config: Record<string, string | undefined>;
 };
 
+/** Credenciais da Evolution guardadas no canal — para chamar de volta a API. */
+function configDoCanal(row: CanalRow): EvolutionConfig | null {
+  const { base_url, api_key, instance_name } = row.config;
+  if (!base_url || !api_key || !instance_name) return null;
+  return { base_url, api_key, instance_name };
+}
+
 /** Compara o segredo em tempo constante (evita descobrir por temporização). */
 function segredoConfere(recebido: string | null, esperado: string): boolean {
   if (!recebido) return false;
@@ -65,8 +76,18 @@ function extrairConteudo(message: Record<string, unknown> | undefined): {
   mediaUrl: string | null;
   mediaNome: string | null;
   mediaMime: string | null;
+  /**
+   * A mensagem CARREGA um anexo, independente de termos conseguido uma URL
+   * para ele. É a diferença entre "não tem mídia" e "tem mídia que ainda
+   * precisa ser buscada" — sem esse sinal, foto e áudio sem legenda eram
+   * lidos como mensagem vazia e descartados.
+   */
+  temMidia: boolean;
 } {
-  const vazio = { texto: null, tipo: "texto" as MessageTipo, mediaUrl: null, mediaNome: null, mediaMime: null };
+  const vazio = {
+    texto: null, tipo: "texto" as MessageTipo,
+    mediaUrl: null, mediaNome: null, mediaMime: null, temMidia: false,
+  };
   if (!message) return vazio;
 
   const obj = (k: string) => message[k] as Record<string, unknown> | undefined;
@@ -92,10 +113,12 @@ function extrairConteudo(message: Record<string, unknown> | undefined): {
       tipo,
       // A Evolution devolve a URL criptografada do WhatsApp; quando o
       // servidor está com S3/Minio ligado, vem também `mediaUrl` já
-      // hospedada — é essa que conseguimos exibir no navegador.
+      // hospedada — é essa que conseguimos exibir no navegador. Quando não
+      // vem, `temMidia` manda buscar o arquivo em base64 mais adiante.
       mediaUrl: (m.mediaUrl as string) ?? (message.mediaUrl as string) ?? null,
       mediaNome: (m.fileName as string) ?? null,
       mediaMime: (m.mimetype as string) ?? null,
+      temMidia: true,
     };
   }
 
@@ -197,7 +220,12 @@ export async function POST(req: Request) {
   if (!telefone) return NextResponse.json({ ok: true, ignored: "não é conversa individual" });
 
   const conteudo = extrairConteudo(data.message as Record<string, unknown> | undefined);
-  if (!conteudo.texto && !conteudo.mediaUrl) {
+  // `temMidia` entra na condição porque foto e áudio SEM legenda chegam com
+  // texto nulo e, num servidor Evolution sem S3, também sem `mediaUrl`. A
+  // condição antiga (`!texto && !mediaUrl`) classificava isso como mensagem
+  // vazia e respondia 200: o anexo do cliente era descartado em silêncio,
+  // sem erro em lugar nenhum. Áudio, que nunca tem legenda, sumia sempre.
+  if (!conteudo.texto && !conteudo.mediaUrl && !conteudo.temMidia) {
     return NextResponse.json({ ok: true, ignored: "mensagem sem conteúdo legível" });
   }
 
@@ -331,6 +359,29 @@ export async function POST(req: Request) {
     await ativarBotNaConversa(admin, conversationId);
   }
 
+  // 2.5) Traz o anexo para o nosso storage.
+  //
+  // Só entra aqui quando a mensagem tem mídia e o payload NÃO trouxe uma
+  // URL utilizável — o caso de um servidor Evolution sem S3, que é onde a
+  // foto e o áudio se perdiam. Buscamos os bytes em base64 e guardamos,
+  // porque a `url` crua do payload é a do WhatsApp, criptografada: ela não
+  // abre no navegador nem serve para reenviar.
+  let guardada = null;
+  if (conteudo.temMidia && !conteudo.mediaUrl && key) {
+    const cfg = configDoCanal(canal);
+    if (cfg) {
+      const baixada = await getMediaBase64(cfg, key);
+      if (baixada) {
+        guardada = await guardarBufferRecebido(admin, {
+          buffer: baixada.buffer,
+          mime: conteudo.mediaMime || baixada.mime,
+          conversationId,
+          nomeOriginal: conteudo.mediaNome,
+        });
+      }
+    }
+  }
+
   // 3) Grava a mensagem.
   const preview = conteudo.texto?.slice(0, 140) ?? `[${conteudo.tipo}]`;
   const { data: msgCriada } = await admin
@@ -342,9 +393,12 @@ export async function POST(req: Request) {
       remetente: fromMe ? "atendente" : "cliente",
       tipo: conteudo.tipo,
       conteudo: conteudo.texto,
-      media_url: conteudo.mediaUrl,
+      // A cópia no nosso storage vence a URL do payload: é a única que o
+      // navegador do atendente consegue abrir e que continua viva depois.
+      media_url: guardada?.url ?? conteudo.mediaUrl,
       media_nome: conteudo.mediaNome,
-      media_mime: conteudo.mediaMime,
+      media_mime: guardada?.mime ?? conteudo.mediaMime,
+      media_tamanho: guardada?.tamanho ?? null,
       external_id: externalId,
       raw_payload: payload as unknown as Record<string, unknown>,
       status: fromMe ? "enviada" : "recebida",
@@ -423,9 +477,11 @@ export async function POST(req: Request) {
       remetente: "cliente",
       tipo: conteudo.tipo,
       texto: conteudo.texto,
-      mediaUrl: conteudo.mediaUrl,
+      // A cópia guardada, pelo mesmo motivo do insert: a URL do payload é
+      // a criptografada do WhatsApp e o bot não consegue abrir.
+      mediaUrl: guardada?.url ?? conteudo.mediaUrl,
       mediaNome: conteudo.mediaNome,
-      mediaMime: conteudo.mediaMime,
+      mediaMime: guardada?.mime ?? conteudo.mediaMime,
       criadaEm: (msgCriada?.created_at as string) ?? null,
     });
   }
