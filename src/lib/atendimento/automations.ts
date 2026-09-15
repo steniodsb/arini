@@ -3,6 +3,7 @@ import {
   emitirConversaAtualizada,
   emitirConversaResolvida,
 } from "@/lib/atendimento/webhook-eventos";
+import { enviarMensagem } from "@/lib/atendimento/outbound";
 import type {
   AtendimentoAutomation,
   AutomationCondition,
@@ -20,22 +21,16 @@ import type {
 // as ações no banco → grava o log em atendimento_automation_logs.
 //
 // O QUE AINDA FALTA PARA FICAR 100%:
-//   1. GANCHO NO WEBHOOK — ninguém chama `executarAutomacoes` ainda. É
-//      preciso invocá-la no handler de entrada de mensagens (a rota do
-//      webhook do WhatsApp/Evolution) com o client de SERVICE ROLE, logo
-//      após gravar a mensagem/conversa, passando o evento correspondente
-//      ('mensagem_criada' e 'conversa_criada') e o contexto montado.
-//   2. Eventos 'conversa_atualizada' e 'conversa_resolvida' precisam de
-//      gancho equivalente onde a conversa é alterada pela UI/API.
-//   3. `dentroHorarioComercial` precisa ser calculado a partir de
-//      atendimento_business_hours da caixa (aqui ele chega pronto no ctx).
-//   4. A ação `enviar_mensagem` grava a mensagem no banco, mas NÃO faz o
-//      envio ao provedor (Evolution/Cloud API) — o disparo real fica a
-//      cargo de quem chamar (ou de um trigger de saída) e ainda não está
-//      ligado.
-//   5. Sem proteção contra loop: uma regra em 'conversa_atualizada' que
-//      atualiza a conversa vai reentrar. Ao ligar o gancho, marque a
+//   1. Sem proteção contra loop: uma regra em 'conversa_atualizada' que
+//      atualiza a conversa vai reentrar. Ao ligar esse gancho, marque a
 //      origem da alteração (ex.: remetente 'sistema') e ignore-a.
+//
+// JÁ RESOLVIDO (mantido aqui porque o comentário antigo listava como
+// pendência e induzia a erro): o gancho do webhook existe desde que
+// `triggers.ts` passou a chamar `dispararAutomacoes`, e a ação
+// `enviar_mensagem` passou a ENTREGAR de verdade pelo canal em 15/09/2026
+// — antes disso ela só gravava no banco com status 'enviada', o que fazia
+// a tela mentir.
 // =====================================================================
 
 /** Recorte da conversa que as condições e ações enxergam. */
@@ -171,6 +166,20 @@ export interface AplicarAcoesOpts {
   autorId?: string | null;
   /** Tags atuais da conversa; se não vier, o motor lê do banco quando precisar. */
   tagsAtuais?: string[];
+  /**
+   * Para onde ENTREGAR o que a ação `enviar_mensagem` produzir.
+   *
+   * Sem isto a mensagem era só gravada no banco — e gravada com
+   * `status: 'enviada'`, então aparecia no inbox com cara de entregue
+   * enquanto o cliente não recebia nada. Quem chama informa o canal e o
+   * destino; sem eles a mensagem continua sendo gravada, mas marcada como
+   * falha, que é a verdade.
+   */
+  entrega?: {
+    canal: ConversationChannel;
+    channelId: string | null;
+    destino: string | null;
+  } | null;
 }
 
 export interface ResultadoAcoes {
@@ -341,18 +350,64 @@ export async function aplicarAcoes(
   }
 
   if (mensagens.length > 0) {
-    const linhas = mensagens.map((m) => ({
-      conversation_id: conversationId,
-      direcao: "out" as const,
-      // Nota interna nasce como "enviada" porque não sai para o cliente;
-      // a mensagem de verdade ainda depende do envio ao provedor.
-      remetente: "sistema" as const,
-      autor_id: opts.autorId ?? null,
-      tipo: "texto" as const,
-      conteudo: m.conteudo,
-      interna: m.interna,
-      status: "enviada" as const,
-    }));
+    // ENTREGA DE VERDADE.
+    //
+    // Antes daqui só saía um `insert` com `status: 'enviada'` — a mensagem
+    // aparecia no inbox como entregue e o cliente nunca recebia nada. A
+    // tela afirmava o contrário do que tinha acontecido, que é a pior
+    // forma de uma automação falhar: ninguém vai atrás do que parece ter
+    // dado certo.
+    //
+    // Agora cada mensagem NÃO-interna é despachada pelo canal antes de ser
+    // gravada, e o `status` reflete o resultado. Nota interna não passa por
+    // aqui: ela nasce "enviada" porque, por definição, não sai para o
+    // cliente — o destino dela é a própria tela.
+    const linhas: Record<string, unknown>[] = [];
+
+    for (const m of mensagens) {
+      let status: "enviada" | "falha" = "enviada";
+      let externalId: string | null = null;
+
+      if (!m.interna) {
+        const entrega = opts.entrega;
+        if (!entrega?.destino) {
+          // Sem para onde mandar, gravar como "enviada" seria repetir o
+          // bug. Fica registrada como falha e o motivo vai para os erros.
+          status = "falha";
+          erros.push(
+            "Ação \"enviar_mensagem\": a conversa não tem destino para entrega — " +
+              "a mensagem ficou registrada como falha e NÃO foi para o cliente.",
+          );
+        } else {
+          const r = await enviarMensagem(supabase, {
+            canal: entrega.canal,
+            channelId: entrega.channelId,
+            destino: entrega.destino,
+            texto: m.conteudo,
+            conversationId,
+          });
+          if (r.ok) {
+            externalId = r.externalId ?? null;
+          } else {
+            status = "falha";
+            erros.push(`Ação "enviar_mensagem" não entregue: ${r.reason}`);
+          }
+        }
+      }
+
+      linhas.push({
+        conversation_id: conversationId,
+        direcao: "out",
+        remetente: "sistema",
+        autor_id: opts.autorId ?? null,
+        tipo: "texto",
+        conteudo: m.conteudo,
+        interna: m.interna,
+        status,
+        external_id: externalId,
+      });
+    }
+
     const { error } = await supabase.from("messages").insert(linhas);
     if (error) erros.push(`Falha ao inserir mensagens: ${error.message}`);
   }
@@ -411,6 +466,14 @@ export async function executarAutomacoes(
       // Ação automática não tem agente humano por trás.
       autorId: null,
       tagsAtuais: ctx.conversa.tags ?? undefined,
+      // Para onde entregar, se a regra mandar mensagem. O contexto já
+      // carrega tudo: o canal, QUAL conexão recebeu (multi-WhatsApp) e o
+      // telefone do contato.
+      entrega: {
+        canal: (ctx.conversa.canal as ConversationChannel) ?? "whatsapp",
+        channelId: ctx.conversa.channel_id ?? null,
+        destino: ctx.conversa.contato_telefone ?? null,
+      },
     });
 
     resultados.push({
