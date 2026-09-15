@@ -1445,3 +1445,74 @@ export const FILAS_SUGERIDAS = [
   "Venda Urbana", "Fazenda", "Locação", "Consórcio", "Documentação",
   "Financeiro", "Jurídico", "Marketing", "Administrativo",
 ] as const;
+
+// =====================================================================
+// CHAT INTERNO DO CRM (migration 0051)
+//
+// Não confundir com `Conversation`/`Message`, que são a conversa com o
+// CLIENTE no Atendimento. Aqui é o time falando entre si.
+// =====================================================================
+
+export type ChatTipo = "direta" | "setor";
+
+export interface ChatConversa {
+  id: string;
+  tipo: ChatTipo;
+  /** Só em `setor`. */
+  setor: Sector | null;
+  /** Só em `direta`, par ordenado (membro_a < membro_b). */
+  membro_a: string | null;
+  membro_b: string | null;
+  ultima_em: string;
+  ultima_previa: string | null;
+  ultima_autor_id: string | null;
+  created_at: string;
+}
+
+export interface ChatMensagem {
+  id: string;
+  conversa_id: string;
+  autor_id: string | null;
+  texto: string | null;
+  media_url: string | null;
+  media_nome: string | null;
+  media_mime: string | null;
+  media_tamanho: number | null;
+  responde_a: string | null;
+  editada_em: string | null;
+  apagada_em: string | null;
+  created_at: string;
+}
+
+export interface ChatParticipante {
+  conversa_id: string;
+  profile_id: string;
+  lido_em: string | null;
+  arquivada: boolean;
+}
+
+/** Pessoa do CRM como o chat precisa dela — sem e-mail nem telefone. */
+export interface ChatPessoa {
+  id: string;
+  nome: string;
+  sector: Sector;
+  avatar_url: string | null;
+}
+
+/**
+ * Uma linha da lista da esquerda. Montada no servidor porque depende de
+ * juntar conversa + participante (não lidas) + o "outro" de uma direta —
+ * fazer isso no browser custaria três consultas por conversa.
+ */
+export interface ChatItemLista {
+  conversa: ChatConversa;
+  /** Como a linha se chama: o nome da pessoa, ou o do setor. */
+  titulo: string;
+  /** Em `direta`, quem é o outro lado. Nulo em `setor`. */
+  outro: ChatPessoa | null;
+  naoLidas: number;
+  arquivada: boolean;
+}
+
+/** "Hoje" / "Ontem" / a data — usado no divisor de dia da thread. */
+export const CHAT_MAX_TEXTO = 4000;

@@ -52,7 +52,7 @@ export default async function AdminLayout({
         />
         <div className="flex-1 p-8 overflow-y-auto">{children}</div>
       </main>
-      <ChatWidget userId={profile.id} sector={profile.sector} />
+      <ChatWidget userId={profile.id} />
     </div>
   );
 }
