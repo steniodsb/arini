@@ -897,6 +897,23 @@ export interface AtendimentoChannelSafe {
   conectado_em: string | null;
   created_at: string;
   instance_name: string | null;
+  /**
+   * Comportamento da instância Evolution (recusa de ligação e o texto que
+   * a acompanha, importação de histórico, grupos). Vazio nos outros
+   * provedores, que não têm equivalente. Sem credencial — ver a coluna
+   * `config`, que a view esconde de propósito.
+   */
+  opcoes: EvolutionInstanceOptions | null;
+}
+
+/** Espelha `EvolutionSettings` de `lib/evolution.ts`, para a UI. */
+export interface EvolutionInstanceOptions {
+  rejectCall: boolean;
+  msgCall: string;
+  groupsIgnore: boolean;
+  alwaysOnline: boolean;
+  readMessages: boolean;
+  syncFullHistory: boolean;
 }
 
 export const CHANNEL_PROVIDER_LABELS: Record<ChannelProvider, string> = {

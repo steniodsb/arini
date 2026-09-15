@@ -21,6 +21,36 @@ export type EvolutionConfig = {
 
 export type EvolutionState = "open" | "connecting" | "close" | "refused";
 
+/**
+ * As opções de comportamento da instância. Antes viviam como literais
+ * dentro de `ensureInstance` e por isso eram imutáveis na prática: o corpo
+ * do `/instance/create` só roda uma vez na vida da instância, e a recepção
+ * ficou meses recusando ligação com um texto que ninguém conseguia editar.
+ */
+export type EvolutionSettings = {
+  /** Recusa a chamada na hora e responde `msgCall`. */
+  rejectCall: boolean;
+  /** O texto que o cliente recebe quando a ligação é recusada. */
+  msgCall: string;
+  /** Ignora mensagem de grupo — atendimento aqui é 1-a-1. */
+  groupsIgnore: boolean;
+  /** Mantém o WhatsApp como "online" o tempo todo. */
+  alwaysOnline: boolean;
+  /** Marca como lida a conversa que respondemos. */
+  readMessages: boolean;
+  /** Importa o histórico do aparelho ao parear. Só vale no PRÓXIMO QR. */
+  syncFullHistory: boolean;
+};
+
+export const EVOLUTION_SETTINGS_PADRAO: EvolutionSettings = {
+  rejectCall: true,
+  msgCall: "Não atendemos ligações por aqui. Pode escrever que respondemos.",
+  groupsIgnore: true,
+  alwaysOnline: false,
+  readMessages: true,
+  syncFullHistory: false,
+};
+
 /** Eventos que realmente consumimos — assinar tudo só gera ruído. */
 const WEBHOOK_EVENTS = [
   "QRCODE_UPDATED",
@@ -91,6 +121,7 @@ export async function ensureInstance(
   cfg: EvolutionConfig,
   webhookUrl: string,
   webhookSecret: string,
+  settings: EvolutionSettings = EVOLUTION_SETTINGS_PADRAO,
 ): Promise<{ qrcode: string | null; state: EvolutionState }> {
   try {
     const created = await call<{
@@ -102,14 +133,8 @@ export async function ensureInstance(
         instanceName: cfg.instance_name,
         qrcode: true,
         integration: "WHATSAPP-BAILEYS",
-        // Padrões sãos para atendimento: não recebe grupo, rejeita ligação
-        // e marca como lida quando respondemos.
-        groupsIgnore: true,
-        rejectCall: true,
-        msgCall: "Não atendemos ligações por aqui. Pode escrever que respondemos.",
-        alwaysOnline: false,
-        readMessages: true,
-        syncFullHistory: false,
+        // Comportamento da instância — vem do canal, não mais fixo aqui.
+        ...settings,
         webhook: {
           enabled: true,
           url: webhookUrl,
@@ -135,6 +160,13 @@ export async function ensureInstance(
   // Já existia: garante o webhook apontando pra cá e pede um QR novo.
   await setWebhook(cfg, webhookUrl, webhookSecret).catch(() => {
     // Webhook é importante mas não deve impedir de mostrar o QR.
+  });
+  // E reaplica as configurações. Sem esta linha o corpo do `/instance/create`
+  // acima é letra morta para toda instância que já nasceu: era por isso que
+  // a mensagem de ligação recusada não mudava por mais que se editasse o
+  // código — o caminho que a define nunca mais rodava.
+  await setSettings(cfg, settings).catch(() => {
+    // Mesma regra do webhook: não impede de mostrar o QR.
   });
   return connect(cfg);
 }
@@ -207,6 +239,83 @@ export async function deleteInstance(cfg: EvolutionConfig): Promise<void> {
   await call(cfg, `/instance/delete/${encodeURIComponent(cfg.instance_name)}`, {
     method: "DELETE",
   });
+}
+
+/**
+ * Grava as opções de comportamento numa instância que JÁ existe.
+ * É o endpoint que faltava: `/instance/create` só aceita essas opções na
+ * criação, então sem isto nada aqui era editável depois do primeiro QR.
+ */
+export async function setSettings(
+  cfg: EvolutionConfig,
+  settings: EvolutionSettings,
+): Promise<void> {
+  await call(cfg, `/settings/set/${encodeURIComponent(cfg.instance_name)}`, {
+    method: "POST",
+    body: { ...settings },
+  });
+}
+
+/** Lê as opções atuais da instância — para a tela mostrar o que vale hoje. */
+export async function getSettings(cfg: EvolutionConfig): Promise<EvolutionSettings | null> {
+  try {
+    const res = await call<Record<string, unknown>>(
+      cfg,
+      `/settings/find/${encodeURIComponent(cfg.instance_name)}`,
+    );
+    if (!res) return null;
+    const bool = (k: keyof EvolutionSettings) =>
+      typeof res[k] === "boolean" ? (res[k] as boolean) : EVOLUTION_SETTINGS_PADRAO[k] as boolean;
+    return {
+      rejectCall: bool("rejectCall"),
+      msgCall: typeof res.msgCall === "string" ? res.msgCall : EVOLUTION_SETTINGS_PADRAO.msgCall,
+      groupsIgnore: bool("groupsIgnore"),
+      alwaysOnline: bool("alwaysOnline"),
+      readMessages: bool("readMessages"),
+      syncFullHistory: bool("syncFullHistory"),
+    };
+  } catch {
+    // Instância fora do ar não deve derrubar a tela de configuração.
+    return null;
+  }
+}
+
+/**
+ * Baixa a mídia de uma mensagem recebida, em base64.
+ *
+ * Por que existe: o webhook entrega a mídia do WhatsApp CRIPTOGRAFADA — a
+ * `url` que vem no payload não abre no navegador nem em lugar nenhum. A
+ * Evolution só devolve uma URL utilizável (`mediaUrl`) quando o servidor
+ * dela está com S3/Minio ligado. Sem S3, este endpoint é o ÚNICO jeito de
+ * alcançar o arquivo, e é por não chamá-lo que toda foto e todo áudio
+ * recebidos eram descartados pelo webhook.
+ */
+export async function getMediaBase64(
+  cfg: EvolutionConfig,
+  messageKey: Record<string, unknown>,
+): Promise<{ buffer: Buffer; mime: string } | null> {
+  try {
+    const res = await call<{ base64?: string; mimetype?: string }>(
+      cfg,
+      `/chat/getBase64FromMediaMessage/${encodeURIComponent(cfg.instance_name)}`,
+      {
+        method: "POST",
+        // `convertToMp4: false` — o áudio do WhatsApp é OGG/opus e o
+        // navegador toca. Converter só adiciona latência e um ponto de
+        // falha no meio de um webhook que precisa responder rápido.
+        body: { message: { key: messageKey }, convertToMp4: false },
+      },
+    );
+    if (!res?.base64) return null;
+    return {
+      buffer: Buffer.from(res.base64, "base64"),
+      mime: res.mimetype || "application/octet-stream",
+    };
+  } catch {
+    // Perder o anexo é ruim; derrubar o webhook e perder a mensagem
+    // inteira (e o retry da Evolution em cima) é pior.
+    return null;
+  }
 }
 
 /** Envia texto. Na v2 o corpo é plano: { number, text }. */

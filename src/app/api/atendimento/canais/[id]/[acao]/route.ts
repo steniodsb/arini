@@ -6,8 +6,11 @@ import {
   ensureInstance,
   connectionState,
   logout,
+  setSettings,
   toChannelStatus,
+  EVOLUTION_SETTINGS_PADRAO,
   type EvolutionConfig,
+  type EvolutionSettings,
 } from "@/lib/evolution";
 import {
   getMe as tgGetMe,
@@ -19,14 +22,16 @@ import type { ChannelStatus } from "@/lib/types";
 /**
  * Ações de conexão de um canal: conectar | status | desconectar.
  *
- * Evolution  → cria/parea a instância e devolve o QR Code.
+ * Evolution  → cria/parea a instância e devolve o QR Code. `opcoes` grava
+ *              o comportamento da instância (recusa de ligação e o texto
+ *              que vai junto, histórico, grupos) sem exigir reconexão.
  * Telegram   → valida o token no getMe e registra o webhook do bot.
  * Cloud API  → não há "conectar": validamos o token contra a Graph API e,
  *              se responder, o canal está pronto (o webhook é configurado
  *              no painel da Meta, não por aqui).
  */
 
-const ACOES = ["conectar", "status", "desconectar"] as const;
+const ACOES = ["conectar", "status", "desconectar", "opcoes"] as const;
 type Acao = (typeof ACOES)[number];
 
 const GRAPH_VERSION = "v21.0";
@@ -62,19 +67,26 @@ export async function POST(
   const admin = createSupabaseAdmin();
   const { data: canal } = await admin
     .from("atendimento_channels")
-    .select("id, provedor, status, config")
+    .select("id, provedor, status, config, opcoes")
     .eq("id", params.id)
     .maybeSingle();
   if (!canal) return NextResponse.json({ error: "canal não encontrado" }, { status: 404 });
 
   const config = (canal.config ?? {}) as Record<string, string>;
+  // As opções do canal, completadas com os padrões: um canal criado antes
+  // da coluna existir tem `{}` e precisa continuar funcionando.
+  const opcoes: EvolutionSettings = {
+    ...EVOLUTION_SETTINGS_PADRAO,
+    ...((canal.opcoes ?? {}) as Partial<EvolutionSettings>),
+  };
 
   async function salvar(patch: {
-    status: ChannelStatus;
+    status?: ChannelStatus;
     ultimo_erro?: string | null;
     telefone?: string | null;
     conectado_em?: string | null;
     config?: Record<string, string>;
+    opcoes?: EvolutionSettings;
   }) {
     await admin.from("atendimento_channels").update(patch).eq("id", params.id);
   }
@@ -103,6 +115,17 @@ export async function POST(
     });
   }
 
+  // `opcoes` é comportamento de instância Baileys — a Cloud API da Meta e o
+  // Telegram não têm equivalente. Barrado aqui para não cair no fluxo da
+  // Meta lá embaixo e marcar o canal como "erro" por uma ação que nem
+  // existe para ele.
+  if (acao === "opcoes" && canal.provedor !== "evolution") {
+    return NextResponse.json(
+      { error: "este canal não tem opções de instância" },
+      { status: 400 },
+    );
+  }
+
   try {
     if (canal.provedor === "evolution") {
       const cfg: EvolutionConfig = {
@@ -116,6 +139,26 @@ export async function POST(
         await salvar({ status: "desconectado", ultimo_erro: null, conectado_em: null });
         await auditar("desconectou", { instancia: cfg.instance_name });
         return NextResponse.json({ status: "desconectado" });
+      }
+
+      // Grava o comportamento da instância. Vai à Evolution pelo
+      // `/settings/set`, que é o único endpoint que alcança uma instância
+      // JÁ criada — o `/instance/create` ignora quem já existe, e era por
+      // isso que a mensagem de ligação recusada não mudava nunca.
+      if (acao === "opcoes") {
+        const body = (await req.json().catch(() => ({}))) as Partial<EvolutionSettings>;
+        const novas: EvolutionSettings = {
+          ...opcoes,
+          ...body,
+          // O texto vai junto com a recusa da ligação; vazio faria o cliente
+          // levar uma chamada cortada sem explicação nenhuma.
+          msgCall: (body.msgCall ?? opcoes.msgCall).trim() || EVOLUTION_SETTINGS_PADRAO.msgCall,
+        };
+        // A Evolution primeiro: se ela recusar, não gravamos localmente uma
+        // configuração que não vale na prática — a tela mentiria.
+        await setSettings(cfg, novas);
+        await salvar({ opcoes: novas, ultimo_erro: null });
+        return NextResponse.json({ opcoes: novas });
       }
 
       if (acao === "status") {
@@ -146,6 +189,7 @@ export async function POST(
         cfg,
         `${base}/api/webhooks/evolution`,
         secret,
+        opcoes,
       );
       const status = qrcode ? "aguardando_qr" : toChannelStatus(state);
       await salvar({

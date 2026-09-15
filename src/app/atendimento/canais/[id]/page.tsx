@@ -11,6 +11,7 @@ import {
 } from "@/lib/types";
 import { formatDateTimeBR } from "@/lib/utils";
 import { ChannelConnection } from "./ChannelConnection";
+import { ChannelOptions } from "./ChannelOptions";
 import { RemoverCanal } from "./RemoverCanal";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 
@@ -113,6 +114,13 @@ export default async function CanalPage({ params }: { params: { id: string } }) 
           </div>
         ) : (
           <ChannelConnection canal={canal} webhookUrl={webhookUrl} />
+        )}
+
+        {/* Só a Evolution tem essas opções: elas são da instância Baileys.
+            A Cloud API da Meta recusa ligação pelo painel da Meta, e o
+            Telegram nem recebe chamada. */}
+        {canal.provedor === "evolution" && (
+          <ChannelOptions canalId={canal.id} iniciais={canal.opcoes} />
         )}
 
         <div className="rounded-lg border p-4 text-sm space-y-2">
