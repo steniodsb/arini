@@ -64,14 +64,39 @@ export async function POST(req: Request) {
   const patch: Record<string, unknown> = {};
   const avisos: string[] = [];
 
+  // Estado ANTES: alimenta o "de → para" do log e diz se a conversa já
+  // tinha saído da caixa central.
+  const { data: antes } = await admin
+    .from("conversations")
+    .select("team_id, responsavel_id, triada_em")
+    .eq("id", conversationId)
+    .maybeSingle();
+  const deEquipe = (antes?.team_id as string | null) ?? null;
+  const deAgente = (antes?.responsavel_id as string | null) ?? null;
+  const jaTriada = Boolean(antes?.triada_em);
+
   if (body.equipeId) {
     const { data } = await admin
       .from("atendimento_teams")
       .select("id")
       .eq("id", body.equipeId)
       .maybeSingle();
-    if (data) patch.team_id = body.equipeId;
-    else avisos.push("equipeId desconhecido — a conversa ficou sem equipe");
+    if (data) {
+      patch.team_id = body.equipeId;
+      // O CARIMBO DA TRIAGEM. Sem ele a conversa ganhava equipe mas
+      // continuava na caixa central: o filtro por fila já a mostrava
+      // (`team_id` preenchido), enquanto o painel de Triagem seguia
+      // pedindo para atribuí-la (`triada_em` nulo). Quem integra via API
+      // via a atribuição "funcionar" num lugar e ser ignorada no outro.
+      //
+      // Entregar numa fila É triar — é exatamente o que o botão
+      // "Encaminhar" da tela faz. `triada_por` fica nulo porque aponta
+      // para `profiles` e bot não tem perfil; quem triou fica registrado
+      // no log de transferências abaixo, com o nome do bot no motivo.
+      if (!jaTriada) patch.triada_em = new Date().toISOString();
+    } else {
+      avisos.push("equipeId desconhecido — a conversa ficou sem equipe");
+    }
   }
 
   if (body.agenteId) {
@@ -96,6 +121,26 @@ export async function POST(req: Request) {
 
   if (Object.keys(patch).length > 0) {
     await admin.from("conversations").update(patch).eq("id", conversationId);
+
+    // Log da mudança de dono, o mesmo que a tela grava. "Quem tirou esse
+    // cliente de mim?" precisa ter resposta também quando quem move é um
+    // bot — senão a conversa troca de fila sozinha e não há linha nenhuma
+    // explicando. `feito_por` fica nulo (aponta para `profiles`), e o bot
+    // é identificado no motivo.
+    const paraEquipe = (patch.team_id as string | undefined) ?? deEquipe;
+    const paraAgente = (patch.responsavel_id as string | undefined) ?? deAgente;
+    await admin.from("atendimento_transferencias").insert({
+      conversation_id: conversationId,
+      // "triagem" só quando a conversa REALMENTE saiu da caixa central
+      // agora; se já estava triada, isto é uma troca de fila.
+      acao: patch.triada_em ? "triagem" : "transferencia",
+      de_equipe: deEquipe,
+      para_equipe: paraEquipe,
+      de_agente: deAgente,
+      para_agente: paraAgente,
+      motivo: `Bot "${bot.nome}"${body.motivo?.trim() ? ` — ${body.motivo.trim()}` : ""}`,
+      feito_por: null,
+    });
   }
 
   return NextResponse.json({
@@ -104,6 +149,10 @@ export async function POST(req: Request) {
     botStatus: "transferida",
     equipeId: (patch.team_id as string | undefined) ?? null,
     agenteId: (patch.responsavel_id as string | undefined) ?? null,
+    // Confirma se a conversa saiu da caixa central nesta chamada. É o que
+    // o integrador precisa para saber que a atribuição valeu de ponta a
+    // ponta, e não só no filtro por fila.
+    triada: Boolean(patch.triada_em) || jaTriada,
     avisos,
   });
 }

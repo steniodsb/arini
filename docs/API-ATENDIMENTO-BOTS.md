@@ -255,12 +255,30 @@ geral. Se o id informado não existir ou o agente não tiver acesso ao
 atendimento, a transferência **acontece do mesmo jeito** e o aviso vem em
 `avisos[]` — o essencial (sair do bot) não é desfeito por um id errado.
 
+**Mandar `equipeId` equivale a clicar em "Encaminhar" no painel de Triagem.**
+Além de gravar a fila, a conversa é carimbada como triada e **sai da caixa
+central** — o mesmo efeito que a recepção produz na tela. Sem `equipeId` a
+conversa fica na caixa central de propósito: é o "não sei para onde vai, alguém
+olhe".
+
+> **Corrigido em 15/09/2026.** Até essa data o endpoint gravava a fila mas não
+> carimbava a triagem. O sintoma era exatamente este: filtrando pela fila a
+> conversa aparecia (a `team_id` estava lá), mas o painel de Triagem continuava
+> pedindo para atribuí-la, porque olha outro campo (`triada_em`). Se o seu fluxo
+> tinha alguma gambiarra para contornar isso, pode remover.
+
+A mudança de fila entra no **histórico de transferências** da conversa, com o
+nome do bot no motivo — o mesmo log das transferências feitas por gente.
+
 Resposta:
 
 ```json
 { "ok": true, "conversationId": "…", "botStatus": "transferida",
-  "equipeId": null, "agenteId": null, "avisos": [] }
+  "equipeId": "…", "agenteId": null, "triada": true, "avisos": [] }
 ```
+
+`triada` confirma que a conversa saiu da caixa central. Vem `false` só quando
+nenhuma equipe válida foi informada.
 
 > Devolver a conversa ao bot é ação **manual**, feita por uma pessoa no inbox.
 > O cliente escrever de novo **não** reativa o bot.
