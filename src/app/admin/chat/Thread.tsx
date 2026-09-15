@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, type RefObject } from "react";
-import { fmtBR, fmtHoraBR } from "@/lib/fuso";
+import { fmtBR, fmtHoraBR, isoDiaBR, inicioDoDiaBR } from "@/lib/fuso";
 import {
   SECTOR_LABELS,
   type ChatMensagem,
@@ -11,17 +11,20 @@ import {
 } from "@/lib/types";
 import { Building2, CornerUpLeft, Trash2, Paperclip, ArrowRight } from "lucide-react";
 
-/** "Hoje" / "Ontem" / "12 de setembro de 2026" — o divisor de dia. */
+/**
+ * "Hoje" / "Ontem" / "12 de setembro de 2026" — o divisor de dia.
+ *
+ * Pelo calendário de SÃO PAULO. Client component também é renderizada no
+ * servidor pelo Next, e lá o relógio é UTC: com `getDate()` cru, uma
+ * mensagem das 22h apareceria sob "Hoje" quando já é o dia seguinte em
+ * UTC — e o divisor mudaria sozinho na hidratação.
+ */
 function diaDaMensagem(iso: string): string {
-  const d = new Date(iso);
-  const hoje = new Date();
-  const ontem = new Date();
-  ontem.setDate(hoje.getDate() - 1);
-  const igual = (a: Date, b: Date) =>
-    a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
-  if (igual(d, hoje)) return "Hoje";
-  if (igual(d, ontem)) return "Ontem";
-  return fmtBR(d, { day: "2-digit", month: "long", year: "numeric" });
+  const diaBR = isoDiaBR(new Date(iso));
+  if (diaBR === isoDiaBR()) return "Hoje";
+  const ontemBR = isoDiaBR(new Date(inicioDoDiaBR().getTime() - 3_600_000));
+  if (diaBR === ontemBR) return "Ontem";
+  return fmtBR(iso, { day: "2-digit", month: "long", year: "numeric" });
 }
 
 function Anexo({ m }: { m: ChatMensagem }) {

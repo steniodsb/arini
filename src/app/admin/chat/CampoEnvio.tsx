@@ -96,8 +96,13 @@ export function CampoEnvio({
           multiple
           className="hidden"
           onChange={(e) => {
-            if (e.target.files) setArquivos((p) => [...p, ...Array.from(e.target.files!)]);
+            // `Array.from` ANTES do setState, e não dentro do updater.
+            // O updater roda no render seguinte, e a essa altura o
+            // `e.target.value = ""` abaixo já esvaziou o FileList — os
+            // anexos chegariam vazios, sem erro nenhum.
+            const novos = e.target.files ? Array.from(e.target.files) : [];
             e.target.value = "";
+            if (novos.length > 0) setArquivos((p) => [...p, ...novos]);
           }}
         />
 

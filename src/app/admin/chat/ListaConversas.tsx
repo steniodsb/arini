@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { SECTOR_LABELS, type ChatItemLista, type ChatPessoa } from "@/lib/types";
-import { fmtHoraBR, fmtBR } from "@/lib/fuso";
+import { fmtHoraBR, fmtBR, isoDiaBR, inicioDoDiaBR } from "@/lib/fuso";
 import { Hash, Search, Plus } from "lucide-react";
 
 /**
@@ -14,22 +14,22 @@ import { Hash, Search, Plus } from "lucide-react";
  * o time voltar para o WhatsApp.
  */
 
-/** "14:32" hoje, "ontem", ou "12/09" — o carimbo curto da lista. */
+/**
+ * "14:32" hoje, "ontem", ou "12/09" — o carimbo curto da lista.
+ *
+ * Compara pelo DIA EM SÃO PAULO, não pelo relógio de quem renderiza.
+ * Esta é client component, mas o Next renderiza client component no
+ * servidor também — e lá o relógio é UTC, então `getDate()` cru marcaria
+ * "ontem" como "12/09" (ou o contrário) na primeira pintura da tela.
+ */
 function quando(iso: string): string {
-  const d = new Date(iso);
-  const agora = new Date();
-  const mesmoDia =
-    d.getDate() === agora.getDate() &&
-    d.getMonth() === agora.getMonth() &&
-    d.getFullYear() === agora.getFullYear();
-  if (mesmoDia) return fmtHoraBR(iso);
-  const ontem = new Date(agora);
-  ontem.setDate(agora.getDate() - 1);
-  if (
-    d.getDate() === ontem.getDate() &&
-    d.getMonth() === ontem.getMonth() &&
-    d.getFullYear() === ontem.getFullYear()
-  ) return "ontem";
+  const hojeBR = isoDiaBR();
+  const diaBR = isoDiaBR(new Date(iso));
+  if (diaBR === hojeBR) return fmtHoraBR(iso);
+  // Uma hora ANTES da meia-noite de São Paulo cai sempre no dia anterior,
+  // sem precisar mexer em número de dia nem em mês.
+  const ontemBR = isoDiaBR(new Date(inicioDoDiaBR().getTime() - 3_600_000));
+  if (diaBR === ontemBR) return "ontem";
   return fmtBR(iso, { day: "2-digit", month: "2-digit" });
 }
 
