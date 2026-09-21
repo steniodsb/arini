@@ -185,14 +185,24 @@ export function Switch({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors relative disabled:opacity-50",
+          // `p-0` não é decoração: o navegador dá padding próprio ao
+          // <button> (1px 6px no Chrome), e como a bolinha abaixo é
+          // absoluta, era esse padding que definia de onde ela partia.
+          "mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors relative p-0 disabled:opacity-50",
           checked ? "bg-acao" : "bg-muted-foreground/30",
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-[18px]" : "translate-x-0.5",
+            // `left-0.5` fixa a origem. Sem ele a bolinha caía na POSIÇÃO
+            // ESTÁTICA — onde estaria no fluxo normal —, que depende do
+            // padding do botão: desligada boiava a 8px da borda em vez de
+            // 2px, e ligada transbordava 4px para fora do trilho.
+            //
+            // Trilho 36 − bolinha 16 − 2 de folga dos dois lados = 16 de
+            // curso. Por isso `translate-x-4`, e não um valor solto.
+            "absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+            checked ? "translate-x-4" : "translate-x-0",
           )}
         />
       </button>
