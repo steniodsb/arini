@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { executarAutomacoes, type ContextoAutomacao } from "./automations";
 import type { AutomationEvent } from "@/lib/types";
+import { resolverCaixa } from "@/lib/atendimento/caixa";
 
 // =====================================================================
 // Gancho de automação — é o que liga as REGRAS cadastradas na tela de
@@ -99,7 +100,7 @@ export async function dispararAutomacoes(
         direcao: gatilho.direcao ?? "in",
         interna: gatilho.interna ?? false,
       },
-      dentroHorarioComercial: await dentroDoHorario(admin, (conv.inbox_id as string | null) ?? null),
+      dentroHorarioComercial: await dentroDoHorario(admin, await resolverCaixa(admin, conv)),
     };
 
     // Conversa nova dispara os dois eventos, nessa ordem: a regra de
@@ -155,7 +156,7 @@ export async function dispararResolucao(
         contato_nome: conv.contato_nome as string | null,
         contato_telefone: conv.contato_telefone as string | null,
       },
-      dentroHorarioComercial: await dentroDoHorario(admin, (conv.inbox_id as string | null) ?? null),
+      dentroHorarioComercial: await dentroDoHorario(admin, await resolverCaixa(admin, conv)),
     });
   } catch {
     /* idem: nunca derruba o chamador */
