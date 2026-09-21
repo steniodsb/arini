@@ -65,6 +65,33 @@ escolhe("R$ 3 mil", null);
 escolhe("locação e administração", "3");
 escolhe("quero falar sobre Compra e Venda", "1");
 
+// --- Palavra distintiva (regra 4) ------------------------------------
+// Ninguém digita "locação e administração"; digita "locação".
+escolhe("locação", "3");
+escolhe("Locação", "3");
+escolhe("quero locação por favor", "3");
+escolhe("financiamento", "4");
+escolhe("escritura", "5");
+escolhe("fazendas", "2");
+
+// Palavra que NÃO desambigua: "e" aparece em vários rótulos e é curta;
+// "atendimento" só existe no ramal 6, então esse casa.
+escolhe("atendimento", "6");
+
+// Palavra em DOIS rótulos não escolhe — seria chute entre dois setores.
+const AMBIGUO = [
+  { id: "x", chave: "1", rotulo: "Documentação Urbana" },
+  { id: "y", chave: "2", rotulo: "Documentação Rural" },
+];
+const amb = interpretarResposta("documentação", AMBIGUO);
+if (amb === null) passou++;
+else falhas.push(`palavra em dois rótulos não pode escolher (veio ${amb.chave})`);
+
+// A regra 4 não pode reabrir os falsos positivos: frase com mais de uma
+// palavra continua sem casar.
+escolhe("quero saber sobre locação de galpão industrial", null);
+escolhe("casa", null);
+
 // --- Nada ------------------------------------------------------------
 escolhe("", null);
 escolhe(null, null);

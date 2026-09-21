@@ -91,13 +91,30 @@ export function interpretarResposta(
     if (unica) return unica;
   }
 
-  // 3. Citou o rótulo. Exige rótulo com mais de 3 letras para um rótulo
-  //    curto não casar com qualquer frase.
+  // 3. Citou o rótulo INTEIRO ("locação e administração").
   const porRotulo = opcoes.find((o) => {
     const r = dobrar(o.rotulo);
     return r.length > 3 && limpo.includes(r);
   });
-  return porRotulo ?? null;
+  if (porRotulo) return porRotulo;
+
+  // 4. PALAVRA DISTINTIVA: a mensagem é uma palavra só, e essa palavra
+  //    aparece em UM único rótulo.
+  //
+  //    A regra 3 sozinha era teoria: o ramal se chama "Locação e
+  //    Administração" e ninguém digita isso — digita "locação". Mas casar
+  //    qualquer palavra solta traria de volta o falso positivo, então
+  //    valem três limites juntos: a mensagem inteira tem de ser aquela
+  //    palavra (tirando o enchimento), ela precisa ter 4+ letras, e não
+  //    pode aparecer em dois rótulos. Se aparecer, a escolha seria um
+  //    chute entre dois setores — e aí é melhor repetir o menu.
+  if (restantes.length === 1 && restantes[0].length >= 4) {
+    const palavra = restantes[0];
+    const candidatos = opcoes.filter((o) => dobrar(o.rotulo).split(/\s+/).includes(palavra));
+    if (candidatos.length === 1) return candidatos[0];
+  }
+
+  return null;
 }
 
 /** Monta o texto do menu: saudação + cabeçalho + as opções numeradas. */

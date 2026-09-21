@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { X, Inbox as InboxIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -150,13 +150,22 @@ export function Field({
 export const inputCls =
   "w-full rounded-md border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/40 disabled:opacity-60";
 
-export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cn(inputCls, props.className)} />;
-}
+// `forwardRef` porque no React 18 a ref não passa como prop comum — e sem
+// ela a tela do menu de ramais não consegue inserir a variável na posição
+// do cursor, que é o ponto da funcionalidade.
+export const TextInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  function TextInput(props, ref) {
+    return <input ref={ref} {...props} className={cn(inputCls, props.className)} />;
+  },
+);
 
-export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={cn(inputCls, "resize-y min-h-[70px]", props.className)} />;
-}
+export const TextArea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function TextArea(props, ref) {
+    return (
+      <textarea ref={ref} {...props} className={cn(inputCls, "resize-y min-h-[70px]", props.className)} />
+    );
+  },
+);
 
 export function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={cn(inputCls, props.className)} />;

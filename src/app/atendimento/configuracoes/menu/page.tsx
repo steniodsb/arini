@@ -62,20 +62,22 @@ export default async function MenuRamaisPage() {
       .order("nome"),
   ]);
 
-  // Filas de destino SEM NINGUÉM. É o aviso mais útil da tela: com a fila
-  // vazia, o cliente escolhe o ramal, recebe "um profissional dará
-  // continuidade" e a conversa fica parada sem dono.
-  const destinos = (opcoes ?? []).map((o) => o.team_id).filter(Boolean) as string[];
-  let filasVazias: string[] = [];
-  if (destinos.length) {
-    const { data: membros } = await admin
-      .from("atendimento_team_members")
-      .select("team_id")
-      .in("team_id", destinos);
-    const comGente = new Set((membros ?? []).map((m) => m.team_id as string));
-    filasVazias = (equipes ?? [])
-      .filter((t) => destinos.includes(t.id) && !comGente.has(t.id))
-      .map((t) => t.nome as string);
+  // QUANTA GENTE TEM EM CADA FILA — o mapa inteiro, não só a lista das
+  // vazias de agora.
+  //
+  // Vai completo porque a tela deixa TROCAR o destino de um ramal: se o
+  // aviso viesse pronto do servidor, escolher outra fila no <select>
+  // mostraria o alerta errado até recarregar a página.
+  //
+  // É o aviso mais útil daqui: com a fila vazia, o cliente escolhe o
+  // ramal, recebe "um profissional dará continuidade" e a conversa fica
+  // parada sem dono.
+  const { data: membros } = await admin.from("atendimento_team_members").select("team_id");
+  const membrosPorFila: Record<string, number> = {};
+  for (const t of equipes ?? []) membrosPorFila[t.id as string] = 0;
+  for (const m of membros ?? []) {
+    const id = m.team_id as string;
+    membrosPorFila[id] = (membrosPorFila[id] ?? 0) + 1;
   }
 
   return (
@@ -86,7 +88,7 @@ export default async function MenuRamaisPage() {
       agentes={(agentes ?? []) as AgentOption[]}
       saudacaoDaCaixa={(caixa.saudacao_texto as string | null) ?? null}
       nomeDaCaixa={caixa.nome as string}
-      filasVazias={filasVazias}
+      membrosPorFila={membrosPorFila}
       podeEditar={papelDoPerfil(profile) === "administrador"}
     />
   );
