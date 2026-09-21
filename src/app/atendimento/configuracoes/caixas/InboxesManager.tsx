@@ -125,6 +125,7 @@ export function InboxesManager({
         ativo: rascunho.ativo,
         permite_responder_apos_resolver: rascunho.permite_responder_apos_resolver,
         bloquear_conversa_encerrada: rascunho.bloquear_conversa_encerrada,
+        assinar_com_nome: rascunho.assinar_com_nome,
         saudacao_ativa: rascunho.saudacao_ativa,
         saudacao_texto: rascunho.saudacao_texto,
         mensagem_ausencia: rascunho.mensagem_ausencia,
@@ -374,6 +375,12 @@ export function InboxesManager({
               onChange={(v) => set("bloquear_conversa_encerrada", v)}
               label="Bloquear conversa encerrada"
               dica="Uma nova mensagem do cliente abre outra conversa em vez de reabrir a antiga."
+            />
+            <Switch
+              checked={rascunho.assinar_com_nome}
+              onChange={(v) => set("assinar_com_nome", v)}
+              label="Assinar com o nome de quem responde"
+              dica={'A resposta sai como "*Michelle:* bom dia". Serve para o cliente — e para você — saberem qual atendente do setor está na conversa.'}
             />
             <div className="pt-2 border-t">
               <Button type="button" variant="destructive" size="sm" onClick={() => setConfirmarExclusao(true)}>

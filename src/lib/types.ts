@@ -513,6 +513,8 @@ export interface AtendimentoInbox {
   fuso: string;
   permite_responder_apos_resolver: boolean;
   bloquear_conversa_encerrada: boolean;
+  /** Prefixa a resposta do atendente com "*PrimeiroNome:*" (migration 0053). */
+  assinar_com_nome: boolean;
   widget_cor: string | null;
   widget_token: string | null;
   /** Política de SLA da caixa — o trigger usa para calcular os prazos (0033). */

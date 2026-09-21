@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
 import { enviarMensagem } from "@/lib/atendimento/outbound";
+import { assinarComNome } from "@/lib/atendimento/assinatura";
+import { resolverCaixa, type ConversaComCaixa } from "@/lib/atendimento/caixa";
 import { emitirMensagemCriada } from "@/lib/atendimento/webhook-eventos";
 import type { ConversationChannel, MessageStatus, MessageTipo } from "@/lib/types";
 
@@ -118,6 +120,7 @@ export async function POST(req: Request) {
   // ---------------- Resposta ao cliente ----------------
   // Assinatura do agente vai no texto enviado E no que fica gravado, para o
   // histórico bater exatamente com o que o cliente recebeu.
+  const admin = createSupabaseAdmin();
   let textoFinal = texto;
   if (body.assinar && texto) {
     const { data: perfil } = await supabase
@@ -126,10 +129,34 @@ export async function POST(req: Request) {
     if (assinatura) textoFinal = `${texto}\n\n${assinatura}`;
   }
 
+  // NOME DE QUEM RESPONDE, na frente ("*Michelle:* bom dia").
+  //
+  // Diferente do bloco acima: aquele é opcional por mensagem e depende de
+  // cada pessoa ter escrito a própria assinatura; este é da CAIXA e sai
+  // sempre, que é o que o cliente pediu — saber qual dos dois atendentes
+  // do setor está na conversa. Ver `lib/atendimento/assinatura.ts`.
+  //
+  // Vem DEPOIS da assinatura livre de propósito: o nome abre a mensagem e
+  // o bloco de despedida fecha, na ordem em que se lê.
+  if (textoFinal) {
+    const caixaId = await resolverCaixa(admin, conv as ConversaComCaixa);
+    if (caixaId) {
+      const { data: caixa } = await admin
+        .from("atendimento_inboxes")
+        .select("assinar_com_nome")
+        .eq("id", caixaId)
+        .maybeSingle();
+      if (caixa?.assinar_com_nome) {
+        const { data: eu } = await admin
+          .from("profiles").select("nome").eq("id", user.id).maybeSingle();
+        textoFinal = assinarComNome(textoFinal, (eu?.nome as string | null) ?? null);
+      }
+    }
+  }
+
   const canal = conv.canal as ConversationChannel;
   const destino = conv.contato_telefone ?? conv.external_id;
 
-  const admin = createSupabaseAdmin();
   const send = await enviarMensagem(admin, {
     canal,
     channelId: (conv.channel_id as string | null) ?? null,
