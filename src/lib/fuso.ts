@@ -165,3 +165,15 @@ export function fmtBR(
   if (!d) return "—";
   return new Intl.DateTimeFormat("pt-BR", { timeZone: TZ_BR, ...opts }).format(d);
 }
+
+/** Hora cheia (0–23) no relógio de São Paulo. Base da saudação automática. */
+export function horaBR(d: Date = new Date()): number {
+  const h = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ_BR,
+    hour: "2-digit",
+    hour12: false,
+  }).format(d);
+  // "24" aparece em algumas implementações para a meia-noite.
+  const n = Number(h);
+  return Number.isFinite(n) ? n % 24 : new Date().getUTCHours();
+}
