@@ -4,10 +4,10 @@ import { useMemo, useState } from "react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Alerta, Modal } from "@/components/atendimento/ui";
 import { Button } from "@/components/ui/button";
-import { Users2, Check } from "lucide-react";
+import { Users2, Check, UserPlus } from "lucide-react";
 import {
-  PAPEL_LABELS, PAPEL_DESCRICAO,
-  type AtendimentoPapel, type AtendimentoTeam,
+  PAPEL_LABELS, PAPEL_DESCRICAO, SECTOR_LABELS,
+  type AtendimentoPapel, type AtendimentoTeam, type Sector,
 } from "@/lib/types";
 
 // =====================================================================
@@ -98,6 +98,47 @@ export function AgentsManager({
   // do sistema. Aqui fica o valor esperando um segundo clique.
   const [emailPendente, setEmailPendente] = useState<Record<string, string>>({});
 
+  // --- Cadastro de agente novo ---------------------------------------
+  const [novoAberto, setNovoAberto] = useState(false);
+  const [novo, setNovo] = useState({
+    nome: "", email: "", sector: "recepcao", cargo: "",
+    atendimento_papel: "atendente" as AtendimentoPapel, access: true, filas: [] as string[],
+  });
+  const [criando, setCriando] = useState(false);
+  // A senha volta do servidor UMA vez e não fica gravada em lugar nenhum.
+  const [recemCriado, setRecemCriado] = useState<{ nome: string; email: string; senha: string } | null>(null);
+
+  async function criarAgente() {
+    setCriando(true);
+    setError(null);
+    const res = await fetch("/api/atendimento/agentes/criar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(novo),
+    });
+    setCriando(false);
+    const j = (await res.json().catch(() => ({}))) as {
+      error?: string; agente?: AgentRow; senha?: string;
+    };
+    if (!res.ok || !j.agente) {
+      setError(j.error ?? "Falha ao criar o agente.");
+      return;
+    }
+    setRows((p) => [...p, j.agente as AgentRow].sort((a, b) => a.nome.localeCompare(b.nome)));
+    if (novo.filas.length) {
+      setMembers((p) => [
+        ...p,
+        ...novo.filas.map((team_id) => ({ team_id, profile_id: (j.agente as AgentRow).id })),
+      ]);
+    }
+    setRecemCriado({ nome: novo.nome, email: novo.email, senha: j.senha ?? "" });
+    setNovoAberto(false);
+    setNovo({
+      nome: "", email: "", sector: "recepcao", cargo: "",
+      atendimento_papel: "atendente", access: true, filas: [],
+    });
+  }
+
   const nomeEquipe = useMemo(() => {
     const m = new Map<string, string>();
     for (const t of teams) m.set(t.id, t.nome);
@@ -138,11 +179,14 @@ export function AgentsManager({
   async function salvarCargo(id: string, valor: string) {
     const limpo = valor.trim().slice(0, CARGO_MAX);
     const atual = rows.find((r) => r.id === id)?.cargo ?? null;
-    const novo = limpo || null;
-    if (novo === atual) return;
+    // `cargoNovo`, e não `novo`: o estado do formulário de cadastro se
+    // chama `novo`, e um shadow aqui faria o próximo leitor achar que esta
+    // função mexe no agente que está sendo criado.
+    const cargoNovo = limpo || null;
+    if (cargoNovo === atual) return;
 
-    setRows((p) => p.map((r) => (r.id === id ? { ...r, cargo: novo } : r)));
-    const ok = await salvar(id, { cargo: novo });
+    setRows((p) => p.map((r) => (r.id === id ? { ...r, cargo: cargoNovo } : r)));
+    const ok = await salvar(id, { cargo: cargoNovo });
     if (!ok) {
       setRows((p) => p.map((r) => (r.id === id ? { ...r, cargo: atual } : r)));
     }
@@ -236,6 +280,35 @@ export function AgentsManager({
 
   return (
     <div className="space-y-3">
+      {canManage && (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={() => setNovoAberto(true)}>
+            <UserPlus size={14} /> Novo agente
+          </Button>
+        </div>
+      )}
+
+      {/* A senha aparece UMA vez — não fica gravada em lugar nenhum nosso. */}
+      {recemCriado && (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 space-y-2">
+          <p className="text-sm font-medium">
+            {recemCriado.nome} foi cadastrado.
+          </p>
+          <p className="text-[13px]">
+            Entra com <strong>{recemCriado.email}</strong> e a senha inicial{" "}
+            <code className="rounded bg-background px-1.5 py-0.5 font-mono">{recemCriado.senha}</code>
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Anote agora: esta senha não pode ser vista de novo — o que fica guardado é um hash, que
+            não volta a ser texto. Peça para a pessoa trocá-la em Meu perfil › Segurança no primeiro
+            acesso.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => setRecemCriado(null)}>
+            Já anotei
+          </Button>
+        </div>
+      )}
+
       {/* Uma lista só para a tela inteira — cada linha aponta para ela. */}
       <datalist id="cargos-sugeridos">
         {CARGOS_SUGERIDOS.map((c) => (
@@ -501,6 +574,150 @@ export function AgentsManager({
           );
         })}
       </div>
+
+      <Modal
+        aberto={novoAberto}
+        onFechar={() => setNovoAberto(false)}
+        titulo="Novo agente"
+        descricao="Cria o acesso e o perfil. A senha inicial aparece uma vez, depois de salvar."
+        rodape={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setNovoAberto(false)}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              disabled={criando || !novo.nome.trim() || !novo.email.trim()}
+              onClick={() => void criarAgente()}
+            >
+              {criando ? "Criando…" : "Criar agente"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <label className="block space-y-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Nome
+            </span>
+            <input
+              value={novo.nome}
+              maxLength={NOME_MAX}
+              placeholder="Ex.: Michelle Santos"
+              onChange={(e) => setNovo((p) => ({ ...p, nome: e.target.value }))}
+              className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+            />
+            {assinaturaLigada && novo.nome.trim() && (
+              <span className="block text-[11px] text-muted-foreground">
+                Vai assinar a resposta no WhatsApp como{" "}
+                <code>*{novo.nome.trim().split(/\s+/)[0]}:*</code>
+              </span>
+            )}
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              E-mail de acesso
+            </span>
+            <input
+              type="email"
+              value={novo.email}
+              placeholder="nome@arininegociosimobiliarios.com.br"
+              onChange={(e) => setNovo((p) => ({ ...p, email: e.target.value }))}
+              className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block space-y-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Setor
+              </span>
+              <select
+                value={novo.sector}
+                onChange={(e) => setNovo((p) => ({ ...p, sector: e.target.value }))}
+                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+              >
+                {(Object.keys(SECTOR_LABELS) as Sector[])
+                  .filter((s) => s !== "admin_central")
+                  .map((s) => (
+                    <option key={s} value={s}>{SECTOR_LABELS[s]}</option>
+                  ))}
+              </select>
+            </label>
+
+            <label className="block space-y-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Papel no atendimento
+              </span>
+              <select
+                value={novo.atendimento_papel}
+                onChange={(e) =>
+                  setNovo((p) => ({ ...p, atendimento_papel: e.target.value as AtendimentoPapel }))
+                }
+                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+              >
+                {(Object.keys(PAPEL_LABELS) as AtendimentoPapel[]).map((p) => (
+                  <option key={p} value={p}>{PAPEL_LABELS[p]}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <label className="block space-y-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Cargo
+            </span>
+            <input
+              value={novo.cargo}
+              maxLength={CARGO_MAX}
+              list="cargos-sugeridos"
+              placeholder="Ex.: Corretora"
+              onChange={(e) => setNovo((p) => ({ ...p, cargo: e.target.value }))}
+              className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+            />
+          </label>
+
+          {/* Fila já aqui: um `atendente` sem fila não enxerga conversa
+              nenhuma, e exigir uma segunda visita a outra tela é o jeito
+              mais fácil de esquecer. */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Filas
+            </span>
+            {teams.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                Nenhuma fila cadastrada ainda.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-1">
+                {teams.map((t) => (
+                  <label key={t.id} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={novo.filas.includes(t.id)}
+                      onChange={(e) =>
+                        setNovo((p) => ({
+                          ...p,
+                          filas: e.target.checked
+                            ? [...p.filas, t.id]
+                            : p.filas.filter((x) => x !== t.id),
+                        }))
+                      }
+                    />
+                    {t.nome}
+                  </label>
+                ))}
+              </div>
+            )}
+            {novo.atendimento_papel === "atendente" && novo.filas.length === 0 && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                Sem fila, este atendente não enxerga conversa nenhuma.
+              </p>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         aberto={filasDe !== null}
