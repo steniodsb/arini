@@ -5,7 +5,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Alerta, Modal } from "@/components/atendimento/ui";
 import { Button } from "@/components/ui/button";
 import {
-  Users2, Check, UserPlus, UserX, UserCheck, Copy, Dice5, Trash2, Link as LinkIcon,
+  Users2, Check, UserPlus, UserX, UserCheck, Copy, Dice5, Trash2, ChevronRight, Link as LinkIcon,
 } from "lucide-react";
 import {
   PAPEL_LABELS, PAPEL_DESCRICAO, SECTOR_LABELS,
@@ -109,6 +109,10 @@ export function AgentsManager({
   });
   const [criando, setCriando] = useState(false);
   const [mostrarInativos, setMostrarInativos] = useState(false);
+  // Quem está aberto para edição. Com dez pessoas, mostrar todos os campos
+  // de todo mundo ao mesmo tempo vira uma parede de formulários em que não
+  // se acha ninguém — a lista precisa ler como lista.
+  const [aberto, setAberto] = useState<Set<string>>(new Set());
   // Segredo recém-gerado (senha ou link). Aparece uma vez, por linha.
   const [segredo, setSegredo] = useState<{ id: string; tipo: "senha" | "link"; valor: string } | null>(null);
   const [senhaDigitada, setSenhaDigitada] = useState<Record<string, string>>({});
@@ -432,21 +436,55 @@ export function AgentsManager({
             ? "administrador"
             : r.atendimento_papel;
           const semFilaAtrapalha = habilitado && papelEfetivo === "atendente" && filas.length === 0;
+          const estaAberto = aberto.has(r.id);
 
           return (
-            <div key={r.id} className={`p-3 space-y-2 ${r.ativo ? "" : "opacity-60"}`}>
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
-                    {r.nome}
-                    {r.cargo && (
-                      <span className="rounded-full border px-1.5 py-px text-[10px] font-normal text-muted-foreground">
-                        {r.cargo}
+            <div key={r.id} className={r.ativo ? "" : "opacity-60"}>
+              {/* CABEÇALHO SEMPRE VISÍVEL — o que basta para achar a pessoa
+                  e saber o essencial sem abrir nada. */}
+              <div className="flex items-center justify-between gap-3 p-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAberto((s) => {
+                      const n = new Set(s);
+                      if (n.has(r.id)) n.delete(r.id); else n.add(r.id);
+                      return n;
+                    })
+                  }
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <ChevronRight
+                    size={15}
+                    className={`shrink-0 text-muted-foreground transition-transform ${estaAberto ? "rotate-90" : ""}`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
+                      {r.nome}
+                      {r.cargo && (
+                        <span className="rounded-full border px-1.5 py-px text-[10px] font-normal text-muted-foreground">
+                          {r.cargo}
+                        </span>
+                      )}
+                      {!r.ativo && (
+                        <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-normal">
+                          desativado
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                      <span>{PAPEL_LABELS[papelEfetivo]}</span>
+                      <span aria-hidden>·</span>
+                      <span className={semFilaAtrapalha ? "text-amber-700 dark:text-amber-400" : ""}>
+                        {filas.length === 0
+                          ? "sem fila"
+                          : filas.map((id) => nomeEquipe.get(id) ?? "—").join(", ")}
                       </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-muted-foreground truncate">{r.sector}</div>
-                </div>
+                      <span aria-hidden>·</span>
+                      <span className="truncate">{r.email}</span>
+                    </span>
+                  </span>
+                </button>
 
                 <div className="flex items-center gap-2 shrink-0">
                   {r.is_admin_central && (
@@ -463,6 +501,10 @@ export function AgentsManager({
                   </button>
                 </div>
               </div>
+
+              {/* DETALHE — só de quem está sendo editado. */}
+              {estaAberto && (
+              <div className="space-y-2 border-t bg-muted/20 p-3">
 
               {/* -------- Acesso: link, senha e desativar -------- */}
               {canManage && (
@@ -745,6 +787,8 @@ export function AgentsManager({
                   </span>
                 </div>
               </div>
+              </div>
+              )}
             </div>
           );
         })}
