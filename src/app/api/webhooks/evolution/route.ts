@@ -7,6 +7,8 @@ import {
 } from "@/lib/evolution";
 import { guardarBufferRecebido } from "@/lib/atendimento/media-inbound";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { processarMenu } from "@/lib/atendimento/menu";
+import { resolverCaixa } from "@/lib/atendimento/caixa";
 import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import {
   emitirContatoCriado,
@@ -334,6 +336,10 @@ export async function POST(req: Request) {
         // é `triada_em` + a fila, e deixar "recepcao" gravado aqui só faria
         // o próximo leitor achar que o roteamento passa pelo setor.
         status: "aberta",
+        // A CAIXA DONA DA CONVERSA. Esta rota nunca gravou o campo — e é
+        // por ele que passam o expediente, a saudação e o menu de ramais.
+        // Ver `lib/atendimento/caixa.ts`.
+        inbox_id: await resolverCaixa(admin, { channel_id: canal.id, canal: "whatsapp" }),
       })
       .select("id")
       .single();
@@ -459,6 +465,20 @@ export async function POST(req: Request) {
   //    nossa (fromMe) não deve reprocessar boas-vindas nem reatribuir.
   let automacao: Awaited<ReturnType<typeof dispararAutomacoes>> | null = null;
   if (!fromMe) {
+    // 4.5) MENU DE RAMAIS. Tem de estar AQUI, e não só em `inbound.ts`:
+    // o WhatsApp não passa por aquele módulo — esta rota é anterior a ele
+    // e faz o próprio caminho. Enquanto o menu vivia só lá, ele estava
+    // ligado na tela e nunca rodava para o único canal em uso.
+    //
+    // Antes das automações, para que uma regra de `mensagem_criada` já
+    // veja a fila que o cliente escolheu. Nunca lança.
+    const menu = await processarMenu(admin, conversationId, {
+      conversaNova: !convExistente,
+      conteudo: conteudo.texto,
+      direcao: "in",
+      interna: false,
+    }).catch(() => null);
+
     automacao = await dispararAutomacoes(admin, conversationId, {
       conversaNova: !convExistente,
       conteudo: conteudo.texto,
@@ -471,19 +491,25 @@ export async function POST(req: Request) {
     //    pelo próprio time; mandá-la ao bot o faria responder a si mesmo.
     //    `entregarAoBot` nunca lança e sai na primeira linha quando a
     //    caixa não tem bot ou quando um humano já assumiu.
-    await entregarAoBot(admin, conversationId, {
-      id: (msgCriada?.id as string) ?? null,
-      direcao: "in",
-      remetente: "cliente",
-      tipo: conteudo.tipo,
-      texto: conteudo.texto,
-      // A cópia guardada, pelo mesmo motivo do insert: a URL do payload é
-      // a criptografada do WhatsApp e o bot não consegue abrir.
-      mediaUrl: guardada?.url ?? conteudo.mediaUrl,
-      mediaNome: conteudo.mediaNome,
-      mediaMime: guardada?.mime ?? conteudo.mediaMime,
-      criadaEm: (msgCriada?.created_at as string) ?? null,
-    });
+    //
+    //    Enquanto o MENU espera resposta o bot fica calado: o cliente
+    //    acabou de receber "escolha uma das opções" e uma segunda voz
+    //    por cima vira dois robôs falando ao mesmo tempo.
+    if (!menu?.aguardandoResposta) {
+      await entregarAoBot(admin, conversationId, {
+        id: (msgCriada?.id as string) ?? null,
+        direcao: "in",
+        remetente: "cliente",
+        tipo: conteudo.tipo,
+        texto: conteudo.texto,
+        // A cópia guardada, pelo mesmo motivo do insert: a URL do payload
+        // é a criptografada do WhatsApp e o bot não consegue abrir.
+        mediaUrl: guardada?.url ?? conteudo.mediaUrl,
+        mediaNome: conteudo.mediaNome,
+        mediaMime: guardada?.mime ?? conteudo.mediaMime,
+        criadaEm: (msgCriada?.created_at as string) ?? null,
+      });
+    }
   }
 
   return NextResponse.json({

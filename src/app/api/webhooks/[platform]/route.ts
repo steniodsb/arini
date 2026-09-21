@@ -6,6 +6,8 @@ import {
   segredoConfere,
 } from "@/lib/whatsapp";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { processarMenu } from "@/lib/atendimento/menu";
+import { resolverCaixa } from "@/lib/atendimento/caixa";
 import {
   emitirContatoCriado,
   emitirConversaCriada,
@@ -400,6 +402,9 @@ export async function POST(req: Request, { params }: { params: { platform: strin
         // é `triada_em` + a fila, e deixar "recepcao" gravado aqui só faria
         // o próximo leitor achar que o roteamento passa pelo setor.
         status: "aberta",
+        // A caixa dona da conversa — por ela passam expediente, saudação
+        // e menu de ramais. Ver `lib/atendimento/caixa.ts`.
+        inbox_id: await resolverCaixa(admin, { channel_id: null, canal: canal }),
       })
       .select("id")
       .single();
@@ -480,6 +485,16 @@ export async function POST(req: Request, { params }: { params: { platform: strin
 
   // Automações cadastradas na tela de Regras (boas-vindas, roteamento,
   // etiquetagem). Nunca lança — webhook precisa responder 200.
+  // Menu de ramais ANTES das automações, pelo mesmo motivo do
+  // WhatsApp: cada webhook faz o próprio caminho, e o menu precisa
+  // estar em todos — senão fica ligado na tela e nunca roda aqui.
+  await processarMenu(admin, conversationId, {
+    conversaNova: !existingConv,
+    conteudo: extracted.mensagem,
+    direcao: "in",
+    interna: false,
+  }).catch(() => null);
+
   const automacao = await dispararAutomacoes(admin, conversationId, {
     conversaNova: !existingConv,
     conteudo: extracted.mensagem,

@@ -4,6 +4,8 @@ import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { getFileUrl } from "@/lib/telegram";
 import { guardarMidiaRecebida } from "@/lib/atendimento/media-inbound";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
+import { processarMenu } from "@/lib/atendimento/menu";
+import { resolverCaixa } from "@/lib/atendimento/caixa";
 import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import { autoResposta, triagemAutomatica } from "@/lib/atendimento/ia-triagem";
 import {
@@ -351,6 +353,9 @@ export async function POST(req: Request) {
         // é `triada_em` + a fila, e deixar "recepcao" gravado aqui só faria
         // o próximo leitor achar que o roteamento passa pelo setor.
         status: "aberta",
+        // A caixa dona da conversa — por ela passam expediente, saudação
+        // e menu de ramais. Ver `lib/atendimento/caixa.ts`.
+        inbox_id: await resolverCaixa(admin, { channel_id: canal.id, canal: "telegram" }),
       })
       .select("id")
       .single();
@@ -459,6 +464,16 @@ export async function POST(req: Request) {
   await notificarRecepcao(admin, preview);
 
   // 5) Automações — mesmo gancho do WhatsApp.
+  // Menu de ramais ANTES das automações, pelo mesmo motivo do
+  // WhatsApp: cada webhook faz o próprio caminho, e o menu precisa
+  // estar em todos — senão fica ligado na tela e nunca roda aqui.
+  const menu = await processarMenu(admin, conversationId, {
+    conversaNova: !convExistente,
+    conteudo: conteudo.texto,
+    direcao: "in",
+    interna: false,
+  }).catch(() => null);
+
   const automacao = await dispararAutomacoes(admin, conversationId, {
     conversaNova: !convExistente,
     conteudo: conteudo.texto,
@@ -471,19 +486,23 @@ export async function POST(req: Request) {
   //      caixa tem bot, é ele quem conduz, não o copiloto interno.
   //      `entregarAoBot` nunca lança e sai na primeira linha quando a caixa
   //      não tem bot ou quando um humano já assumiu.
-  await entregarAoBot(admin, conversationId, {
-    id: (msgCriada?.id as string) ?? null,
-    direcao: "in",
-    remetente: "cliente",
-    tipo: conteudo.tipo,
-    texto: conteudo.texto,
-    // A URL guardada no nosso storage, nunca a temporária do Telegram —
-    // aquela carrega o token do bot e morre em ~1 h.
-    mediaUrl: guardada?.url ?? null,
-    mediaNome: conteudo.mediaNome,
-    mediaMime: guardada?.mime ?? conteudo.mediaMime,
-    criadaEm: (msgCriada?.created_at as string) ?? null,
-  });
+  //      Enquanto o MENU espera resposta o bot fica calado — dois robôs
+  //      falando ao mesmo tempo com o cliente é o pior resultado.
+  if (!menu?.aguardandoResposta) {
+    await entregarAoBot(admin, conversationId, {
+      id: (msgCriada?.id as string) ?? null,
+      direcao: "in",
+      remetente: "cliente",
+      tipo: conteudo.tipo,
+      texto: conteudo.texto,
+      // A URL guardada no nosso storage, nunca a temporária do Telegram —
+      // aquela carrega o token do bot e morre em ~1 h.
+      mediaUrl: guardada?.url ?? null,
+      mediaNome: conteudo.mediaNome,
+      mediaMime: guardada?.mime ?? conteudo.mediaMime,
+      criadaEm: (msgCriada?.created_at as string) ?? null,
+    });
+  }
 
   // 6) IA — triagem e auto-resposta, na mesma ordem sempre: primeiro
   //    classificar/etiquetar/rotear, depois responder. Assim a auto-resposta
