@@ -27,13 +27,16 @@ const RAMAIS = [
   { chave: "6", rotulo: "Atendimento Consultivo", fila: "Atendimento Geral" },
 ];
 
-const SAUDACAO = `{{saudacao}}! Seja bem-vindo à Arini Negócios Imobiliários.
+// Texto colado nas palavras do cliente no áudio de 17/09 18:34 ("me chamo
+// Lia") e no fluxograma. Ele mesmo disse que as mensagens do .pptx eram
+// "só como exemplo" e que faria as dele — isto é ponto de partida.
+const SAUDACAO = `{{saudacao}}! Tudo bem? Me chamo Lia, da Arini Negócios Imobiliários.
 Será um prazer atender você.`;
 
 const CABECALHO = "Para direcionarmos seu atendimento, escolha uma das opções abaixo:";
 
-const CONFIRMACAO = `Perfeito. Seu atendimento foi direcionado ao setor responsável.
-Em instantes, um profissional dará continuidade à conversa.`;
+const CONFIRMACAO = `Perfeito! Seu atendimento foi direcionado para {{fila}}.
+Em breve você será atendido.`;
 
 const NAO_ENTENDI = "Não consegui identificar a opção. Responda apenas com o número:";
 
