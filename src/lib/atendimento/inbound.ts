@@ -2,6 +2,8 @@ import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
 import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
+import { processarMenu } from "@/lib/atendimento/menu";
+import { resolverCaixa } from "@/lib/atendimento/caixa";
 import {
   emitirContatoCriado,
   emitirConversaCriada,
@@ -354,6 +356,10 @@ export async function registrarMensagemEntrada(
         // é `triada_em` + a fila, e deixar "recepcao" gravado aqui só faria
         // o próximo leitor achar que o roteamento passa pelo setor.
         status: "aberta",
+        // A CAIXA DONA DA CONVERSA. Existe desde a 0031 e nunca era
+        // gravada aqui — por isso a condição "horário comercial" das
+        // automações nunca soube o expediente (ver `caixa.ts`).
+        inbox_id: await resolverCaixa(admin, { channel_id: channelId, canal }),
         custom_attributes: entrada.atributos ?? {},
       })
       .select("id")
@@ -468,6 +474,17 @@ export async function registrarMensagemEntrada(
     })
     .then(undefined, () => undefined);
 
+  // ---- 4.5) Menu de ramais --------------------------------------------
+  // ANTES das automações para que uma regra de `mensagem_criada` já veja a
+  // conversa com a fila que o cliente escolheu. Nunca lança: menu quebrado
+  // não pode derrubar o recebimento da mensagem.
+  const menu = await processarMenu(admin, conversationId, {
+    conversaNova: !convExistente,
+    conteudo: texto,
+    direcao: "in",
+    interna: false,
+  }).catch(() => null);
+
   // ---- 5) Automações --------------------------------------------------
   const automacao = await dispararAutomacoes(admin, conversationId, {
     conversaNova: !convExistente,
@@ -481,17 +498,25 @@ export async function registrarMensagemEntrada(
   // conversa, e o payload que o bot recebe já sai com esse estado.
   // `entregarAoBot` nunca lança e sai na primeira linha quando a caixa não
   // tem bot ou quando um humano já assumiu (`bot_status='transferida'`).
-  await entregarAoBot(admin, conversationId, {
-    id: (msgCriada?.id as string) ?? null,
-    direcao: "in",
-    remetente: "cliente",
-    tipo,
-    texto,
-    mediaUrl: entrada.mediaUrl ?? null,
-    mediaNome: entrada.mediaNome ?? null,
-    mediaMime: entrada.mediaMime ?? null,
-    criadaEm: (msgCriada?.created_at as string) ?? null,
-  });
+  //
+  // ENQUANTO O MENU ESPERA RESPOSTA, o bot fica calado: o cliente acabou
+  // de receber "escolha uma das opções" e uma segunda voz respondendo por
+  // cima transforma o atendimento em dois robôs falando ao mesmo tempo.
+  // Assim que o ramal é escolhido (ou o menu desiste), o fluxo normal
+  // volta e o bot recebe as mensagens seguintes.
+  if (!menu?.aguardandoResposta) {
+    await entregarAoBot(admin, conversationId, {
+      id: (msgCriada?.id as string) ?? null,
+      direcao: "in",
+      remetente: "cliente",
+      tipo,
+      texto,
+      mediaUrl: entrada.mediaUrl ?? null,
+      mediaNome: entrada.mediaNome ?? null,
+      mediaMime: entrada.mediaMime ?? null,
+      criadaEm: (msgCriada?.created_at as string) ?? null,
+    });
+  }
 
   return {
     ok: true,
