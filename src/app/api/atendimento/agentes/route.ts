@@ -38,6 +38,26 @@ import { PAPEL_LABELS, type AtendimentoPapel } from "@/lib/types";
 
 const PAPEIS_VALIDOS: AtendimentoPapel[] = ["administrador", "recepcao", "atendente"];
 
+// TRANSFERIR CARTEIRA ficou de fora, e a decisão tem prazo de validade.
+//
+// Das 53 colunas que apontam para `profiles`, 7 significam "de quem é
+// isso AGORA" (conversations.responsavel_id, leads.corretor_id,
+// agenda_events.responsavel_id, lead_appointments.responsavel_id,
+// legal_records.responsavel_id, marketing_campaigns.responsavel_id,
+// atendimento_csat.agente_id) e 46 significam "quem FEZ isso" — e essas
+// nunca devem mudar de dono: reatribuir uma mensagem é dizer que outra
+// pessoa escreveu o que ela não escreveu.
+//
+// Hoje transferir não moveria nada: em 21/09/2026, das 345 conversas
+// abertas, ZERO tinham responsável. Ninguém assumiu nada ainda, então
+// desativar sozinho não deixa trabalho órfão.
+//
+// QUANDO ISTO DEIXA DE VALER: no dia em que as pessoas passarem a
+// "Assumir" conversas de verdade. Aí desativar alguém deixa as conversas
+// dela com um dono que não entra mais — some da vista de quem poderia
+// pegar, e parece atendida. É o momento de implementar a transferência
+// das 7 colunas acima, e só delas.
+
 /** Cabe em uma linha de tabela e num select sem estourar o layout. */
 const CARGO_MAX = 40;
 
@@ -356,4 +376,90 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ ok: true, agente: alvo, link });
+}
+
+// =====================================================================
+// DELETE /api/atendimento/agentes?profileId=…  — apaga de verdade.
+//
+// QUANDO ISTO FUNCIONA, E QUANDO NÃO DEVE FUNCIONAR
+// --------------------------------------------------
+// Há 53 chaves estrangeiras apontando para `profiles` com `NO ACTION`:
+// leads, aprovações, eventos de agenda, mensagens, transferências. Quem
+// já trabalhou no sistema NÃO pode ser apagado — o banco recusa, e está
+// certo: sumir com a linha destruiria o registro de quem fez o quê, que é
+// justamente o que a auditoria existe para preservar.
+//
+// Então exclusão aqui serve para um caso só: a conta criada por engano,
+// que nunca foi usada. Para quem trabalhou, o certo é DESATIVAR — perde o
+// acesso na hora (0054) e o histórico continua legível.
+//
+// Em vez de enumerar as 53 tabelas para "verificar antes", a rota tenta e
+// traduz a recusa do banco. Assim nenhuma tabela nova criada depois
+// escapa da regra por esquecimento.
+// =====================================================================
+export async function DELETE(req: Request) {
+  const sessao = await getAtendimentoUser();
+  if (!sessao?.user) return NextResponse.json({ error: "não autenticado" }, { status: 401 });
+  if (!sessao.profile?.is_admin_central) {
+    return NextResponse.json({ error: "apenas a diretoria pode excluir agentes" }, { status: 403 });
+  }
+
+  const profileId = new URL(req.url).searchParams.get("profileId");
+  if (!profileId) return NextResponse.json({ error: "profileId é obrigatório" }, { status: 400 });
+  if (profileId === sessao.user.id) {
+    return NextResponse.json({ error: "você não pode excluir a própria conta" }, { status: 400 });
+  }
+
+  const admin = createSupabaseAdmin();
+  const { data: alvo } = await admin
+    .from("profiles")
+    .select("id, nome, email, sector, is_admin_central")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (!alvo) return NextResponse.json({ error: "agente não encontrado" }, { status: 404 });
+  if (alvo.is_admin_central) {
+    return NextResponse.json({ error: "uma conta da diretoria não pode ser excluída por aqui" }, { status: 400 });
+  }
+
+  // O PERFIL VAI PRIMEIRO, de propósito: é ele que o banco protege. Se
+  // apagássemos o usuário de auth antes e o perfil fosse recusado,
+  // sobraria um perfil sem credencial — visível nas telas, impossível de
+  // usar e impossível de apagar pelo mesmo motivo.
+  const { error: erroPerfil } = await admin.from("profiles").delete().eq("id", profileId);
+  if (erroPerfil) {
+    const temHistorico = /violates foreign key|still referenced/i.test(erroPerfil.message);
+    return NextResponse.json(
+      {
+        error: temHistorico
+          ? `${alvo.nome} já tem histórico no sistema (conversas, leads ou aprovações) e por isso não pode ser apagada — apagar destruiria o registro de quem fez o quê. Use "Desativar": ela perde o acesso na hora e o histórico continua legível.`
+          : erroPerfil.message,
+      },
+      { status: 400 },
+    );
+  }
+
+  const { error: erroAuth } = await admin.auth.admin.deleteUser(profileId);
+  if (erroAuth) {
+    // O perfil já foi embora; avisar é melhor do que fingir sucesso, mas
+    // não é caso de erro: a conta não entra mais em lugar nenhum sem
+    // perfil (`fn_has_atendimento` devolve false sem linha).
+    console.error("agente excluído, mas o usuário de auth resistiu:", erroAuth.message);
+  }
+
+  await registrarAuditoria(admin, {
+    atorId: sessao.user.id,
+    atorNome: sessao.profile?.nome ?? sessao.user.email ?? null,
+    acao: "excluiu",
+    entidade: "profiles",
+    entidadeId: profileId,
+    detalhes: {
+      alvo_nome: alvo.nome ?? null,
+      alvo_email: alvo.email ?? null,
+      alvo_setor: alvo.sector ?? null,
+      auth_removido: !erroAuth,
+    },
+    ip: ipDaRequisicao(req),
+  });
+
+  return NextResponse.json({ ok: true, excluido: profileId });
 }

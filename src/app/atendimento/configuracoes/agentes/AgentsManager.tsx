@@ -5,7 +5,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Alerta, Modal } from "@/components/atendimento/ui";
 import { Button } from "@/components/ui/button";
 import {
-  Users2, Check, UserPlus, UserX, UserCheck, Copy, Dice5, Link as LinkIcon,
+  Users2, Check, UserPlus, UserX, UserCheck, Copy, Dice5, Trash2, Link as LinkIcon,
 } from "lucide-react";
 import {
   PAPEL_LABELS, PAPEL_DESCRICAO, SECTOR_LABELS,
@@ -208,6 +208,33 @@ export function AgentsManager({
     const pega = (n: number) => Array.from({ length: n }, () => sil[Math.floor(Math.random() * sil.length)]).join("");
     const p = pega(3);
     return `${p[0].toUpperCase()}${p.slice(1)}-${pega(2)}${Math.floor(Math.random() * 90) + 10}!`;
+  }
+
+  /**
+   * Exclusão de verdade. Só passa para conta sem histórico — o banco
+   * recusa o resto, e a mensagem do servidor explica o porquê e manda
+   * desativar. Ver o comentário da rota DELETE.
+   */
+  async function excluir(r: AgentRow) {
+    if (!confirm(
+      `Excluir ${r.nome} definitivamente?
+
+` +
+      "Só funciona se ela nunca tiver usado o sistema. Se já tiver histórico, " +
+      "o banco recusa e você deve usar Desativar."
+    )) return;
+
+    setBusy(r.id);
+    setError(null);
+    const res = await fetch(`/api/atendimento/agentes?profileId=${r.id}`, { method: "DELETE" });
+    setBusy(null);
+    if (!res.ok) {
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      setError(j.error ?? "Não foi possível excluir.");
+      return;
+    }
+    setRows((p) => p.filter((x) => x.id !== r.id));
+    setMembers((p) => p.filter((m) => m.profile_id !== r.id));
   }
 
   async function alternarAtivo(r: AgentRow) {
@@ -474,6 +501,17 @@ export function AgentsManager({
 
                   <div className="flex-1" />
 
+                  {!r.ativo && (
+                    <Button
+                      variant="ghost" size="sm"
+                      disabled={busy === r.id || r.is_admin_central}
+                      onClick={() => void excluir(r)}
+                      title="Só funciona para conta que nunca foi usada. Com histórico, o banco recusa."
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 size={13} /> Excluir
+                    </Button>
+                  )}
                   <Button
                     variant="ghost" size="sm"
                     disabled={busy === r.id || r.is_admin_central}
