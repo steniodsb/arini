@@ -105,7 +105,7 @@ export function ParticipantsMenu({
           <div className="max-h-56 overflow-y-auto">
             {carregando && <div className="p-3 text-xs text-muted-foreground">Carregando…</div>}
             {!carregando && agents.length === 0 && (
-              <div className="p-3 text-xs text-muted-foreground">Nenhum agente.</div>
+              <div className="p-3 text-xs text-muted-foreground">Nenhum usuário.</div>
             )}
             {agents.map((a) => (
               <button

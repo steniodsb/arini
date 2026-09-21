@@ -40,7 +40,7 @@ type Aba = "geral" | "agentes" | "mensagens" | "atribuicao" | "prechat" | "csat"
 
 const ABAS: { id: Aba; label: string; icon: typeof Settings2 }[] = [
   { id: "geral", label: "Geral", icon: Settings2 },
-  { id: "agentes", label: "Agentes", icon: Users },
+  { id: "agentes", label: "Usuários", icon: Users },
   { id: "mensagens", label: "Mensagens automáticas", icon: MessageSquareText },
   { id: "atribuicao", label: "Atribuição", icon: Shuffle },
   { id: "prechat", label: "Pré-chat", icon: ClipboardList },
@@ -260,7 +260,7 @@ export function InboxesManager({
           aberto={modalNova}
           onFechar={() => setModalNova(false)}
           titulo="Nova caixa de entrada"
-          descricao="Você configura mensagens, agentes e CSAT depois de criar."
+          descricao="Você configura mensagens, usuários e CSAT depois de criar."
           rodape={
             <>
               <Button type="button" variant="ghost" size="sm" onClick={() => setModalNova(false)}>Cancelar</Button>
@@ -368,7 +368,7 @@ export function InboxesManager({
               checked={rascunho.permite_responder_apos_resolver}
               onChange={(v) => set("permite_responder_apos_resolver", v)}
               label="Permitir responder após resolver"
-              dica="O agente pode enviar mensagens mesmo com a conversa marcada como resolvida."
+              dica="O atendente pode enviar mensagens mesmo com a conversa marcada como resolvida."
             />
             <Switch
               checked={rascunho.bloquear_conversa_encerrada}
@@ -391,10 +391,10 @@ export function InboxesManager({
         )}
 
         {aba === "agentes" && (
-          <Card titulo="Agentes desta caixa" descricao="Só quem está marcado recebe conversas desta caixa. Salva na hora.">
+          <Card titulo="Usuários desta caixa" descricao="Só quem está marcado recebe conversas desta caixa. Salva na hora.">
             {agents.length === 0 ? (
               <div className="p-4">
-                <Alerta tipo="atencao">Nenhum agente com acesso ao atendimento foi encontrado.</Alerta>
+                <Alerta tipo="atencao">Nenhum usuário com acesso ao atendimento foi encontrado.</Alerta>
               </div>
             ) : (
               <div className="p-4 space-y-1.5">

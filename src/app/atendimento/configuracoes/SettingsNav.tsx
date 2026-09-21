@@ -20,7 +20,7 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: type
     titulo: "Equipe",
     itens: [
       { href: "/atendimento/perfil", label: "Meu perfil e senha", icon: UserCog },
-      { href: "/atendimento/configuracoes/agentes", label: "Agentes", icon: Users },
+      { href: "/atendimento/configuracoes/agentes", label: "Usuários", icon: Users },
       { href: "/atendimento/configuracoes/equipes", label: "Equipes", icon: UsersRound },
     ],
   },
@@ -52,7 +52,7 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: type
       { href: "/atendimento/configuracoes/menu", label: "Menu de ramais", icon: ListOrdered },
       { href: "/atendimento/macros", label: "Macros", icon: Workflow },
       { href: "/atendimento/configuracoes/automacoes", label: "Regras de automação", icon: Zap },
-      { href: "/atendimento/configuracoes/bots", label: "Agent Bots", icon: Bot },
+      { href: "/atendimento/configuracoes/bots", label: "Bots externos", icon: Bot },
     ],
   },
   {

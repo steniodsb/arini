@@ -1346,19 +1346,19 @@ function AbaAgentes({
       <Card>
         <EmptyState
           titulo="Nenhuma conversa atribuída no período"
-          descricao="Atribua conversas a agentes para acompanhar produtividade individual."
+          descricao="Atribua conversas a usuários para acompanhar produtividade individual."
           icone={<Users size={34} />}
         />
       </Card>
     );
   }
   return (
-    <Card titulo="Desempenho por agente" descricao="Clique no cabeçalho para reordenar.">
+    <Card titulo="Desempenho por usuário" descricao="Clique no cabeçalho para reordenar.">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
-              <ThOrdenavel campo="nome" atual={ordem} onOrdenar={onOrdenar}>Agente</ThOrdenavel>
+              <ThOrdenavel campo="nome" atual={ordem} onOrdenar={onOrdenar}>Usuário</ThOrdenavel>
               <ThOrdenavel campo="atribuidas" atual={ordem} onOrdenar={onOrdenar} alinhar="right">Atribuídas</ThOrdenavel>
               <ThOrdenavel campo="resolvidas" atual={ordem} onOrdenar={onOrdenar} alinhar="right">Resolvidas</ThOrdenavel>
               <ThOrdenavel campo="mensagens" atual={ordem} onOrdenar={onOrdenar} alinhar="right">Mensagens</ThOrdenavel>
@@ -1726,8 +1726,8 @@ function AbaSla({ dados }: { dados: DadosSla }) {
       </Card>
 
       <Card
-        titulo="Violações por agente"
-        descricao="Crédito pelo responsável atual da conversa. Agentes sem nenhuma violação não aparecem."
+        titulo="Violações por usuário"
+        descricao="Crédito pelo responsável atual da conversa. Usuários sem nenhuma violação não aparecem."
       >
         {dados.agentes.length === 0 ? (
           <EmptyState

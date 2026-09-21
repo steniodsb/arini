@@ -128,7 +128,7 @@ export function AgentsManager({
       error?: string; agente?: AgentRow; senha?: string;
     };
     if (!res.ok || !j.agente) {
-      setError(j.error ?? "Falha ao criar o agente.");
+      setError(j.error ?? "Falha ao criar o usuário.");
       return;
     }
     setRows((p) => [...p, j.agente as AgentRow].sort((a, b) => a.nome.localeCompare(b.nome)));
@@ -367,7 +367,7 @@ export function AgentsManager({
             </label>
           )}
           <Button size="sm" onClick={() => setNovoAberto(true)}>
-            <UserPlus size={14} /> Novo agente
+            <UserPlus size={14} /> Novo usuário
           </Button>
         </div>
       )}
@@ -753,7 +753,7 @@ export function AgentsManager({
       <Modal
         aberto={novoAberto}
         onFechar={() => setNovoAberto(false)}
-        titulo="Novo agente"
+        titulo="Novo usuário"
         descricao="Cria o acesso e o perfil. A senha inicial aparece uma vez, depois de salvar."
         rodape={
           <>
@@ -765,7 +765,7 @@ export function AgentsManager({
               disabled={criando || !novo.nome.trim() || !novo.email.trim()}
               onClick={() => void criarAgente()}
             >
-              {criando ? "Criando…" : "Criar agente"}
+              {criando ? "Criando…" : "Criar usuário"}
             </Button>
           </>
         }

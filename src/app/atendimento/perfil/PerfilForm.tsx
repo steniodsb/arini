@@ -290,7 +290,7 @@ export function PerfilForm({
             </Field>
             <Field
               label="Cargo"
-              dica="É como você aparece para o time quando assume um lead. Quem define é a diretoria, em Configurações › Agentes."
+              dica="É como você aparece para o time quando assume um lead. Quem define é a diretoria, em Configurações › Usuários."
             >
               <TextInput value={cargo ?? "Sem cargo definido"} readOnly disabled />
             </Field>

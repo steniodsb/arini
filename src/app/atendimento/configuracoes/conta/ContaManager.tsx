@@ -165,14 +165,14 @@ function AbaConta({ inicial }: { inicial: AtendimentoSettings | null }) {
         <Switch
           checked={form.ocultar_nome_agente}
           onChange={(v) => setForm({ ...form, ocultar_nome_agente: v })}
-          label="Esconder o nome do agente do cliente"
+          label="Esconder o nome do atendente do cliente"
           dica="A resposta sai em nome da empresa. Útil quando o time rodiza muito."
         />
         <Switch
           checked={form.notificacao_som}
           onChange={(v) => setForm({ ...form, notificacao_som: v })}
           label="Som de mensagem nova ligado por padrão"
-          dica="Cada agente ainda pode silenciar no próprio navegador."
+          dica="Cada usuário ainda pode silenciar no próprio navegador."
         />
       </div>
 
@@ -228,7 +228,7 @@ function AbaPapeis({ inicial }: { inicial: AtendimentoRole[] }) {
 
       <Card
         titulo="Papéis"
-        descricao="Um conjunto de permissões que você aplica ao agente."
+        descricao="Um conjunto de permissões que você aplica ao usuário."
         acoes={
           <Button size="sm" variant="gold" onClick={() => setCriando(true)}>
             <Plus size={14} /> Novo papel
@@ -294,7 +294,7 @@ function AbaPapeis({ inicial }: { inicial: AtendimentoRole[] }) {
         aberto={Boolean(excluindo)}
         onFechar={() => setExcluindo(null)}
         titulo="Excluir papel"
-        descricao="Os agentes que usam este papel ficam sem papel definido."
+        descricao="Os usuários que usam este papel ficam sem papel definido."
         rodape={
           <>
             <Button size="sm" variant="outline" onClick={() => setExcluindo(null)}>Cancelar</Button>

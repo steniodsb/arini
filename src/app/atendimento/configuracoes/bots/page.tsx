@@ -16,7 +16,7 @@ export default async function BotsPage() {
     return (
       <PageShell>
         <PageHeader
-          titulo="Agent Bots"
+          titulo="Bots externos"
           descricao="Plugar um bot externo como atendente de uma caixa de entrada."
         />
         <Alerta tipo="atencao">

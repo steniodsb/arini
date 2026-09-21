@@ -180,7 +180,7 @@ export function MacrosManager({
     <PageShell>
       <PageHeader
         titulo="Macros"
-        descricao="Sequências de ações que o agente dispara em um clique dentro da conversa."
+        descricao="Sequências de ações que o atendente dispara em um clique dentro da conversa."
         acoes={
           <Button type="button" variant="gold" onClick={abrirNova}>
             <Plus size={15} /> Nova macro

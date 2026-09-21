@@ -324,13 +324,13 @@ export function AoVivoPanel() {
       <div className={`grid lg:grid-cols-2 ${tv ? "gap-5" : "gap-4"}`}>
         {/* Quem está livre agora */}
         <Card
-          titulo="Agentes agora"
+          titulo="Quem está online agora"
           descricao="Ordenado pela carga. Offline só aparece quando ainda tem conversa na mão."
         >
           {dados.agentes.length === 0 ? (
             <EmptyState
               titulo="Ninguém disponível no momento"
-              descricao="Nenhum agente com acesso ao atendimento está online, ausente ou ocupado agora."
+              descricao="Nenhum usuário com acesso ao atendimento está online, ausente ou ocupado agora."
               icone={<UserX size={34} />}
             />
           ) : (

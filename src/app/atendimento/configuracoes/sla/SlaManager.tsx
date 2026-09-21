@@ -230,7 +230,7 @@ export function SlaManager({ initial }: { initial: SlaPolicy[] }) {
             </Field>
             <CampoMinutos
               label="Primeira resposta"
-              dica="Tempo máximo até a primeira resposta do agente."
+              dica="Tempo máximo até a primeira resposta do atendente."
               valor={rascunho.primeira}
               onChange={(v) => setRascunho({ ...rascunho, primeira: v })}
             />

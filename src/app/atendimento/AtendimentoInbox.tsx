@@ -1116,7 +1116,7 @@ export function AtendimentoInbox({
                 <AcaoMassa titulo="Adiar 3 h" disabled={!selecionadas.size} onClick={() => void massaAtualizar({ status: "adiada", snoozed_until: new Date(Date.now() + 3 * 3600_000).toISOString() })}>
                   <AlarmClock size={14} />
                 </AcaoMassa>
-                <AcaoMassa titulo="Atribuir agente" disabled={!selecionadas.size} onClick={() => setModalMassa("agente")}>
+                <AcaoMassa titulo="Atribuir responsável" disabled={!selecionadas.size} onClick={() => setModalMassa("agente")}>
                   <Users2 size={14} />
                 </AcaoMassa>
                 <AcaoMassa titulo="Prioridade" disabled={!selecionadas.size} onClick={() => setModalMassa("prioridade")}>
@@ -1526,7 +1526,7 @@ export function AtendimentoInbox({
       <Modal
         aberto={modalMassa === "agente"}
         onFechar={() => setModalMassa(null)}
-        titulo="Atribuir agente"
+        titulo="Atribuir responsável"
         descricao={`${idsSelecionados.length} conversa(s) selecionada(s).`}
       >
         <div className="space-y-1">

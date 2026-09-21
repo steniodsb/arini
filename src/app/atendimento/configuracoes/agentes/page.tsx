@@ -38,7 +38,7 @@ export default async function AgentesPage() {
   return (
     <div className="p-6 max-w-3xl space-y-4">
       <div>
-        <h1 className="font-display text-xl text-arini dark:text-gold">Agentes</h1>
+        <h1 className="font-display text-xl text-arini dark:text-gold">Usuários</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Quem acessa o Atendimento, com que cargo, que papel e em quais filas.
         </p>

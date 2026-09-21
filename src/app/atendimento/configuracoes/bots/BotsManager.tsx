@@ -335,8 +335,8 @@ export function BotsManager({
   return (
     <div className="space-y-5">
       <PageHeader
-        titulo="Agent Bots"
-        descricao="Um sistema externo (n8n, Dialogflow, script próprio) atende uma caixa como se fosse um agente."
+        titulo="Bots externos"
+        descricao="Um sistema externo (n8n, Dialogflow, script próprio) atende uma caixa como se fosse um atendente."
         acoes={
           <Button type="button" variant="gold" size="sm" onClick={novo}>
             <Plus size={15} /> Novo bot

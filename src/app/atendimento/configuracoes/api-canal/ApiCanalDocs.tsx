@@ -228,7 +228,7 @@ export function ApiCanalDocs({ canais, baseUrl }: { canais: CanalHttp[]; baseUrl
                   <div className="space-y-2 border-t pt-4">
                     <Field
                       label="URL de saída (callback)"
-                      dica="Para onde entregamos a resposta do agente. Sem ela, o envio falha com erro explícito em vez de sumir."
+                      dica="Para onde entregamos a resposta do atendente. Sem ela, o envio falha com erro explícito em vez de sumir."
                     >
                       <TextInput
                         value={callbacks[canal.id] ?? ""}
@@ -293,7 +293,7 @@ export function ApiCanalDocs({ canais, baseUrl }: { canais: CanalHttp[]; baseUrl
         </div>
       </Card>
 
-      <Card titulo="Saída — receber a resposta do agente">
+      <Card titulo="Saída — receber a resposta do atendente">
         <div className="p-4 space-y-3 text-xs text-muted-foreground">
           <p>
             Quando o agente responde, fazemos um POST na sua{" "}

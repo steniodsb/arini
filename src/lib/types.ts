@@ -576,7 +576,7 @@ export interface MacroAction {
 }
 
 export const MACRO_ACTION_LABELS: Record<MacroActionType, string> = {
-  atribuir_agente: "Atribuir a um agente",
+  atribuir_agente: "Atribuir a um usuário",
   atribuir_equipe: "Atribuir a uma equipe",
   mudar_status: "Mudar o status",
   mudar_prioridade: "Mudar a prioridade",
@@ -819,7 +819,7 @@ export type ApiScope = "leitura" | "escrita" | "admin";
 export const API_SCOPE_LABELS: Record<ApiScope, string> = {
   leitura: "Leitura (listar conversas, contatos, relatórios)",
   escrita: "Escrita (enviar mensagem, criar contato, mudar status)",
-  admin: "Administração (canais, agentes, configurações)",
+  admin: "Administração (canais, usuários, configurações)",
 };
 
 export interface ApiToken {
@@ -1164,7 +1164,7 @@ export interface WhatsappTemplate {
 export const PERMISSOES: { chave: string; label: string; grupo: string }[] = [
   { chave: "conversa:ver_todas", label: "Ver todas as conversas", grupo: "Conversas" },
   { chave: "conversa:ver_proprias", label: "Ver apenas as próprias e as não atribuídas", grupo: "Conversas" },
-  { chave: "conversa:atribuir", label: "Atribuir conversa a outro agente", grupo: "Conversas" },
+  { chave: "conversa:atribuir", label: "Atribuir conversa a outro usuário", grupo: "Conversas" },
   { chave: "conversa:excluir", label: "Excluir conversa", grupo: "Conversas" },
   { chave: "contato:ver", label: "Ver contatos", grupo: "Contatos" },
   { chave: "contato:editar", label: "Criar e editar contatos", grupo: "Contatos" },
@@ -1174,7 +1174,7 @@ export const PERMISSOES: { chave: string; label: string; grupo: string }[] = [
   { chave: "config:ver", label: "Ver configurações", grupo: "Configurações" },
   { chave: "config:editar", label: "Editar configurações", grupo: "Configurações" },
   { chave: "canal:gerenciar", label: "Conectar e desconectar canais", grupo: "Configurações" },
-  { chave: "agente:gerenciar", label: "Gerenciar agentes e equipes", grupo: "Configurações" },
+  { chave: "agente:gerenciar", label: "Gerenciar usuários e equipes", grupo: "Configurações" },
 ];
 
 export interface AtendimentoRole {

@@ -309,7 +309,7 @@ export function CustomAttributesManager({ initial }: { initial: CustomAttributeD
             </Field>
 
             {rascunho.tipo === "lista" && (
-              <Field label="Opções" obrigatorio dica="Os valores que o agente poderá escolher.">
+              <Field label="Opções" obrigatorio dica="Os valores que o atendente poderá escolher.">
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-1.5">
                     {rascunho.opcoes.length === 0 && (
