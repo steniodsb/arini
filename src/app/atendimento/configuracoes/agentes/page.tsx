@@ -24,6 +24,15 @@ export default async function AgentesPage() {
     admin.from("atendimento_team_members").select("team_id, profile_id"),
   ]);
 
+  // Alguma caixa assina a resposta com o nome do atendente? Se sim, o nome
+  // editado aqui é o que o CLIENTE lê no WhatsApp — e a tela avisa.
+  const { data: caixasAssinando } = await admin
+    .from("atendimento_inboxes")
+    .select("id")
+    .eq("assinar_com_nome", true)
+    .eq("ativo", true)
+    .limit(1);
+
   return (
     <div className="p-6 max-w-3xl space-y-4">
       <div>
@@ -37,6 +46,7 @@ export default async function AgentesPage() {
         canManage={!!profile.is_admin_central}
         teams={(teams ?? []) as AtendimentoTeam[]}
         initialMembers={(membros ?? []) as { team_id: string; profile_id: string }[]}
+        assinaturaLigada={(caixasAssinando ?? []).length > 0}
       />
     </div>
   );

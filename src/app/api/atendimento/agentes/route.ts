@@ -41,6 +41,18 @@ const PAPEIS_VALIDOS: AtendimentoPapel[] = ["administrador", "recepcao", "atende
 /** Cabe em uma linha de tabela e num select sem estourar o layout. */
 const CARGO_MAX = 40;
 
+/**
+ * O NOME não é mais cosmético desde que a caixa pode assinar a resposta
+ * com ele (0053): o primeiro nome vai para o WhatsApp do cliente. Foi
+ * exatamente assim que as contas de demonstração vazaram — em 21/09/2026
+ * onze respostas reais saíram assinadas "*Admin:*", porque a tela não
+ * tinha como trocar "Admin Arini" pelo nome de quem estava atendendo.
+ */
+const NOME_MAX = 60;
+
+/** Simples de propósito: quem valida e-mail de verdade é o Supabase Auth. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 export async function POST(req: Request) {
   const result = await getAtendimentoUser();
   if (!result?.user) return NextResponse.json({ error: "não autenticado" }, { status: 401 });
@@ -53,6 +65,8 @@ export async function POST(req: Request) {
     access?: boolean;
     atendimento_papel?: string;
     cargo?: string | null;
+    nome?: string;
+    email?: string;
   };
   try {
     body = await req.json();
@@ -83,9 +97,29 @@ export async function POST(req: Request) {
     );
   }
 
-  if (!temAccess && papel === undefined && !temCargo) {
+  // Nome: vazio NÃO é apagar. Perfil sem nome deixa a assinatura muda e a
+  // lista de agentes ilegível — é erro de digitação, não intenção.
+  const temNome = body.nome !== undefined;
+  const nome = temNome ? (body.nome ?? "").trim() : undefined;
+  if (temNome && !nome) {
+    return NextResponse.json({ error: "o nome não pode ficar vazio" }, { status: 400 });
+  }
+  if (nome && nome.length > NOME_MAX) {
     return NextResponse.json(
-      { error: "informe access, atendimento_papel e/ou cargo" },
+      { error: `o nome precisa ter no máximo ${NOME_MAX} caracteres` },
+      { status: 400 },
+    );
+  }
+
+  const temEmail = body.email !== undefined;
+  const email = temEmail ? (body.email ?? "").trim().toLowerCase() : undefined;
+  if (temEmail && (!email || !EMAIL_RE.test(email))) {
+    return NextResponse.json({ error: "e-mail inválido" }, { status: 400 });
+  }
+
+  if (!temAccess && papel === undefined && !temCargo && !temNome && !temEmail) {
+    return NextResponse.json(
+      { error: "informe access, atendimento_papel, cargo, nome e/ou email" },
       { status: 400 },
     );
   }
@@ -101,10 +135,34 @@ export async function POST(req: Request) {
     .maybeSingle();
   if (!antes) return NextResponse.json({ error: "agente não encontrado" }, { status: 404 });
 
+  // O E-MAIL É A IDENTIDADE DE LOGIN, e mora em DOIS lugares: `auth.users`
+  // (onde a autenticação acontece) e `profiles.email` (o espelho que as
+  // telas leem). Gravar só o espelho deixaria a pessoa vendo o e-mail novo
+  // na tela e entrando com o antigo — ou, pior, sem conseguir entrar.
+  //
+  // O Auth vai PRIMEIRO porque é ele que rejeita duplicado. Se falhar,
+  // nada mais é escrito e a linha fica intacta.
+  if (temEmail && email !== (antes.email as string | null)?.toLowerCase()) {
+    const { error: erroAuth } = await admin.auth.admin.updateUserById(body.profileId, { email });
+    if (erroAuth) {
+      const duplicado = /already|registered|exists/i.test(erroAuth.message);
+      return NextResponse.json(
+        {
+          error: duplicado
+            ? `já existe uma conta com o e-mail ${email}`
+            : `não foi possível trocar o e-mail: ${erroAuth.message}`,
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   const patch: Record<string, unknown> = {};
   if (temAccess) patch.atendimento_access = body.access;
   if (papel !== undefined) patch.atendimento_papel = papel;
   if (temCargo) patch.cargo = cargo;
+  if (temNome) patch.nome = nome;
+  if (temEmail) patch.email = email;
 
   const { data: alvo, error } = await admin
     .from("profiles")
@@ -136,6 +194,26 @@ export async function POST(req: Request) {
       ...base,
       acao: body.access ? "liberou_acesso" : "revogou_acesso",
       detalhes: { ...alvoDescrito, atendimento_access: body.access },
+    });
+  }
+
+  // NOME: deixou de ser cosmético quando a caixa passou a assinar a
+  // resposta com ele (0053). Trocar o nome de alguém muda o que o CLIENTE
+  // lê no WhatsApp, então "quem mudou isso?" precisa ter resposta.
+  if (temNome && nome !== (antes.nome as string | null)) {
+    await registrarAuditoria(admin, {
+      ...base,
+      acao: "atualizou",
+      detalhes: { ...alvoDescrito, campo: "nome", de: antes.nome ?? null, para: nome },
+    });
+  }
+
+  // E-MAIL: é a credencial de acesso. A linha mais importante deste log.
+  if (temEmail && email !== (antes.email as string | null)?.toLowerCase()) {
+    await registrarAuditoria(admin, {
+      ...base,
+      acao: "atualizou",
+      detalhes: { ...alvoDescrito, campo: "email", de: antes.email ?? null, para: email },
     });
   }
   // O cargo é cosmético, mas "quem me rebaixou de Gerente para Estagiário

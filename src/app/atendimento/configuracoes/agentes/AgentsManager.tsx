@@ -48,6 +48,9 @@ type AgentRow = {
 /** Mesmo limite da rota — a tela avisa antes de o servidor recusar. */
 const CARGO_MAX = 40;
 
+/** Mesmo teto da API. Nome vazio não é "apagar", é erro de digitação. */
+const NOME_MAX = 60;
+
 /**
  * Sugestões de cargo. Não é um enum: imobiliária inventa função nova toda
  * hora, e travar a lista só faria alguém escrever "Corretor" no campo
@@ -66,11 +69,18 @@ export function AgentsManager({
   canManage,
   teams,
   initialMembers,
+  assinaturaLigada,
 }: {
   initial: AgentRow[];
   canManage: boolean;
   teams: AtendimentoTeam[];
   initialMembers: Member[];
+  /**
+   * Alguma caixa assina a resposta com o nome do atendente (0053)? Quando
+   * sim, o nome desta tela vai para o WhatsApp do cliente — e a tela
+   * precisa dizer isso, senão ninguém liga uma coisa à outra.
+   */
+  assinaturaLigada: boolean;
 }) {
   const [rows, setRows] = useState(initial);
   const [members, setMembers] = useState<Member[]>(initialMembers);
@@ -81,6 +91,12 @@ export function AgentsManager({
   // aí a fonte da verdade volta a ser a linha (que já foi gravada, ou
   // revertida se o servidor recusou).
   const [rascunhoCargo, setRascunhoCargo] = useState<Record<string, string>>({});
+  const [rascunhoNome, setRascunhoNome] = useState<Record<string, string>>({});
+  const [rascunhoEmail, setRascunhoEmail] = useState<Record<string, string>>({});
+  // E-mail NÃO grava no blur como os outros campos: ele é a credencial de
+  // login. Trocar sem querer, ao sair do campo, tranca a pessoa para fora
+  // do sistema. Aqui fica o valor esperando um segundo clique.
+  const [emailPendente, setEmailPendente] = useState<Record<string, string>>({});
 
   const nomeEquipe = useMemo(() => {
     const m = new Map<string, string>();
@@ -139,6 +155,52 @@ export function AgentsManager({
       for (const chave of Object.keys(p)) if (chave !== id) resto[chave] = p[chave];
       return resto;
     });
+  }
+
+  function largar(
+    id: string,
+    set: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+  ) {
+    set((p) => {
+      if (!(id in p)) return p;
+      const resto: Record<string, string> = {};
+      for (const chave of Object.keys(p)) if (chave !== id) resto[chave] = p[chave];
+      return resto;
+    });
+  }
+
+  /**
+   * Grava o nome no blur, como o cargo.
+   *
+   * O nome DEIXOU DE SER COSMÉTICO: desde que a caixa passa a assinar a
+   * resposta com ele, o primeiro nome vai para o WhatsApp do cliente. Foi
+   * assim que "Admin Arini" virou "*Admin:*" em conversa real.
+   */
+  async function salvarNome(id: string, valor: string) {
+    const limpo = valor.trim().slice(0, NOME_MAX);
+    const atual = rows.find((r) => r.id === id)?.nome ?? "";
+    if (!limpo || limpo === atual) return;
+
+    setRows((p) => p.map((r) => (r.id === id ? { ...r, nome: limpo } : r)));
+    const ok = await salvar(id, { nome: limpo });
+    if (!ok) {
+      setRows((p) => p.map((r) => (r.id === id ? { ...r, nome: atual } : r)));
+    }
+  }
+
+  /** Troca o e-mail SÓ depois do segundo clique — é a credencial de login. */
+  async function confirmarEmail(id: string) {
+    const novo = (emailPendente[id] ?? "").trim().toLowerCase();
+    const atual = rows.find((r) => r.id === id)?.email ?? "";
+    largar(id, setEmailPendente);
+    largar(id, setRascunhoEmail);
+    if (!novo || novo === atual) return;
+
+    setRows((p) => p.map((r) => (r.id === id ? { ...r, email: novo } : r)));
+    const ok = await salvar(id, { email: novo });
+    if (!ok) {
+      setRows((p) => p.map((r) => (r.id === id ? { ...r, email: atual } : r)));
+    }
   }
 
   async function trocarPapel(id: string, papel: AtendimentoPapel) {
@@ -226,9 +288,7 @@ export function AgentsManager({
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {r.email} · {r.sector}
-                  </div>
+                  <div className="text-xs text-muted-foreground truncate">{r.sector}</div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
@@ -245,6 +305,106 @@ export function AgentsManager({
                     <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${habilitado ? "left-[22px]" : "left-0.5"}`} />
                   </button>
                 </div>
+              </div>
+
+              {/* -------- Identidade: nome e e-mail -------- */}
+              <div className="grid sm:grid-cols-2 gap-2">
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Nome
+                  </span>
+                  <input
+                    value={rascunhoNome[r.id] ?? r.nome ?? ""}
+                    disabled={!canManage || busy === r.id}
+                    maxLength={NOME_MAX}
+                    placeholder="Ex.: Michelle Santos"
+                    onChange={(e) => setRascunhoNome((p) => ({ ...p, [r.id]: e.target.value }))}
+                    onBlur={(e) => {
+                      const valor = e.target.value;
+                      largar(r.id, setRascunhoNome);
+                      void salvarNome(r.id, valor);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        largar(r.id, setRascunhoNome);
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    className="w-full rounded-md border bg-background px-2 py-1.5 text-sm disabled:opacity-60"
+                  />
+                  <span className="block text-[11px] text-muted-foreground leading-snug">
+                    {assinaturaLigada ? (
+                      <>
+                        O <strong>primeiro nome</strong> vai assinar a resposta no WhatsApp do
+                        cliente: <code>*{(r.nome ?? "").trim().split(/\s+/)[0] || "—"}:*</code>
+                      </>
+                    ) : (
+                      "Como a pessoa aparece no sistema."
+                    )}
+                  </span>
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    E-mail de acesso
+                  </span>
+                  <input
+                    type="email"
+                    value={rascunhoEmail[r.id] ?? r.email ?? ""}
+                    disabled={!canManage || busy === r.id}
+                    placeholder="nome@arininegociosimobiliarios.com.br"
+                    onChange={(e) => setRascunhoEmail((p) => ({ ...p, [r.id]: e.target.value }))}
+                    onBlur={(e) => {
+                      const valor = e.target.value.trim().toLowerCase();
+                      // Não grava aqui: só arma a confirmação abaixo.
+                      if (!valor || valor === (r.email ?? "").toLowerCase()) {
+                        largar(r.id, setRascunhoEmail);
+                        largar(r.id, setEmailPendente);
+                        return;
+                      }
+                      setEmailPendente((p) => ({ ...p, [r.id]: valor }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        largar(r.id, setRascunhoEmail);
+                        largar(r.id, setEmailPendente);
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    className="w-full rounded-md border bg-background px-2 py-1.5 text-sm disabled:opacity-60"
+                  />
+                  {emailPendente[r.id] ? (
+                    <span className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px]">
+                      <span className="flex-1">
+                        Esta pessoa passa a entrar com <strong>{emailPendente[r.id]}</strong>. A
+                        senha continua a mesma.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void confirmarEmail(r.id)}
+                        className="rounded border border-amber-600/50 px-1.5 py-0.5 font-medium hover:bg-amber-500/20"
+                      >
+                        Trocar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          largar(r.id, setEmailPendente);
+                          largar(r.id, setRascunhoEmail);
+                        }}
+                        className="rounded px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
+                      >
+                        Cancelar
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="block text-[11px] text-muted-foreground leading-snug">
+                      É com ele que a pessoa faz login. Trocar pede confirmação.
+                    </span>
+                  )}
+                </label>
               </div>
 
               <div className="grid sm:grid-cols-3 gap-2">
