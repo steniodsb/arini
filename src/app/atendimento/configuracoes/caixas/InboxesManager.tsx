@@ -440,29 +440,31 @@ export function InboxesManager({
         )}
 
         {aba === "atribuicao" && (
-          <Card className="p-4 space-y-4">
-            <Switch
-              checked={rascunho.auto_atribuicao}
-              onChange={(v) => set("auto_atribuicao", v)}
-              label="Atribuição automática (round-robin)"
-              dica="Distribui cada conversa nova para o próximo agente disponível da caixa, em rodízio."
-            />
-            <Field
-              label="Limite de conversas simultâneas por agente"
-              dica="0 = sem limite. Ao atingir o limite, o agente é pulado no rodízio."
-            >
-              <TextInput
-                type="number"
-                min={0}
-                value={rascunho.auto_atribuicao_limite}
-                onChange={(e) => set("auto_atribuicao_limite", Math.max(0, Number(e.target.value) || 0))}
-                disabled={!rascunho.auto_atribuicao}
-                className="max-w-[140px]"
-              />
-            </Field>
-            {!rascunho.auto_atribuicao && (
-              <Alerta tipo="info">Com a atribuição automática desligada, as conversas ficam sem responsável até alguém assumir.</Alerta>
-            )}
+          <Card className="p-4 space-y-3">
+            {/* O INTERRUPTOR SAIU PORQUE ELE MENTIA.
+                `auto_atribuicao` e `auto_atribuicao_limite` existem na
+                tabela desde a 0031 e NENHUMA linha de código os lê — não
+                há rodízio nem limite implementados. Ligado, ele não fazia
+                nada além de convencer quem ligou de que a distribuição
+                estava resolvida.
+                Um campo que não faz nada é pior que um campo ausente:
+                ninguém vai investigar por que as conversas não estão sendo
+                distribuídas se a tela diz que estão. */}
+            <Alerta tipo="info">
+              A conversa que cai numa fila fica <strong>visível para todo mundo da fila</strong>,
+              sem responsável, até alguém clicar em <strong>Assumir</strong> — e a partir daí ela
+              tem dono. É o modelo de fila compartilhada: quem estiver livre pega.
+            </Alerta>
+            <p className="text-sm text-muted-foreground">
+              Não há rodízio automático. Para uma equipe em que cada setor tem uma ou duas
+              pessoas, distribuir sozinho costuma atrapalhar: a conversa ganha um dono que pode
+              estar de folga, some da lista de todos e fica parada. Fila sem dono é de todos, e
+              alguém pega.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Quando um ramal precisa cair sempre na mesma pessoa, use o campo{" "}
+              <strong>&quot;Direto para&quot;</strong> em Automação › Menu de ramais.
+            </p>
           </Card>
         )}
 

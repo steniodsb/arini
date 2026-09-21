@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { Alerta, Modal } from "@/components/atendimento/ui";
 import { Button } from "@/components/ui/button";
-import { Users2, Check, UserPlus } from "lucide-react";
+import {
+  Users2, Check, UserPlus, UserX, UserCheck, Copy, Dice5, Link as LinkIcon,
+} from "lucide-react";
 import {
   PAPEL_LABELS, PAPEL_DESCRICAO, SECTOR_LABELS,
   type AtendimentoPapel, type AtendimentoTeam, type Sector,
@@ -43,6 +45,7 @@ type AgentRow = {
   is_admin_central: boolean;
   atendimento_access: boolean;
   atendimento_papel: AtendimentoPapel;
+  ativo: boolean;
 };
 
 /** Mesmo limite da rota — a tela avisa antes de o servidor recusar. */
@@ -105,6 +108,10 @@ export function AgentsManager({
     atendimento_papel: "atendente" as AtendimentoPapel, access: true, filas: [] as string[],
   });
   const [criando, setCriando] = useState(false);
+  const [mostrarInativos, setMostrarInativos] = useState(false);
+  // Segredo recém-gerado (senha ou link). Aparece uma vez, por linha.
+  const [segredo, setSegredo] = useState<{ id: string; tipo: "senha" | "link"; valor: string } | null>(null);
+  const [senhaDigitada, setSenhaDigitada] = useState<Record<string, string>>({});
   // A senha volta do servidor UMA vez e não fica gravada em lugar nenhum.
   const [recemCriado, setRecemCriado] = useState<{ nome: string; email: string; senha: string } | null>(null);
 
@@ -168,6 +175,46 @@ export function AgentsManager({
   async function alternarAcesso(id: string, access: boolean) {
     if (await salvar(id, { access })) {
       setRows((p) => p.map((r) => (r.id === id ? { ...r, atendimento_access: access } : r)));
+    }
+  }
+
+  /**
+   * Chamada que devolve um SEGREDO (senha nova ou link de acesso). A
+   * resposta aparece uma vez na tela e não fica guardada em lugar nenhum:
+   * a senha vira hash no Auth e o link é de uso único.
+   */
+  async function pedirSegredo(id: string, corpo: Record<string, unknown>, tipo: "senha" | "link") {
+    setBusy(id);
+    setError(null);
+    const res = await fetch("/api/atendimento/agentes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profileId: id, ...corpo }),
+    });
+    setBusy(null);
+    const j = (await res.json().catch(() => ({}))) as { error?: string; link?: string };
+    if (!res.ok) {
+      setError(j.error ?? "Não deu certo.");
+      return;
+    }
+    const valor = tipo === "link" ? (j.link ?? "") : String(corpo.senha ?? "");
+    setSegredo({ id, tipo, valor });
+    largar(id, setSenhaDigitada);
+  }
+
+  /** Senha ditável por telefone: sílabas simples, sem 0/O nem 1/l. */
+  function senhaSugerida(): string {
+    const sil = "ba be bi bo ca ce co da de do fa fe fi ga go la le li lo ma me mi mo na ne no pa pe pi ra re ri ro sa se si ta te ti to va ve vi".split(" ");
+    const pega = (n: number) => Array.from({ length: n }, () => sil[Math.floor(Math.random() * sil.length)]).join("");
+    const p = pega(3);
+    return `${p[0].toUpperCase()}${p.slice(1)}-${pega(2)}${Math.floor(Math.random() * 90) + 10}!`;
+  }
+
+  async function alternarAtivo(r: AgentRow) {
+    const novoAtivo = !r.ativo;
+    if (!novoAtivo && !confirm(`Desativar ${r.nome}? Ela perde o acesso na hora, e o histórico fica.`)) return;
+    if (await salvar(r.id, { ativo: novoAtivo })) {
+      setRows((p) => p.map((x) => (x.id === r.id ? { ...x, ativo: novoAtivo } : x)));
     }
   }
 
@@ -281,7 +328,17 @@ export function AgentsManager({
   return (
     <div className="space-y-3">
       {canManage && (
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-3">
+          {rows.some((r) => !r.ativo) && (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={mostrarInativos}
+                onChange={(e) => setMostrarInativos(e.target.checked)}
+              />
+              Mostrar desativados ({rows.filter((r) => !r.ativo).length})
+            </label>
+          )}
           <Button size="sm" onClick={() => setNovoAberto(true)}>
             <UserPlus size={14} /> Novo agente
           </Button>
@@ -338,7 +395,7 @@ export function AgentsManager({
       )}
 
       <div className="rounded-xl border bg-card divide-y">
-        {rows.map((r) => {
+        {rows.filter((r) => r.ativo || mostrarInativos).map((r) => {
           const habilitado = r.atendimento_access || r.is_admin_central;
           const filas = filasDoAgente(r.id);
           // A diretoria é administradora pela regra do banco
@@ -350,7 +407,7 @@ export function AgentsManager({
           const semFilaAtrapalha = habilitado && papelEfetivo === "atendente" && filas.length === 0;
 
           return (
-            <div key={r.id} className="p-3 space-y-2">
+            <div key={r.id} className={`p-3 space-y-2 ${r.ativo ? "" : "opacity-60"}`}>
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
@@ -379,6 +436,86 @@ export function AgentsManager({
                   </button>
                 </div>
               </div>
+
+              {/* -------- Acesso: link, senha e desativar -------- */}
+              {canManage && (
+                <div className="flex flex-wrap items-center gap-1.5 rounded-md border bg-muted/30 p-1.5">
+                  <Button
+                    variant="outline" size="sm" disabled={busy === r.id || !r.ativo}
+                    onClick={() => void pedirSegredo(r.id, { gerarLink: true }, "link")}
+                    title="Gera um link que faz a pessoa entrar já logada. Serve para o primeiro acesso e para quem esqueceu a senha."
+                  >
+                    <LinkIcon size={13} /> Link de acesso
+                  </Button>
+
+                  <div className="flex items-center gap-1">
+                    <input
+                      value={senhaDigitada[r.id] ?? ""}
+                      disabled={busy === r.id || !r.ativo}
+                      placeholder="nova senha (8+)"
+                      onChange={(e) => setSenhaDigitada((p) => ({ ...p, [r.id]: e.target.value }))}
+                      className="w-36 rounded-md border bg-background px-2 py-1 text-xs disabled:opacity-60"
+                    />
+                    <Button
+                      variant="ghost" size="sm" disabled={busy === r.id || !r.ativo}
+                      onClick={() => setSenhaDigitada((p) => ({ ...p, [r.id]: senhaSugerida() }))}
+                      title="Sugere uma senha fácil de ditar por telefone"
+                    >
+                      <Dice5 size={13} />
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
+                      disabled={busy === r.id || !r.ativo || (senhaDigitada[r.id] ?? "").length < 8}
+                      onClick={() => void pedirSegredo(r.id, { senha: senhaDigitada[r.id] }, "senha")}
+                    >
+                      Definir senha
+                    </Button>
+                  </div>
+
+                  <div className="flex-1" />
+
+                  <Button
+                    variant="ghost" size="sm"
+                    disabled={busy === r.id || r.is_admin_central}
+                    onClick={() => void alternarAtivo(r)}
+                    title={r.is_admin_central ? "A diretoria não pode ser desativada por aqui" : undefined}
+                    className={r.ativo ? "text-red-600 hover:text-red-700" : "text-emerald-700"}
+                  >
+                    {r.ativo ? <><UserX size={13} /> Desativar</> : <><UserCheck size={13} /> Reativar</>}
+                  </Button>
+                </div>
+              )}
+
+              {/* O segredo aparece UMA vez. Depois não há como recuperá-lo:
+                  a senha vira hash e o link é de uso único. */}
+              {segredo?.id === r.id && (
+                <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2.5 space-y-1.5">
+                  <p className="text-xs font-medium">
+                    {segredo.tipo === "link"
+                      ? `Link de acesso de ${r.nome} — mande no WhatsApp dela`
+                      : `Senha nova de ${r.nome}`}
+                  </p>
+                  <code className="block break-all rounded bg-background px-2 py-1 font-mono text-[11px]">
+                    {segredo.valor}
+                  </code>
+                  <p className="text-[11px] text-muted-foreground">
+                    {segredo.tipo === "link"
+                      ? "Quem tiver este link entra como esta pessoa — mande só para ela, nunca em grupo. Ele expira em pouco tempo e é de uso único."
+                      : "Anote agora: não dá para ver de novo. Peça para ela trocar em Meu perfil › Segurança."}
+                  </p>
+                  <div className="flex gap-1.5">
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => void navigator.clipboard?.writeText(segredo.valor)}
+                    >
+                      <Copy size={13} /> Copiar
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setSegredo(null)}>
+                      Já anotei
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* -------- Identidade: nome e e-mail -------- */}
               <div className="grid sm:grid-cols-2 gap-2">

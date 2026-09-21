@@ -17,8 +17,10 @@ export default async function AgentesPage() {
   const [{ data: agentes }, { data: teams }, { data: membros }] = await Promise.all([
     admin
       .from("profiles")
-      .select("id, nome, email, sector, cargo, is_admin_central, atendimento_access, atendimento_papel")
-      .eq("ativo", true)
+      // Sem filtro de `ativo`: quem foi desativado precisa continuar
+      // aparecendo (atrás do "mostrar desativados") para poder ser
+      // reativado. Filtrar aqui faria a pessoa sumir sem volta pela tela.
+      .select("id, nome, email, sector, cargo, ativo, is_admin_central, atendimento_access, atendimento_papel")
       .order("nome"),
     admin.from("atendimento_teams").select("*").order("nome"),
     admin.from("atendimento_team_members").select("team_id, profile_id"),

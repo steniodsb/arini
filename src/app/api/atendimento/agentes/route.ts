@@ -67,6 +67,12 @@ export async function POST(req: Request) {
     cargo?: string | null;
     nome?: string;
     email?: string;
+    /** Desligar/religar a pessoa sem apagar o histórico dela. */
+    ativo?: boolean;
+    /** Nova senha definida pela diretoria (mínimo 8). Nunca vai para o log. */
+    senha?: string;
+    /** Gera o link de acesso individual e o devolve nesta resposta. */
+    gerarLink?: boolean;
   };
   try {
     body = await req.json();
@@ -117,11 +123,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "e-mail inválido" }, { status: 400 });
   }
 
-  if (!temAccess && papel === undefined && !temCargo && !temNome && !temEmail) {
+  const temAtivo = typeof body.ativo === "boolean";
+  const temSenha = typeof body.senha === "string";
+  const senha = temSenha ? (body.senha as string) : undefined;
+  if (temSenha && (senha as string).length < 8) {
+    return NextResponse.json({ error: "a senha precisa ter pelo menos 8 caracteres" }, { status: 400 });
+  }
+
+  // DESATIVAR A SI MESMO tranca a diretoria para fora do próprio sistema,
+  // e não há outra tela que devolva o acesso — sobraria mexer no banco.
+  if (temAtivo && body.ativo === false && body.profileId === result.user.id) {
     return NextResponse.json(
-      { error: "informe access, atendimento_papel, cargo, nome e/ou email" },
+      { error: "você não pode desativar a própria conta" },
       { status: 400 },
     );
+  }
+
+  if (
+    !temAccess && papel === undefined && !temCargo && !temNome && !temEmail &&
+    !temAtivo && !temSenha && !body.gerarLink
+  ) {
+    return NextResponse.json({ error: "nada para alterar" }, { status: 400 });
   }
 
   const admin = createSupabaseAdmin();
@@ -157,19 +179,42 @@ export async function POST(req: Request) {
     }
   }
 
+  // SENHA definida pela diretoria. Sem caixa de e-mail real, "esqueci minha
+  // senha" por e-mail nunca vai funcionar aqui — alguém precisa destravar,
+  // e esse alguém é quem administra.
+  //
+  // Consequência que fica registrada de propósito: quem pode definir a
+  // senha de alguém pode entrar como essa pessoa. Numa operação de sete
+  // pessoas em que o dono é o administrador isso é inevitável; o que não
+  // pode é acontecer sem deixar linha no log.
+  if (temSenha) {
+    const { error: erroSenha } = await admin.auth.admin.updateUserById(body.profileId, {
+      password: senha,
+    });
+    if (erroSenha) {
+      return NextResponse.json(
+        { error: `não foi possível definir a senha: ${erroSenha.message}` },
+        { status: 400 },
+      );
+    }
+  }
+
   const patch: Record<string, unknown> = {};
   if (temAccess) patch.atendimento_access = body.access;
   if (papel !== undefined) patch.atendimento_papel = papel;
   if (temCargo) patch.cargo = cargo;
   if (temNome) patch.nome = nome;
   if (temEmail) patch.email = email;
+  if (temAtivo) patch.ativo = body.ativo;
 
-  const { data: alvo, error } = await admin
-    .from("profiles")
-    .update(patch)
-    .eq("id", body.profileId)
-    .select("id, nome, email, sector, cargo, atendimento_access, atendimento_papel")
-    .maybeSingle();
+  const COLUNAS = "id, nome, email, sector, cargo, ativo, atendimento_access, atendimento_papel";
+
+  // Só define senha ou só gera link não mexe em `profiles` — e um
+  // `.update({})` vazio não tem o que fazer. Nesse caso a linha é apenas
+  // relida, para a tela receber o estado atual do mesmo jeito.
+  const { data: alvo, error } = Object.keys(patch).length
+    ? await admin.from("profiles").update(patch).eq("id", body.profileId).select(COLUNAS).maybeSingle()
+    : await admin.from("profiles").select(COLUNAS).eq("id", body.profileId).maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   if (!alvo) return NextResponse.json({ error: "agente não encontrado" }, { status: 404 });
 
@@ -247,5 +292,68 @@ export async function POST(req: Request) {
     });
   }
 
-  return NextResponse.json({ ok: true, agente: alvo });
+  if (temAtivo && body.ativo !== (antes as { ativo?: boolean }).ativo) {
+    await registrarAuditoria(admin, {
+      ...base,
+      acao: body.ativo ? "reativou" : "desativou",
+      detalhes: { ...alvoDescrito, ativo: body.ativo },
+    });
+  }
+
+  // O VALOR da senha nunca entra no log — só o fato de ter sido trocada,
+  // e por quem. Guardar senha em texto num registro que ninguém apaga
+  // seria criar o problema que a troca existe para resolver.
+  if (temSenha) {
+    await registrarAuditoria(admin, {
+      ...base,
+      acao: "atualizou",
+      detalhes: { ...alvoDescrito, campo: "senha", definida_pela_diretoria: true },
+    });
+  }
+
+  // ---- Link de acesso individual --------------------------------------
+  // É o que o cliente pediu no fluxograma ("usuário/login OU link
+  // individual") e o que dispensa ditar senha por telefone. Serve para o
+  // primeiro acesso e para quem esqueceu — um mecanismo, não dois.
+  let link: string | null = null;
+  if (body.gerarLink) {
+    const destino = new URL("/atendimento", req.url);
+    destino.protocol = "https:";
+    const { data: gerado, error: erroLink } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email: (alvo.email as string),
+      options: { redirectTo: destino.toString() },
+    });
+    if (erroLink || !gerado?.properties?.action_link) {
+      return NextResponse.json(
+        { error: `não foi possível gerar o link: ${erroLink?.message ?? "erro desconhecido"}` },
+        { status: 400 },
+      );
+    }
+
+    // O SUPABASE SUBSTITUI o destino quando ele não está na lista de URLs
+    // permitidas — e devolve o PADRÃO da lista, que não é um endereço
+    // válido. O link sairia "funcionando" e jogaria a pessoa no nada.
+    // Melhor recusar com instrução do que entregar link quebrado.
+    const voltou = new URL(gerado.properties.action_link).searchParams.get("redirect_to") ?? "";
+    if (!voltou.startsWith(destino.origin)) {
+      return NextResponse.json(
+        {
+          error:
+            `o Supabase recusou o destino do link (devolveu "${voltou}"). ` +
+            `Adicione ${destino.origin}/** em Authentication › URL Configuration › Redirect URLs e tente de novo.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    link = gerado.properties.action_link;
+    await registrarAuditoria(admin, {
+      ...base,
+      acao: "atualizou",
+      detalhes: { ...alvoDescrito, campo: "link_de_acesso", gerado: true },
+    });
+  }
+
+  return NextResponse.json({ ok: true, agente: alvo, link });
 }
