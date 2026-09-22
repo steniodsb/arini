@@ -95,7 +95,7 @@ export function AtendimentoInbox({
   minhasEquipes: string[];
 }) {
   const params = useSearchParams();
-  const vistaParam = params.get("vista"); // "central" | "mencoes" | "nao_atendidas" | null
+  const vistaParam = params.get("vista"); // "central" | "minhas" | "mencoes" | "nao_atendidas" | null
   const convParam = params.get("c");
 
   /**
@@ -155,6 +155,8 @@ export function AtendimentoInbox({
   // contato é consulta pontual, não leitura contínua. A preferência de quem
   // prefere vê-lo sempre aberto sobrevive ao recarregar.
   const [painelAberto, setPainelAberto] = useState(false);
+  // Nome sendo editado no cabeçalho. `null` = ninguém editando.
+  const [nomeEditando, setNomeEditando] = useState<string | null>(null);
   useEffect(() => {
     try {
       if (localStorage.getItem("atendimento:painelContato") === "aberto") setPainelAberto(true);
@@ -313,13 +315,30 @@ export function AtendimentoInbox({
     // nulo é a definição, não uma heurística: é a mesma coluna que a RLS
     // usa para decidir quem enxerga o quê (ver 0040).
     if (vista === "central") return conversations.filter((c) => !c.triada_em);
+    // MINHAS: o trabalho que está na minha mão.
+    //
+    // EXISTE PORQUE A CONVERSA ENCAMINHADA SUMIA. A recepção abre na
+    // caixa central, que por definição lista só o que ainda NÃO foi
+    // triado — e triar é exatamente o que encaminhar faz. Quem recebia a
+    // conversa a via desaparecer e não tinha por onde reencontrá-la.
+    //
+    // São DUAS coisas, não uma: encaminhar manda ora para uma PESSOA, ora
+    // para uma FILA. Filtrar só por responsável deixaria de fora tudo o
+    // que cai na fila esperando alguém pegar — que é metade do fluxo.
+    if (vista === "minhas") {
+      return conversations.filter(
+        (c) =>
+          c.responsavel_id === currentUser.id ||
+          (!c.responsavel_id && c.team_id !== null && minhasEquipes.includes(c.team_id)),
+      );
+    }
     if (vista === "mencoes") return conversations.filter((c) => minhasMencoes.has(c.id));
     if (vista === "nao_atendidas") {
       // "Não atendidas" = tem mensagem do cliente e ninguém respondeu ainda.
       return conversations.filter((c) => !c.primeira_resposta_em && c.status !== "resolvida");
     }
     return conversations;
-  }, [conversations, vista, minhasMencoes]);
+  }, [conversations, vista, minhasMencoes, currentUser.id, minhasEquipes]);
 
   const byStatus = useMemo(
     () => porVista.filter((c) => statusFilter === "todas" || c.status === statusFilter),
@@ -437,6 +456,28 @@ export function AtendimentoInbox({
     patchLocal(id, patch);
     const { error } = await supa().from("conversations").update(update).eq("id", id);
     if (error) setNotice({ tipo: "erro", texto: error.message });
+  }
+
+  /**
+   * Dá nome a quem chegou sem nome.
+   *
+   * No WhatsApp o contato costuma entrar só com o número — e aí a lista
+   * inteira vira uma coluna de telefones, impossível de reconhecer. O
+   * nome é gravado na conversa E no lead, quando existe: são as duas
+   * telas onde esse contato aparece, e deixar uma delas para trás faria a
+   * pessoa renomear duas vezes.
+   */
+  async function renomearContato(c: Conversation, nome: string) {
+    const limpo = nome.trim().slice(0, 80);
+    setNomeEditando(null);
+    if (!limpo || limpo === (c.contato_nome ?? "")) return;
+
+    patchLocal(c.id, { contato_nome: limpo });
+    const { error } = await supa().from("conversations").update({ contato_nome: limpo }).eq("id", c.id);
+    if (error) { setNotice({ tipo: "erro", texto: error.message }); return; }
+    if (c.lead_id) {
+      await supa().from("leads").update({ nome: limpo }).eq("id", c.lead_id);
+    }
   }
 
   /**
@@ -849,6 +890,7 @@ export function AtendimentoInbox({
   // ------------------------------------------------------------------
   const tituloVista =
     vista === "central" ? "Caixa central"
+      : vista === "minhas" ? "Minhas conversas"
       : vista === "mencoes" ? "Menções"
       : vista === "nao_atendidas" ? "Não atendidas"
       : "Conversas";
@@ -1206,7 +1248,33 @@ export function AtendimentoInbox({
             <header className="px-3 py-2 border-b bg-card flex items-center justify-between gap-2 flex-wrap shrink-0">
               <div className="min-w-0">
                 <div className="font-semibold text-sm truncate flex items-center gap-1.5">
-                  {contactName(selected)}
+                  {nomeEditando !== null ? (
+                    <input
+                      autoFocus
+                      value={nomeEditando}
+                      maxLength={80}
+                      placeholder="Nome do contato"
+                      onChange={(e) => setNomeEditando(e.target.value)}
+                      onBlur={(e) => void renomearContato(selected, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") setNomeEditando(null);
+                      }}
+                      className="w-48 rounded-md border bg-background px-1.5 py-0.5 text-sm font-normal outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setNomeEditando(selected.contato_nome ?? "")}
+                      title="Clique para dar nome a este contato"
+                      className="truncate rounded px-0.5 hover:bg-muted"
+                    >
+                      {contactName(selected)}
+                      {!selected.contato_nome && (
+                        <span className="ml-1 text-[10px] font-normal text-acao">+ nome</span>
+                      )}
+                    </button>
+                  )}
                   {selected.prioridade && <PrioridadeChip prioridade={selected.prioridade} />}
                   <StatusChip status={selected.status} />
                 </div>

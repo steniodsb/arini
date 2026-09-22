@@ -41,7 +41,7 @@ import { useState } from "react";
 import {
   Inbox, MessageSquare, AtSign, AlarmClock, Radio, Users, Building2,
   BarChart3, Megaphone, Settings, ChevronDown, ChevronRight, Zap,
-  LifeBuoy, Bot, PanelLeftClose, PanelLeftOpen, Sparkles,
+  LifeBuoy, Bot, PanelLeftClose, PanelLeftOpen, Sparkles, UserCheck,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
@@ -67,12 +67,27 @@ const CAIXA_CENTRAL: Item = {
   destaque: true,
 };
 
+/**
+ * MINHAS CONVERSAS — o que está atribuído a quem está olhando.
+ *
+ * Sem este item a conversa encaminhada sumia: a recepção abre na caixa
+ * central, que só lista o que ainda não foi triado, e encaminhar é o que
+ * tira a conversa de lá. Quem recebia não tinha por onde chegar nela.
+ */
+const MINHAS: Item = {
+  href: "/atendimento?vista=minhas",
+  label: "Minhas conversas",
+  icon: UserCheck,
+  destaque: true,
+};
+
 const CONVERSAS: Item = {
   href: "/atendimento",
   label: "Conversas",
   icon: MessageSquare,
   children: [
     { href: "/atendimento", label: "Todas as conversas", icon: Inbox },
+    { href: "/atendimento?vista=minhas", label: "Minhas conversas", icon: UserCheck },
     { href: "/atendimento?vista=mencoes", label: "Menções", icon: AtSign },
     { href: "/atendimento?vista=nao_atendidas", label: "Não atendidas", icon: AlarmClock },
   ],
@@ -98,9 +113,9 @@ const ITENS_ADMIN: Item[] = [
   { href: "/atendimento/configuracoes", label: "Configurações", icon: Settings },
 ];
 
-const ITENS_RECEPCAO: Item[] = [CAIXA_CENTRAL, CONVERSAS, CONTATOS, EMPRESAS, AJUDA];
+const ITENS_RECEPCAO: Item[] = [CAIXA_CENTRAL, MINHAS, CONVERSAS, CONTATOS, EMPRESAS, AJUDA];
 
-const ITENS_ATENDENTE: Item[] = [CONVERSAS, CONTATOS, EMPRESAS, MACROS, AJUDA];
+const ITENS_ATENDENTE: Item[] = [MINHAS, CONVERSAS, CONTATOS, EMPRESAS, MACROS, AJUDA];
 
 function itensDoPapel(papel: AtendimentoPapel | undefined): Item[] {
   if (papel === "recepcao") return ITENS_RECEPCAO;
