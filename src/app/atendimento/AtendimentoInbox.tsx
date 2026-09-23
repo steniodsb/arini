@@ -225,13 +225,33 @@ export function AtendimentoInbox({
   // ------------------------------------------------------------------
   // Carregamento
   // ------------------------------------------------------------------
+  /**
+   * Qual conversa foi pedida por ÚLTIMO. Guarda contra resposta atrasada.
+   *
+   * O BUG QUE ISTO CONSERTA, relatado em 23/09: "estou respondendo em uma
+   * conversa e depois aparece que estou conversando com outra pessoa".
+   *
+   * A sequência: o polling de 30s dispara `loadMessages` para a conversa
+   * A; antes de a resposta chegar, o atendente clica na B; a resposta de A
+   * chega atrasada e chama `setMessages` sem perguntar nada — e o fio
+   * passa a mostrar as mensagens de A sob o cabeçalho da B.
+   *
+   * Não é teórico nem raro: o polling garante uma requisição em voo a cada
+   * 30 segundos, então basta trocar de conversa na hora errada. E o dano
+   * não é só visual — a pessoa escreve para quem ela está LENDO.
+   */
+  const conversaPedida = useRef<string | null>(null);
+
   const loadMessages = useCallback(async (convId: string) => {
+    conversaPedida.current = convId;
     const supabase = createSupabaseBrowser();
     const { data } = await supabase
       .from("messages")
       .select("*")
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
+    // Chegou tarde: já estamos em outra conversa. Descarta.
+    if (conversaPedida.current !== convId) return;
     setMessages((data ?? []) as Message[]);
   }, []);
 
