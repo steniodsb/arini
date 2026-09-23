@@ -106,7 +106,7 @@ export const MessageThread = forwardRef<
             {/* Nota interna — centralizada, cor de alerta, nunca vai ao cliente */}
             {m.interna ? (
               <div className="flex justify-center group">
-                <div className="max-w-[80%] rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 px-3 py-2 text-sm">
+                <div className="max-w-[80%] rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 px-3 py-2 text-[15px] leading-snug">
                   <div className="flex items-center gap-1 text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-400 mb-0.5">
                     <StickyNote size={11} /> Nota interna{autor ? ` · ${autor}` : ""}
                   </div>
@@ -145,7 +145,7 @@ export const MessageThread = forwardRef<
                       </span>
                     )}
                     <div
-                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-[15px] leading-snug ${
                         saida
                           ? "bg-bolha-out text-bolha-out-foreground rounded-br-sm"
                           : "bg-card border rounded-bl-sm"
@@ -190,7 +190,7 @@ export const MessageThread = forwardRef<
                       )}
 
                       <div
-                        className={`mt-1 flex items-center gap-1 text-[10px] ${
+                        className={`mt-1 flex items-center gap-1 text-[11px] ${
                           saida ? "opacity-70 justify-end" : "text-muted-foreground"
                         }`}
                       >

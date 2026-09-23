@@ -13,6 +13,9 @@
 // atendimento_channels.config e nunca exposta ao browser.
 // =====================================================================
 
+import { MSG_LIGACAO_PADRAO } from "@/lib/evolution-padroes";
+export { MSG_LIGACAO_PADRAO };
+
 export type EvolutionConfig = {
   base_url: string;
   api_key: string;
@@ -44,7 +47,7 @@ export type EvolutionSettings = {
 
 export const EVOLUTION_SETTINGS_PADRAO: EvolutionSettings = {
   rejectCall: true,
-  msgCall: "Não atendemos ligações por aqui. Pode escrever que respondemos.",
+  msgCall: MSG_LIGACAO_PADRAO,
   groupsIgnore: true,
   alwaysOnline: false,
   readMessages: true,
@@ -252,7 +255,12 @@ export async function setSettings(
 ): Promise<void> {
   await call(cfg, `/settings/set/${encodeURIComponent(cfg.instance_name)}`, {
     method: "POST",
-    body: { ...settings },
+    // `readStatus` é OBRIGATÓRIO na 2.3.7 — sem ele o endpoint responde
+    // 400 ("instance requires property readStatus"). Descoberto em 23/09
+    // ao sincronizar a mensagem de ligação: o botão Salvar da tela
+    // falhava do mesmo jeito, e era por isso que o texto nunca mudava.
+    // `false` = não marcar os status (stories) dos contatos como vistos.
+    body: { readStatus: false, ...settings },
   });
 }
 
@@ -402,6 +410,34 @@ export async function sendMedia(
     },
   );
   return { id: res.key?.id ?? null };
+}
+
+/** Uma mensagem recebida, identificada como o WhatsApp a identifica. */
+export type ChaveMensagem = { remoteJid: string; fromMe: boolean; id: string };
+
+/**
+ * Marca mensagens RECEBIDAS como lidas no WhatsApp — o "visto azul".
+ *
+ * Por que existe: a opção `readMessages` da instância só marca como lida
+ * quando alguém RESPONDE. Quem lia a conversa na plataforma e ainda ia
+ * responder deixava o cliente vendo dois tiques cinza — e o celular da
+ * imobiliária acumulando "não lidas" de coisa que já tinha sido lida.
+ * Aqui é o mesmo gesto do WhatsApp Web: abriu, leu.
+ */
+export async function markMessagesAsRead(
+  cfg: EvolutionConfig,
+  chaves: ChaveMensagem[],
+): Promise<boolean> {
+  if (chaves.length === 0) return true;
+  try {
+    await call(cfg, `/chat/markMessageAsRead/${encodeURIComponent(cfg.instance_name)}`, {
+      method: "POST",
+      body: { readMessages: chaves },
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** A Evolution espera só dígitos (DDI+DDD+número), sem +, espaço ou traço. */

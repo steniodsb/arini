@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Users, UsersRound, Tag, Zap, Radio, Inbox, Clock, Timer, Star,
   SlidersHorizontal, Workflow, ListOrdered, UserCog, Webhook, KeyRound, ScrollText, MessageCircle, Filter, Building2, FileText, Code2, Bot, Rocket, Palette,
+  PhoneOff,
 } from "lucide-react";
 
 const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: typeof Users }[] }[] = [
@@ -29,6 +30,9 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: type
     itens: [
       { href: "/atendimento/configuracoes/caixas", label: "Caixas de entrada", icon: Inbox },
       { href: "/atendimento/canais", label: "Conexões", icon: Radio },
+      // A mensagem de "não atendemos ligação" sempre viveu dentro do canal;
+      // o Carlos procurou e não achou (23/09). Aqui ela tem nome no menu.
+      { href: "/atendimento/configuracoes/ligacoes", label: "Ligações recebidas", icon: PhoneOff },
       { href: "/atendimento/configuracoes/widget", label: "Chat do site", icon: MessageCircle },
       { href: "/atendimento/configuracoes/templates", label: "Templates do WhatsApp", icon: FileText },
       { href: "/atendimento/configuracoes/api-canal", label: "Canal via API", icon: Code2 },

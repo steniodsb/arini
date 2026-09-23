@@ -256,14 +256,32 @@ export function AtendimentoInbox({
     setMessages((data ?? []) as Message[]);
   }, []);
 
+  /**
+   * Duas consultas, não uma: as ATIVAS e as ENCERRADAS. Numa lista só,
+   * ordenada por atividade e cortada em 300, as encerradas (por definição
+   * as mais paradas) eram as primeiras a cair fora — e a caixa
+   * "Encerradas" mostrava só as fechadas hoje. Mesmo par de consultas de
+   * `page.tsx`.
+   */
   const refreshConversations = useCallback(async () => {
     const supabase = createSupabaseBrowser();
-    const { data } = await supabase
-      .from("conversations")
-      .select("*")
-      .order("last_message_at", { ascending: false })
-      .limit(300);
-    if (data) setConversations(data as Conversation[]);
+    const [{ data: ativas }, { data: encerradas }] = await Promise.all([
+      supabase
+        .from("conversations")
+        .select("*")
+        .neq("status", "resolvida")
+        .order("last_message_at", { ascending: false })
+        .limit(300),
+      supabase
+        .from("conversations")
+        .select("*")
+        .eq("status", "resolvida")
+        .order("resolvida_em", { ascending: false, nullsFirst: false })
+        .limit(200),
+    ]);
+    if (ativas || encerradas) {
+      setConversations([...(ativas ?? []), ...(encerradas ?? [])] as Conversation[]);
+    }
   }, []);
 
   // Quais conversas têm nota interna me mencionando (aba "Menções").
@@ -301,6 +319,15 @@ export function AtendimentoInbox({
       .then(() => {
         patchLocal(selectedId, { unread_count: 0, marcada_nao_lida: false });
       });
+    // E AVISA O WHATSAPP que foi lida — o visto azul para o cliente e o
+    // "não lida" saindo do celular da imobiliária. Só quando havia algo
+    // por ler: trocar de conversa não pode virar uma chamada por clique.
+    // Best-effort: falhar aqui não impede de ler nem de responder.
+    const tinhaNaoLidas = (conversations.find((c) => c.id === selectedId)?.unread_count ?? 0) > 0;
+    if (tinhaNaoLidas) {
+      void fetch(`/api/atendimento/conversas/${selectedId}/lida`, { method: "POST" }).catch(() => undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, loadMessages]);
 
   // Tempo real + fallback por polling.
@@ -446,6 +473,13 @@ export function AtendimentoInbox({
     if (canalFiltro !== "todos") vistos.add(canalFiltro as ConversationChannel);
     return (Object.keys(CHANNEL_LABELS) as ConversationChannel[]).filter((ch) => vistos.has(ch));
   }, [porVista, canalFiltro]);
+
+  /** As filas que têm conversa encerrada — viram abas na vista Encerradas. */
+  const filasComEncerrada = useMemo(() => {
+    if (vista !== "encerradas") return [] as AtendimentoTeam[];
+    const ids = new Set(porVista.map((c) => c.team_id).filter(Boolean));
+    return teams.filter((t) => ids.has(t.id));
+  }, [vista, porVista, teams]);
 
   const filtered = useMemo(() => {
     const lista = byStatus.filter((c) => {
@@ -1106,6 +1140,41 @@ export function AtendimentoInbox({
             os cinco canais deixariam três zeradas para sempre em quem usa
             só WhatsApp, que é ruído no lugar de organização.
           */}
+          {/* ENCERRADAS POR RAMAL. "Tanto uma caixa geral quanto uma caixa
+              do próprio ramal" (Carlos, 23/09). É o mesmo `equipeFiltro`
+              do painel de filtros, em abas — trocar de aba é trocar o
+              filtro. Só aparecem filas que têm encerrada. */}
+          {vista === "encerradas" && filasComEncerrada.length > 0 && (
+            <div className="px-3 pb-1.5">
+              <div role="tablist" aria-label="Encerradas por ramal" className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+                {([["todas", "Geral"], ...filasComEncerrada.map((t) => [t.id, t.nome] as [string, string])] as [string, string][]).map(([id, rotulo]) => {
+                  const ativo = equipeFiltro === id;
+                  const n = id === "todas"
+                    ? porVista.length
+                    : porVista.filter((c) => c.team_id === id).length;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={ativo}
+                      onClick={() => setEquipeFiltro(id)}
+                      title={rotulo}
+                      className={`shrink-0 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors max-w-[160px] ${
+                        ativo
+                          ? "bg-arini text-white border-arini dark:bg-gold dark:text-arini dark:border-gold"
+                          : "bg-transparent text-muted-foreground border-transparent hover:bg-muted"
+                      }`}
+                    >
+                      <span className="truncate">{rotulo}</span>
+                      <span className={ativo ? "opacity-80" : "opacity-60"}>{n}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {canaisComConversa.length > 1 && (
             <div className="px-3 pb-1.5">
               <div
@@ -1208,7 +1277,7 @@ export function AtendimentoInbox({
               </button>
               <span className="text-[11px] text-muted-foreground">{selecionadas.size} selecionada(s)</span>
               <div className="ml-auto flex items-center gap-0.5">
-                <AcaoMassa titulo="Resolver" disabled={!selecionadas.size} onClick={() => void massaAtualizar({ status: "resolvida", resolvida_em: new Date().toISOString(), resolvida_por: currentUser.id })}>
+                <AcaoMassa titulo="Encerrar" disabled={!selecionadas.size} onClick={() => void massaAtualizar({ status: "resolvida", resolvida_em: new Date().toISOString(), resolvida_por: currentUser.id })}>
                   <Check size={14} />
                 </AcaoMassa>
                 <AcaoMassa titulo="Adiar 3 h" disabled={!selecionadas.size} onClick={() => void massaAtualizar({ status: "adiada", snoozed_until: new Date(Date.now() + 3 * 3600_000).toISOString() })}>
@@ -1493,8 +1562,11 @@ export function AtendimentoInbox({
                     >
                       <Clock size={14} />
                     </Button>
-                    <Button type="button" size="sm" variant="gold" onClick={() => void mudarStatus("resolvida")} title="Alt + R">
-                      <Check size={14} /> Resolver
+                    {/* "Encerrar" é a palavra do Carlos ("o atendente
+                        conseguir encerrar o atendimento"). O status
+                        continua `resolvida` no banco e nos relatórios. */}
+                    <Button type="button" size="sm" variant="gold" onClick={() => void mudarStatus("resolvida")} title="Encerrar atendimento (Alt + R)">
+                      <Check size={14} /> Encerrar
                     </Button>
                   </>
                 ) : (
@@ -1638,6 +1710,7 @@ export function AtendimentoInbox({
                 coisas. */}
             {!(mostrarTriagem && papel === "recepcao") && (
               <Composer
+                conversationId={selected.id}
                 cannedResponses={cannedResponses}
                 macros={macros}
                 agents={agents}

@@ -7,6 +7,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   Search, MessageSquare, Users, Building2, BarChart3, Megaphone, Radio,
   Settings, Zap, Sun, Moon, User, LifeBuoy, Bot, CornerDownLeft, Keyboard,
+  CalendarDays, PhoneOff,
 } from "lucide-react";
 
 type Cmd = {
@@ -93,6 +94,8 @@ export function CommandBar() {
     return [
       { id: "conv", label: "Ir para Conversas", icon: MessageSquare, run: nav("/atendimento"), grupo: "Navegação" },
       { id: "cont", label: "Ir para Contatos", icon: Users, run: nav("/atendimento/contatos"), grupo: "Navegação" },
+      { id: "agenda", label: "Ir para Agenda", icon: CalendarDays, run: nav("/atendimento/agenda"), grupo: "Navegação" },
+      { id: "lig", label: "Mensagem para ligações recebidas", icon: PhoneOff, run: nav("/atendimento/configuracoes/ligacoes"), grupo: "Navegação" },
       { id: "emp", label: "Ir para Empresas", icon: Building2, run: nav("/atendimento/empresas"), grupo: "Navegação" },
       { id: "rel", label: "Ir para Relatórios", icon: BarChart3, run: nav("/atendimento/relatorios"), grupo: "Navegação" },
       { id: "camp", label: "Ir para Campanhas", icon: Megaphone, run: nav("/atendimento/campanhas"), grupo: "Navegação" },

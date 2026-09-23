@@ -42,6 +42,7 @@ import {
   Inbox, MessageSquare, AtSign, AlarmClock, Radio, Users, Building2,
   BarChart3, Megaphone, Settings, ChevronDown, ChevronRight, Zap,
   LifeBuoy, Bot, PanelLeftClose, PanelLeftOpen, Sparkles, UserCheck, Menu, CheckCheck,
+  CalendarDays,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
@@ -95,6 +96,13 @@ const CONVERSAS: Item = {
 };
 
 const CONTATOS: Item = { href: "/atendimento/contatos", label: "Contatos", icon: Users };
+/**
+ * AGENDA — a mesma do CRM, servida dentro do atendimento. Relatado em
+ * 23/09: "não está aparecendo a opção de agendamento vinculada ao
+ * sistema". Ela existia, mas só em crm.<domínio>/admin/agenda — outro
+ * host, outro login, e sem link em lugar nenhum daqui.
+ */
+const AGENDA: Item = { href: "/atendimento/agenda", label: "Agenda", icon: CalendarDays };
 const EMPRESAS: Item = { href: "/atendimento/empresas", label: "Empresas", icon: Building2 };
 const MACROS: Item = { href: "/atendimento/macros", label: "Macros", icon: Zap };
 const AJUDA: Item = { href: "/atendimento/ajuda", label: "Central de Ajuda", icon: LifeBuoy };
@@ -105,6 +113,7 @@ const ITENS_ADMIN: Item[] = [
   CONVERSAS,
   { href: "/atendimento/canais", label: "Canais", icon: Radio },
   CONTATOS,
+  AGENDA,
   EMPRESAS,
   { href: "/atendimento/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/atendimento/campanhas", label: "Campanhas", icon: Megaphone },
@@ -114,9 +123,9 @@ const ITENS_ADMIN: Item[] = [
   { href: "/atendimento/configuracoes", label: "Configurações", icon: Settings },
 ];
 
-const ITENS_RECEPCAO: Item[] = [CAIXA_CENTRAL, MINHAS, CONVERSAS, CONTATOS, EMPRESAS, AJUDA];
+const ITENS_RECEPCAO: Item[] = [CAIXA_CENTRAL, MINHAS, CONVERSAS, CONTATOS, AGENDA, EMPRESAS, AJUDA];
 
-const ITENS_ATENDENTE: Item[] = [MINHAS, CONVERSAS, CONTATOS, EMPRESAS, MACROS, AJUDA];
+const ITENS_ATENDENTE: Item[] = [MINHAS, CONVERSAS, CONTATOS, AGENDA, EMPRESAS, MACROS, AJUDA];
 
 function itensDoPapel(papel: AtendimentoPapel | undefined): Item[] {
   if (papel === "recepcao") return ITENS_RECEPCAO;

@@ -18,6 +18,7 @@ import {
   deleteWebhook as tgDeleteWebhook,
 } from "@/lib/telegram";
 import type { ChannelStatus } from "@/lib/types";
+import { MSG_LIGACAO_MAX } from "@/lib/evolution-padroes";
 
 /**
  * Ações de conexão de um canal: conectar | status | desconectar.
@@ -154,6 +155,14 @@ export async function POST(
           // levar uma chamada cortada sem explicação nenhuma.
           msgCall: (body.msgCall ?? opcoes.msgCall).trim() || EVOLUTION_SETTINGS_PADRAO.msgCall,
         };
+        // A coluna da Evolution é varchar(100): acima disso ela responde
+        // 500 e não grava nada. Melhor um erro que explica.
+        if (novas.msgCall.length > MSG_LIGACAO_MAX) {
+          return NextResponse.json(
+            { error: `a mensagem de ligação tem no máximo ${MSG_LIGACAO_MAX} caracteres (a Evolution recusa acima disso)` },
+            { status: 400 },
+          );
+        }
         // A Evolution primeiro: se ela recusar, não gravamos localmente uma
         // configuração que não vale na prática — a tela mentiria.
         await setSettings(cfg, novas);

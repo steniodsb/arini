@@ -222,9 +222,17 @@ export function AgendaShell({
   agentes,
   userId,
   sector,
+  basePath = "/admin/agenda",
 }: {
   vista: AgendaVista;
   agrupamento: AgendaAgrupamento;
+  /**
+   * Onde a agenda está montada. O CRM a serve em /admin/agenda; o
+   * Atendimento, em /atendimento/agenda (mesma casca, outro shell). A
+   * navegação por vista/data precisa reescrever a URL do lugar certo —
+   * senão trocar de semana no Atendimento jogaria a pessoa no CRM.
+   */
+  basePath?: string;
   /** AAAA-MM-DD — âncora do período, vinda da URL. */
   dataBase: string;
   inicio: string;
@@ -409,9 +417,9 @@ export function AgendaShell({
       });
       // `replace` (e não `push`) para o botão Voltar do navegador não virar
       // um histórico de cliques em setinha de semana.
-      iniciarTransicao(() => router.replace(`/admin/agenda?${params}`, { scroll: false }));
+      iniciarTransicao(() => router.replace(`${basePath}?${params}`, { scroll: false }));
     },
-    [router, vista, dataBase, agrupamento],
+    [router, vista, dataBase, agrupamento, basePath],
   );
 
   const trocarVista = useCallback(

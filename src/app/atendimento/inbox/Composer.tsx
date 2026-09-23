@@ -15,7 +15,19 @@ export type ArquivoPendente = { file: File; preview: string | null };
  * Composer da conversa: resposta ou nota interna, anexos, emoji, respostas
  * rápidas (com atalho "/"), menções "@" nas notas, macros e assinatura.
  */
+/**
+ * Rascunhos por conversa. O composer é um só para todas as conversas; sem
+ * isto, o texto digitado para a Ana ficava no campo quando se clicava no
+ * Bruno — e saía para o Bruno. É a segunda metade do relato de 23/09
+ * ("aparece que estou conversando com outra pessoa"): a primeira foi a
+ * corrida do fio (ver `AtendimentoInbox`), esta é o campo de texto.
+ * Fica na memória da aba: trocar de conversa e voltar recupera o que
+ * estava sendo escrito, como no WhatsApp.
+ */
+const rascunhos = new Map<string, string>();
+
 export function Composer({
+  conversationId,
   cannedResponses,
   macros,
   agents,
@@ -31,6 +43,8 @@ export function Composer({
   onTextoInjetado,
   provedorCanal,
 }: {
+  /** A conversa aberta — o rascunho é guardado por ela. */
+  conversationId?: string;
   cannedResponses: CannedResponse[];
   macros: AtendimentoMacro[];
   agents: AgentOption[];
@@ -69,6 +83,21 @@ export function Composer({
   const [gravandoAudio, setGravandoAudio] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Troca de conversa: guarda o rascunho da anterior e recupera o da
+  // nova. Anexos, menções e citação NÃO viajam — são da conversa antiga.
+  const conversaAnterior = useRef<string | undefined>(conversationId);
+  useEffect(() => {
+    const antes = conversaAnterior.current;
+    if (antes === conversationId) return;
+    if (antes) rascunhos.set(antes, texto);
+    conversaAnterior.current = conversationId;
+    setTexto(conversationId ? (rascunhos.get(conversationId) ?? "") : "");
+    setArquivos([]);
+    setMentions([]);
+    setMenu(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
 
   // Libera as URLs de preview ao trocar/desmontar (senão vaza memória).
   useEffect(() => {
@@ -146,6 +175,7 @@ export function Composer({
   }
 
   function limpar() {
+    if (conversationId) rascunhos.delete(conversationId);
     setTexto("");
     setArquivos([]);
     setMentions([]);
@@ -460,7 +490,7 @@ export function Composer({
                 ? "Nota interna — só a equipe vê. Use @ para avisar um colega."
                 : "Escreva uma resposta…  (Enter envia · Shift+Enter quebra linha · / respostas rápidas)"
             }
-            className="flex-1 resize-none min-h-[42px] max-h-40 rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/40 disabled:opacity-60"
+            className="flex-1 resize-none min-h-[44px] max-h-40 rounded-2xl border bg-background px-4 py-2.5 text-[15px] leading-snug outline-none focus:ring-2 focus:ring-ring/40 disabled:opacity-60"
           />
         )}
         <Button

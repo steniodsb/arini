@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { errMessage } from "@/lib/utils";
 import type { EvolutionInstanceOptions } from "@/lib/types";
+import { MSG_LIGACAO_PADRAO, MSG_LIGACAO_MAX } from "@/lib/evolution-padroes";
 import { PhoneOff, Save, History, Users, Eye, CheckCheck } from "lucide-react";
 
 // =====================================================================
@@ -24,16 +25,17 @@ import { PhoneOff, Save, History, Users, Eye, CheckCheck } from "lucide-react";
 
 const PADRAO: EvolutionInstanceOptions = {
   rejectCall: true,
-  msgCall: "Não atendemos ligações por aqui. Pode escrever que respondemos.",
+  msgCall: MSG_LIGACAO_PADRAO,
   groupsIgnore: true,
   alwaysOnline: false,
   readMessages: true,
   syncFullHistory: false,
 };
 
-// Limite do WhatsApp para a mensagem de recusa. Acima disso a Evolution
-// aceita e o WhatsApp trunca — melhor barrar aqui, onde dá para explicar.
-const MAX_MSG = 200;
+// Limite da COLUNA da Evolution (varchar 100), não do WhatsApp. Acima
+// disso o salvar responde 500 e nada é gravado — melhor barrar aqui,
+// onde dá para explicar. Ver `MSG_LIGACAO_MAX`.
+const MAX_MSG = MSG_LIGACAO_MAX;
 
 function Chave({
   icone, titulo, descricao, valor, onChange, aviso,
