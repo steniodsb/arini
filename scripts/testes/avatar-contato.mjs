@@ -28,8 +28,24 @@ try {
   // --- ponta a ponta ---
   const { data: ch } = await db.from("atendimento_channels").select("config").eq("provedor", "evolution").limit(1).maybeSingle();
   const cfg = { base_url: ch.config.base_url, api_key: ch.config.api_key, instance_name: ch.config.instance_name };
-  const { data: real } = await db.from("conversations").select("contato_telefone")
-    .eq("canal", "whatsapp").not("contato_telefone", "is", null).order("last_message_at", { ascending: false }).limit(1).maybeSingle();
+  // ESCOLHE UM NUMERO QUE TENHA FOTO PUBLICA. A primeira versao pegava
+  // "quem escreveu por ultimo" e caiu de 9/9 para 5/9 sem ninguem mexer
+  // no codigo: o ultimo a escrever era alguem sem foto (ou com
+  // privacidade), a Evolution devolveu null — corretamente — e o teste
+  // acusou defeito onde nao havia. Um teste que depende do humor do
+  // ultimo cliente nao e teste.
+  const { getProfilePictureUrl } = await import("../../src/lib/evolution.ts");
+  const { data: recentes } = await db.from("conversations").select("contato_telefone")
+    .eq("canal", "whatsapp").not("contato_telefone", "is", null)
+    .order("last_message_at", { ascending: false }).limit(15);
+  let real = null;
+  for (const c of recentes ?? []) {
+    if (await getProfilePictureUrl(cfg, c.contato_telefone)) { real = c; break; }
+  }
+  if (!real) {
+    console.log("  (nenhum dos 15 contatos recentes tem foto publica — ponta a ponta pulada, nao falhada)");
+    throw Object.assign(new Error("SEM_FOTO_DISPONIVEL"), { pular: true });
+  }
 
   const { data: c } = await db.from("conversations").insert({
     canal: "whatsapp", external_id: `zz-avatar-${Date.now()}`, contato_nome: "ZZ Avatar",
@@ -46,13 +62,13 @@ try {
   ok("carimbou o horario", Boolean(lida?.avatar_em));
 
   // A imagem realmente existe no bucket?
-  const r = await fetch(url);
+  const r = url ? await fetch(url) : { ok: false, status: 0, headers: new Headers() };
   ok("a foto abre no nosso storage", r.ok && (r.headers.get("content-type") ?? "").startsWith("image/"), `HTTP ${r.status} ${r.headers.get("content-type")}`);
 
   // Segunda chamada em seguida NAO busca de novo (carimbo recente).
   const denovo = await atualizarAvatarDoContato(db, cfg, { id: convId, contato_telefone: real.contato_telefone, lead_id: null, avatar_em: lida.avatar_em });
   ok("mensagem seguinte nao repete a busca", denovo === null);
-} catch (e) { falhas.push(`ERRO: ${e.message}`); }
+} catch (e) { if (!e.pular) falhas.push(`ERRO: ${e.message}`); }
 finally { if (convId) await db.from("conversations").delete().eq("id", convId); }
 
 console.log(`\n${passou} passaram, ${falhas.length} falharam`);
