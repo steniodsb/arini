@@ -24,6 +24,7 @@ export type MenuRow = {
   max_tentativas: number;
   fila_escape: string | null;
   expira_minutos: number;
+  reenviar_apos_resolver: boolean;
 };
 
 export type OpcaoRow = {
@@ -275,13 +276,49 @@ export function MenuManager({
       )}
 
       <Card titulo="Ligar o menu" descricao="Enquanto estiver desligado, nada muda no WhatsApp.">
-        <Switch
-          checked={menu.ativo}
-          onChange={(v) => campo("ativo", v)}
-          disabled={!podeEditar}
-          label={menu.ativo ? "Ativo — todo cliente novo recebe o menu" : "Desligado"}
-          dica="A partir do momento em que ligar, quem escrever pela primeira vez recebe a saudação e as opções, e a resposta roteia a conversa."
-        />
+        <div className="space-y-3">
+          <Switch
+            checked={menu.ativo}
+            onChange={(v) => campo("ativo", v)}
+            disabled={!podeEditar}
+            label={menu.ativo ? "Ativo" : "Desligado"}
+            dica="A partir do momento em que ligar, quem escrever recebe a saudação e as opções, e a resposta roteia a conversa."
+          />
+
+          {/* QUEM RECEBE O MENU. Duas operações legítimas: quem atende
+              sempre pela mesma pessoa não quer o menu voltando; quem
+              opera por setores quer. */}
+          <div className="space-y-1.5 border-t pt-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Quem recebe o menu
+            </p>
+            {([
+              [false, "Só contato novo",
+               "Quem nunca escreveu antes. Cliente antigo que volta cai direto na caixa central, sem passar pelo ramal."],
+              [true, "Contato novo e cliente que volta",
+               "O cliente antigo recebe o ramal de novo quando escreve DEPOIS de a conversa anterior ter sido marcada como resolvida. Enquanto o atendimento está em andamento, o menu não aparece — ele estaria interrompendo quem já está sendo atendido."],
+            ] as [boolean, string, string][]).map(([valor, titulo, texto]) => (
+              <label
+                key={String(valor)}
+                className={`flex gap-2 rounded-md border p-2 cursor-pointer ${
+                  menu.reenviar_apos_resolver === valor ? "border-acao bg-acao/5" : "hover:bg-muted/50"
+                } ${podeEditar ? "" : "opacity-60 pointer-events-none"}`}
+              >
+                <input
+                  type="radio"
+                  className="mt-0.5"
+                  checked={menu.reenviar_apos_resolver === valor}
+                  onChange={() => campo("reenviar_apos_resolver", valor)}
+                  disabled={!podeEditar}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm">{titulo}</span>
+                  <span className="block text-[11px] leading-snug text-muted-foreground">{texto}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
       </Card>
 
       <Card titulo="As mensagens">

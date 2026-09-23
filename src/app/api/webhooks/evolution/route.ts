@@ -253,7 +253,7 @@ export async function POST(req: Request) {
   // antiga; por isso pega a mais recente em vez de exigir unicidade.
   const { data: achadas } = await admin
     .from("conversations")
-    .select("id, lead_id, unread_count")
+    .select("id, lead_id, unread_count, status")
     .eq("canal", "whatsapp")
     .eq("external_id", telefone)
     .eq("channel_id", canal.id)
@@ -267,18 +267,21 @@ export async function POST(req: Request) {
   if (!convExistente) {
     const { data: orfas } = await admin
       .from("conversations")
-      .select("id, lead_id, unread_count")
+      // Mesmas colunas da busca acima: `status` entra porque é dele que
+      // sai o sinal de "estava resolvida" (0055).
+      .select("id, lead_id, unread_count, status")
       .eq("canal", "whatsapp")
       .eq("external_id", telefone)
       .is("channel_id", null)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(1);
-    if (orfas?.[0]) {
-      convExistente = orfas[0];
+    const orfa = orfas?.[0];
+    if (orfa) {
+      convExistente = orfa;
       await admin
         .from("conversations")
         .update({ channel_id: canal.id })
-        .eq("id", convExistente.id);
+        .eq("id", orfa.id);
     }
   }
 
@@ -444,6 +447,11 @@ export async function POST(req: Request) {
     last_message_preview: preview,
     contato_nome: nome ?? undefined,
   };
+  // A CONVERSA ESTAVA RESOLVIDA? Lido ANTES do patch abaixo, que a
+  // reabre. Depois dele o status diz "aberta" para todo mundo e o sinal
+  // se perde — e é justamente ele que faz o ramal recomeçar (0055).
+  const estavaResolvida = (convExistente?.status as string | null) === "resolvida";
+
   if (!fromMe) {
     patch.unread_count = ((convExistente?.unread_count as number) ?? 0) + 1;
     patch.status = "aberta";
@@ -477,6 +485,7 @@ export async function POST(req: Request) {
       conteudo: conteudo.texto,
       direcao: "in",
       interna: false,
+      reabriuResolvida: estavaResolvida,
     }).catch(() => null);
 
     automacao = await dispararAutomacoes(admin, conversationId, {

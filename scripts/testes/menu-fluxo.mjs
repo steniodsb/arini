@@ -214,6 +214,60 @@ async function main() {
   ok("7. e nada é enviado", enviadas.length === 0);
 
   // =====================================================================
+  // 9. CLIENTE QUE VOLTA — a regra que o Carlos desenhou
+  //
+  // "Depois que for concluído o processo, coloca resolvido. Aí ele vai
+  //  pra base principal. Aí o ramal já chama ele de novo. Agora, enquanto
+  //  não tiver concluído, o ramal dele não aparece."
+  //
+  // As duas metades importam, e a segunda mais: mandar o menu no meio de
+  // um atendimento seria interromper quem já está sendo atendido.
+  // =====================================================================
+  await db.from("atendimento_menus").update({ reenviar_apos_resolver: true }).eq("id", menu.id);
+
+  id = await novaConversa();
+  await corre(id, gat("oi", true));          // menu vai
+  await corre(id, gat("1"));                 // escolhe, roteia
+  enviadas = [];
+
+  // 9a. Conversa EM ANDAMENTO: o cliente escreve de novo, o menu cala.
+  let r9 = await corre(id, gat("mais uma pergunta"));
+  ok("9a. conversa em andamento NÃO recebe o menu de novo", r9.acao === "nada", `acao=${r9.acao}`);
+  ok("9a. e nada é enviado", enviadas.length === 0);
+
+  // 9b. RESOLVIDA e o cliente volta: o ramal recomeça.
+  await db.from("conversations").update({ status: "resolvida" }).eq("id", id);
+  enviadas = [];
+  r9 = await corre(id, { conversaNova: false, conteudo: "oi de novo", direcao: "in", interna: false, reabriuResolvida: true });
+  ok("9b. depois de RESOLVIDA, o menu volta", r9.acao === "enviou", `acao=${r9.acao} erros=${r9.erros}`);
+  ok("9b. e traz os ramais outra vez", enviadas[0]?.includes("1 — Compra e Venda"), enviadas[0]);
+
+  // 9c. O estado recomeça do zero — inclusive as tentativas.
+  const { data: est9 } = await db
+    .from("atendimento_menu_estado").select("tentativas, respondido_em").eq("conversation_id", id).maybeSingle();
+  ok("9c. estado zerado para a nova rodada", est9 && est9.tentativas === 0 && !est9.respondido_em, JSON.stringify(est9));
+
+  // 9d. Ele pode escolher OUTRO setor desta vez.
+  enviadas = [];
+  r9 = await corre(id, gat("2"));
+  ok("9d. escolhe outro ramal na volta", r9.acao === "roteou", `acao=${r9.acao}`);
+  const { data: conv9 } = await db.from("conversations").select("team_id").eq("id", id).maybeSingle();
+  ok("9d. e a conversa muda de fila", conv9.team_id === filas[1].id, `team=${conv9.team_id}`);
+
+  // =====================================================================
+  // 10. COM A OPÇÃO DESLIGADA, nada disso acontece
+  // =====================================================================
+  await db.from("atendimento_menus").update({ reenviar_apos_resolver: false }).eq("id", menu.id);
+  id = await novaConversa();
+  await corre(id, gat("oi", true));
+  await corre(id, gat("1"));
+  await db.from("conversations").update({ status: "resolvida" }).eq("id", id);
+  enviadas = [];
+  const r10 = await corre(id, { conversaNova: false, conteudo: "voltei", direcao: "in", interna: false, reabriuResolvida: true });
+  ok("10. só contato novo: resolvida não reabre o menu", r10.acao === "nada", `acao=${r10.acao}`);
+  ok("10. e nada é enviado", enviadas.length === 0);
+
+  // =====================================================================
   // 8. Mensagem do ATENDENTE não conta como escolha
   // =====================================================================
   id = await novaConversa();

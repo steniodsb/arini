@@ -44,6 +44,7 @@ type Body = {
   max_tentativas?: number;
   fila_escape?: string | null;
   expira_minutos?: number;
+  reenviar_apos_resolver?: boolean;
   opcoes?: OpcaoPayload[];
 };
 
@@ -122,6 +123,9 @@ export async function PUT(req: Request) {
       max_tentativas: Math.min(5, Math.max(1, Number(body.max_tentativas) || 3)),
       fila_escape: body.fila_escape || null,
       expira_minutos: Math.max(1, Number(body.expira_minutos) || 1440),
+      // Só contato novo (false) ou também cliente que volta depois de
+      // resolvido (true). Ver migration 0055.
+      reenviar_apos_resolver: body.reenviar_apos_resolver === true,
     })
     .eq("id", menuId);
   if (erroMenu) return NextResponse.json({ error: erroMenu.message }, { status: 400 });

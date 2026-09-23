@@ -126,7 +126,20 @@ function ctxVariaveis(conversa: ConversaMenu, fila?: string | null) {
 export async function processarMenu(
   admin: SupabaseClient,
   conversationId: string,
-  gatilho: { conversaNova: boolean; conteudo: string | null; direcao: "in" | "out"; interna: boolean },
+  gatilho: {
+    conversaNova: boolean;
+    conteudo: string | null;
+    direcao: "in" | "out";
+    interna: boolean;
+    /**
+     * A conversa estava RESOLVIDA quando esta mensagem chegou.
+     *
+     * Precisa vir de fora porque quem recebe a mensagem já reabre a
+     * conversa (`status = 'aberta'`) antes de chamar o menu — lido aqui,
+     * o status diria sempre "aberta" e o sinal se perderia.
+     */
+    reabriuResolvida?: boolean;
+  },
   opts: { enviar?: Enviar } = {},
 ): Promise<ResultadoMenu> {
   const enviar = opts.enviar ?? enviarMensagem;
@@ -149,6 +162,26 @@ export async function processarMenu(
     .select("conversation_id, menu_id, enviado_em, tentativas, respondido_em")
     .eq("conversation_id", conversationId)
     .maybeSingle();
+
+  // ATENDIMENTO CONCLUÍDO, CLIENTE VOLTOU: o ramal recomeça.
+  //
+  // Numa imobiliária com quinze anos de carteira, o mesmo número volta
+  // muitas vezes — ora para vendas, ora para o despachante. Amarrar o
+  // menu a "contato novo" deixava de fora justamente quem mais escreve.
+  //
+  // O gatilho é a RESOLUÇÃO, não o tempo: enquanto o assunto anterior
+  // está aberto, perguntar "com qual setor você quer falar?" interrompe
+  // alguém que já está falando com um. Por isso `reabriuResolvida`, e
+  // por isso o comportamento é opcional (0055).
+  if (gatilho.reabriuResolvida && !gatilho.conversaNova) {
+    const menuDaCaixa = await menuAtivoDaCaixa(admin, conversa);
+    if (menuDaCaixa?.reenviar_apos_resolver) {
+      // O estado antigo é o registro do menu ANTERIOR. Apagá-lo é o que
+      // permite recomeçar do zero — inclusive as tentativas.
+      await admin.from("atendimento_menu_estado").delete().eq("conversation_id", conversa.id);
+      return enviarMenu(admin, enviar, conversa, erros);
+    }
+  }
 
   // Já respondido: o menu terminou o trabalho dele nesta conversa.
   if (estadoRow?.respondido_em) return NADA;
@@ -175,6 +208,19 @@ interface EstadoRow {
 }
 
 // ---------------------------------------------------------------------
+
+/** O menu ativo da caixa desta conversa, ou null. */
+async function menuAtivoDaCaixa(admin: SupabaseClient, conversa: ConversaMenu) {
+  const caixaId = await resolverCaixa(admin, conversa);
+  if (!caixaId) return null;
+  const { data } = await admin
+    .from("atendimento_menus")
+    .select("id, reenviar_apos_resolver")
+    .eq("inbox_id", caixaId)
+    .eq("ativo", true)
+    .maybeSingle();
+  return data as { id: string; reenviar_apos_resolver: boolean } | null;
+}
 
 async function carregarMenu(admin: SupabaseClient, menuId: string) {
   const { data: menu } = await admin
