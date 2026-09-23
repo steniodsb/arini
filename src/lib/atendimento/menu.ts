@@ -25,7 +25,7 @@ import type { ConversationChannel } from "@/lib/types";
 // =====================================================================
 
 export interface ResultadoMenu {
-  acao: "nada" | "enviou" | "roteou" | "repetiu" | "escapou" | "expirou";
+  acao: "nada" | "enviou" | "roteou" | "repetiu" | "escapou" | "expirou" | "cedeu";
   detalhe?: string;
   /** Enquanto true, quem chamou NÃO deve entregar a mensagem ao bot externo. */
   aguardandoResposta: boolean;
@@ -187,6 +187,31 @@ export async function processarMenu(
   if (estadoRow?.respondido_em) return NADA;
 
   if (estadoRow) {
+    // HUMANO JÁ RESPONDEU DEPOIS DO MENU? Então o menu perdeu a vez.
+    //
+    // O caso que definiu isto (Wilson Moreira, 23/09): menu às 12:23, o
+    // Carlos respondeu pelo celular às 13:14 e 13:16, e às 14:03 os áudios
+    // do cliente receberam "não consegui identificar" ×2 e "Perfeito,
+    // identificamos… Atendimento Geral" — POR CIMA da conversa que o
+    // Carlos estava tendo. Robô falando por cima de gente é o pior
+    // resultado possível deste módulo.
+    //
+    // `remetente = 'atendente'` cobre também o eco `fromMe` do celular: é
+    // assim que o webhook grava a resposta dada pelo aparelho, e é o caso
+    // real — 83% das respostas saem pelo celular.
+    const { count: humanas } = await admin
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("conversation_id", conversationId)
+      .eq("direcao", "out")
+      .eq("remetente", "atendente")
+      .eq("interna", false)
+      .gt("created_at", (estadoRow as EstadoRow).enviado_em);
+    if ((humanas ?? 0) > 0) {
+      await fecharEstado(admin, conversationId, null);
+      return { acao: "cedeu", detalhe: "humano já respondeu", aguardandoResposta: false, erros };
+    }
+
     return responderAoMenu(admin, enviar, conversa, estadoRow as EstadoRow, gatilho.conteudo, erros);
   }
 
@@ -340,14 +365,40 @@ async function responderAoMenu(
     return { acao: "expirou", aguardandoResposta: false, erros };
   }
 
+  // MÍDIA SEM TEXTO (áudio, foto, documento) NÃO É TENTATIVA. Responder
+  // "não consegui identificar a opção" a um áudio é o robô confessando
+  // que não ouviu — e contar isso como erro do cliente é injusto. Fica em
+  // silêncio, e o menu continua aberto para o texto que vier.
+  if (!conteudo?.trim()) {
+    return { acao: "nada", detalhe: "mídia sem texto", aguardandoResposta: true, erros };
+  }
+
   const escolha = interpretarResposta(conteudo, opcoes);
 
   if (escolha) {
     return rotear(admin, enviar, conversa, menu, escolha, erros);
   }
 
-  // Não entendeu. Repete o menu até o teto; depois desiste para não deixar
-  // o cliente em laço com o robô.
+  // RAJADA: o cliente ainda está digitando. Se o menu (ou a repetição)
+  // saiu há menos de 90 s, não responde nem conta — a próxima mensagem
+  // pode ser o número. Só vale para resposta que NÃO casou: um "3" dez
+  // segundos depois do menu é resposta válida e já roteou acima.
+  const { data: ultimoSistema } = await admin
+    .from("messages")
+    .select("created_at")
+    .eq("conversation_id", conversa.id)
+    .eq("direcao", "out")
+    .eq("remetente", "sistema")
+    .eq("interna", false)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (ultimoSistema && Date.now() - new Date(ultimoSistema.created_at as string).getTime() < 90_000) {
+    return { acao: "nada", detalhe: "rajada", aguardandoResposta: true, erros };
+  }
+
+  // Não entendeu. Repete até o teto; depois desiste para não deixar o
+  // cliente em laço com o robô.
   const tentativas = Number(estado.tentativas) + 1;
   const ctx = ctxVariaveis(conversa);
 
@@ -371,12 +422,12 @@ async function responderAoMenu(
 
     await fecharEstado(admin, conversa.id, null);
 
-    const despedida = aplicarVariaveis(
-      (menu.confirmacao as string) || "",
-      ctxVariaveis(conversa, nomeFila),
-    );
-    if (despedida.trim()) await responder(admin, enviar, conversa, despedida, erros);
-
+    // SEM MENSAGEM NO ESCAPE, de propósito. A confirmação do menu diz
+    // "identificamos sua necessidade como {{fila}}" — e aqui ninguém
+    // identificou nada: o cliente escreveu uma frase e o robô desistiu.
+    // Mandar isso é mentir. A frase do cliente já está na conversa, na
+    // fila de escape, e a resposta certa a ela é a de uma pessoa.
+    void nomeFila;
     return { acao: "escapou", aguardandoResposta: false, erros };
   }
 
@@ -385,17 +436,13 @@ async function responderAoMenu(
     .update({ tentativas })
     .eq("conversation_id", conversa.id);
 
-  // Repete SEM a saudação: "Olá! Seja bem-vindo" na terceira vez soa pior
-  // que não responder. Só o cabeçalho e as opções.
-  const texto = aplicarVariaveis(
-    [
-      (menu.nao_entendi as string).trim(),
-      montarTextoMenu({ saudacao: "", cabecalho: menu.cabecalho as string }, null, opcoes),
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
-    ctx,
-  );
+  // Repete SÓ O EMPURRÃO ("responda com o número"), sem a lista de
+  // opções. Reenviar o menu inteiro a cada frase era o "disparo
+  // incontrolável" que o Carlos relatou: metade dos contatos novos
+  // escreve uma frase na primeira resposta, e cada frase trazia o bloco
+  // completo de volta. O cliente já viu as opções; o que falta é um
+  // lembrete de uma linha — e o texto é do Carlos, na tela.
+  const texto = aplicarVariaveis((menu.nao_entendi as string).trim(), ctx);
   if (texto.trim()) await responder(admin, enviar, conversa, texto, erros);
 
   return { acao: "repetiu", detalhe: `tentativa ${tentativas}`, aguardandoResposta: true, erros };

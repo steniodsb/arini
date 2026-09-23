@@ -121,6 +121,12 @@ async function main() {
   }
 
   const gat = (conteudo, conversaNova = false) => ({ conversaNova, conteudo, direcao: "in", interna: false });
+  // Sai da janela de RAJADA (90 s): envelhece o que o sistema mandou por
+  // último. Sem isto, uma frase logo depois do menu é "cliente ainda
+  // digitando" e o motor fica em silêncio de propósito — ver teste 13.
+  const envelhece = async (id) => db.from("messages")
+    .update({ created_at: new Date(Date.now() - 5 * 60_000).toISOString() })
+    .eq("conversation_id", id).eq("remetente", "sistema");
   const corre = (id, g) => processarMenu(db, id, g, { enviar: enviarFalso });
 
   // =====================================================================
@@ -139,19 +145,23 @@ async function main() {
   // =====================================================================
   // 2. Mensagem seguinte que NÃO é opção: repete, não roteia
   // =====================================================================
+  await envelhece(id);
   enviadas = [];
   r = await corre(id, gat("quero saber de um apartamento de 2 quartos"));
   ok("2. frase com número não roteia", r.acao === "repetiu", `acao=${r.acao}`);
   ok("2. repete sem a saudação", !enviadas[0]?.includes("Bem-vindo"), enviadas[0]);
+  ok("2. e SEM a lista de opções (só o empurrão)", !enviadas[0]?.includes("1 — Compra e Venda"), enviadas[0]);
   const { data: conv2 } = await db.from("conversations").select("team_id, triada_em").eq("id", id).maybeSingle();
   ok("2. a conversa continua sem fila", !conv2.team_id && !conv2.triada_em);
 
   // =====================================================================
   // 3. Estourar as tentativas manda para a fila de escape
   // =====================================================================
+  await envelhece(id);
   enviadas = [];
   r = await corre(id, gat("blablabla"));
   ok("3. na 2ª tentativa desiste", r.acao === "escapou", `acao=${r.acao}`);
+  ok("3. escape em silêncio (sem 'identificamos sua necessidade')", enviadas.length === 0, JSON.stringify(enviadas));
   const { data: conv3 } = await db.from("conversations").select("team_id, triada_em").eq("id", id).maybeSingle();
   ok("3. foi para a fila de escape", conv3.team_id === filas[2].id, `team=${conv3.team_id}`);
   ok("3. e saiu da caixa central", Boolean(conv3.triada_em));
@@ -266,6 +276,83 @@ async function main() {
   const r10 = await corre(id, { conversaNova: false, conteudo: "voltei", direcao: "in", interna: false, reabriuResolvida: true });
   ok("10. só contato novo: resolvida não reabre o menu", r10.acao === "nada", `acao=${r10.acao}`);
   ok("10. e nada é enviado", enviadas.length === 0);
+
+  // =====================================================================
+  // 11. HUMANO JÁ RESPONDEU: o menu cede a vez, em silêncio
+  //
+  // Caso real (Wilson Moreira, 23/09): menu 12:23, Carlos respondeu pelo
+  // celular 13:14, e às 14:03 os áudios do cliente levaram "não entendi"
+  // ×2 + "Perfeito, identificamos…" por cima da conversa do Carlos.
+  // =====================================================================
+  await db.from("atendimento_menus").update({ max_tentativas: 3, reenviar_apos_resolver: false }).eq("id", menu.id);
+  id = await novaConversa();
+  await corre(id, gat("oi", true));
+  // O Carlos responde pelo celular: eco fromMe = out / atendente / sem autor.
+  await db.from("messages").insert({
+    conversation_id: id, direcao: "out", remetente: "atendente", autor_id: null,
+    tipo: "texto", conteudo: "Boa tarde! Aqui é o Carlos, me conta o que precisa", interna: false, status: "enviada",
+  });
+  enviadas = [];
+  let r11 = await corre(id, gat("quero ver o apartamento"));
+  ok("11. humano já respondeu → menu CEDE", r11.acao === "cedeu", `acao=${r11.acao}`);
+  ok("11. e não manda 'não entendi' por cima da conversa", enviadas.length === 0, JSON.stringify(enviadas));
+  ok("11. bot externo liberado", r11.aguardandoResposta === false);
+  const { data: est11 } = await db.from("atendimento_menu_estado").select("respondido_em").eq("conversation_id", id).maybeSingle();
+  ok("11. estado fechado", Boolean(est11?.respondido_em));
+  const { data: conv11 } = await db.from("conversations").select("team_id").eq("id", id).maybeSingle();
+  ok("11. e NÃO roteou para lugar nenhum", !conv11.team_id);
+
+  // =====================================================================
+  // 12. MÍDIA SEM TEXTO não é tentativa
+  // =====================================================================
+  id = await novaConversa();
+  await corre(id, gat("oi", true));
+  enviadas = [];
+  const r12 = await corre(id, gat(null));                 // áudio/foto sem legenda
+  ok("12. áudio sem texto: silêncio", r12.acao === "nada" && enviadas.length === 0, `acao=${r12.acao} enviadas=${enviadas.length}`);
+  ok("12. o menu continua aberto", r12.aguardandoResposta === true);
+  const { data: est12 } = await db.from("atendimento_menu_estado").select("tentativas").eq("conversation_id", id).maybeSingle();
+  ok("12. e NÃO contou tentativa", est12?.tentativas === 0, `tentativas=${est12?.tentativas}`);
+
+  // =====================================================================
+  // 13. RAJADA: frase logo depois do menu não conta nem responde…
+  // =====================================================================
+  enviadas = [];
+  const r13 = await corre(id, gat("quero saber do apartamento"));   // < 90 s do menu
+  ok("13. frase logo após o menu: silêncio (cliente ainda digitando)", r13.acao === "nada" && enviadas.length === 0, `acao=${r13.acao}`);
+  const { data: est13 } = await db.from("atendimento_menu_estado").select("tentativas").eq("conversation_id", id).maybeSingle();
+  ok("13. não contou tentativa", est13?.tentativas === 0);
+  // …mas um NÚMERO logo depois do menu é resposta válida e roteia.
+  enviadas = [];
+  const r13b = await corre(id, gat("2"));
+  ok("13. número dentro dos 90 s ROTEIA normalmente", r13b.acao === "roteou", `acao=${r13b.acao}`);
+
+  // =====================================================================
+  // 14. Fora da rajada: repete SÓ o empurrão, sem a lista; escape em silêncio
+  // =====================================================================
+  id = await novaConversa();
+  await corre(id, gat("oi", true));
+  // Envelhece o envio do menu para sair da janela de rajada.
+  await db.from("messages").update({ created_at: new Date(Date.now() - 5 * 60_000).toISOString() })
+    .eq("conversation_id", id).eq("remetente", "sistema");
+  enviadas = [];
+  const r14 = await corre(id, gat("quero saber do apartamento"));
+  ok("14. frase fora da rajada: repete", r14.acao === "repetiu", `acao=${r14.acao}`);
+  ok("14. manda SÓ o empurrão", enviadas[0] === "Não entendi.", JSON.stringify(enviadas[0]));
+  ok("14. SEM reenviar a lista de opções", !enviadas[0]?.includes("1 — Compra e Venda"));
+
+  await db.from("atendimento_menus").update({ max_tentativas: 1 }).eq("id", menu.id);
+  id = await novaConversa();
+  await corre(id, gat("oi", true));
+  await db.from("messages").update({ created_at: new Date(Date.now() - 5 * 60_000).toISOString() })
+    .eq("conversation_id", id).eq("remetente", "sistema");
+  enviadas = [];
+  const r14b = await corre(id, gat("preciso de um contrato de aluguel"));
+  ok("14. com teto 1, a primeira frase já escapa", r14b.acao === "escapou", `acao=${r14b.acao}`);
+  ok("14. e o escape NÃO manda 'identificamos sua necessidade' (mentira)", enviadas.length === 0, JSON.stringify(enviadas));
+  const { data: conv14 } = await db.from("conversations").select("team_id").eq("id", id).maybeSingle();
+  ok("14. mas a conversa foi para a fila de escape", conv14.team_id === filas[2].id);
+  await db.from("atendimento_menus").update({ max_tentativas: 2 }).eq("id", menu.id);
 
   // =====================================================================
   // 8. Mensagem do ATENDENTE não conta como escolha
