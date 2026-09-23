@@ -68,10 +68,20 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string; icon: type
 export function SettingsNav() {
   const pathname = usePathname();
   return (
-    <nav className="w-56 shrink-0 border-r bg-card p-3 space-y-4 overflow-y-auto">
+    // NO CELULAR VIRA FAIXA ROLÁVEL NO TOPO. Como barra lateral fixa, ela
+    // comia 224px de uma tela de 375 e deixava o conteúdo espremido no
+    // que sobrava. Em faixa, todos os itens continuam alcançáveis — basta
+    // arrastar de lado — e a tela inteira fica para o conteúdo.
+    <nav
+      className="w-56 shrink-0 border-r bg-card p-3 space-y-4 overflow-y-auto
+        max-md:w-full max-md:border-r-0 max-md:border-b max-md:p-2
+        max-md:space-y-0 max-md:flex max-md:gap-1 max-md:overflow-x-auto max-md:overflow-y-hidden"
+    >
       {GRUPOS.map((g) => (
-        <div key={g.titulo} className="space-y-0.5">
-          <h2 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-2 pb-1">
+        <div key={g.titulo} className="space-y-0.5 max-md:flex max-md:gap-1 max-md:space-y-0">
+          {/* O título do grupo só faz sentido empilhado; na faixa ele
+              viraria uma palavra solta entre os botões. */}
+          <h2 className="max-md:hidden text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-2 pb-1">
             {g.titulo}
           </h2>
           {g.itens.map((it) => {
@@ -81,13 +91,14 @@ export function SettingsNav() {
               <Link
                 key={it.href}
                 href={it.href}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] ${
+                className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] max-md:whitespace-nowrap max-md:shrink-0 ${
                   active
                     ? "bg-arini/10 text-arini dark:text-gold font-medium dark:bg-gold/15"
                     : "text-foreground/80 hover:bg-muted"
                 }`}
               >
-                <Icon size={14} className="shrink-0" /> <span className="truncate">{it.label}</span>
+                <Icon size={14} className="shrink-0" />{" "}
+                <span className="truncate max-md:overflow-visible">{it.label}</span>
               </Link>
             );
           })}

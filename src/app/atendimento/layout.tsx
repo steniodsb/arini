@@ -52,7 +52,10 @@ export default async function AtendimentoLayout({
             avatarUrl={profile?.avatar_url ?? null}
             papel={papelDoPerfil(profile)}
           />
-          <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
+          {/* `max-md:pt-12` paga o espaço da barra fixa do celular aqui,
+              uma vez só: ela existe em TODAS as telas do atendimento, e
+              repetir esse padding tela a tela seria esquecê-lo numa. */}
+          <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col max-md:pt-12">
             {children}
           </main>
         </div>

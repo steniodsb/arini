@@ -4,7 +4,7 @@ import { SettingsNav } from "./SettingsNav";
 export default async function ConfiguracoesLayout({ children }: { children: React.ReactNode }) {
   await requireAtendimentoUser();
   return (
-    <div className="flex h-full">
+    <div className="flex h-full max-md:flex-col">
       <SettingsNav />
       <div className="flex-1 min-w-0 overflow-y-auto">{children}</div>
     </div>

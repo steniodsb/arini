@@ -34,7 +34,7 @@ import {
   RefreshCw, Check, X, RotateCcw, Clock, Search, SlidersHorizontal, ArrowDownUp,
   CheckSquare, Users2, Flag, Tag as TagIcon, PanelRightClose, PanelRightOpen,
   AlarmClock, Trash2, MessageSquareDot, MailOpen, Volume2, VolumeX, Sparkles,
-  Inbox as InboxIcon, Hand, PartyPopper,
+  Inbox as InboxIcon, Hand, PartyPopper, ArrowLeft,
 } from "lucide-react";
 import { fmtDataHoraBR } from "@/lib/fuso";
 
@@ -113,6 +113,23 @@ export function AtendimentoInbox({
   const [selectedId, setSelectedId] = useState<string | null>(
     convParam ?? initialConversations[0]?.id ?? null,
   );
+  /**
+   * NO CELULAR A TELA ABRE NA LISTA, não dentro de uma conversa.
+   *
+   * A seleção automática da primeira conversa existe para o desktop, onde
+   * o painel da direita ficaria vazio sem ela. No celular só cabe uma
+   * tela por vez, então esse mesmo comportamento joga a pessoa dentro de
+   * um atendimento que ela não escolheu — e some com a lista.
+   *
+   * Roda depois da montagem porque `useState` também é avaliado no
+   * servidor, onde não existe `window` para medir a largura.
+   */
+  useEffect(() => {
+    if (convParam) return; // veio por link direto para uma conversa
+    if (window.matchMedia("(max-width: 767px)").matches) setSelectedId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [minhasMencoes, setMinhasMencoes] = useState<Set<string>>(new Set());
   const [loadingMsgs, setLoadingMsgs] = useState(false);
@@ -936,9 +953,18 @@ export function AtendimentoInbox({
       estoura a altura do pai em vez de rolar dentro dele — é o que faz a
       lista e a thread rolarem cada uma no seu cartão.
     */
-    <div className="flex h-full min-h-0 gap-3 p-3 bg-muted/30 mx-auto w-full max-w-[1800px]">
+    // UMA TELA POR VEZ NO CELULAR. Lado a lado, a lista (340px fixos) e a
+    // conversa somavam mais que a largura do aparelho e saíam do viewport
+    // — onde nada é clicável, porque a página não rola de lado. Aqui a
+    // lista ocupa a tela toda; ao escolher uma conversa, ela dá lugar ao
+    // fio, e o botão de voltar traz a lista de volta.
+    <div className="flex h-full min-h-0 gap-3 p-3 max-md:p-0 max-md:gap-0 bg-muted/30 mx-auto w-full max-w-[1800px]">
       {/* ================= Lista ================= */}
-      <aside className="w-[340px] shrink-0 rounded-2xl border bg-card shadow-sm flex flex-col min-h-0 overflow-hidden">
+      <aside
+        className={`w-[340px] shrink-0 rounded-2xl border bg-card shadow-sm flex-col min-h-0 overflow-hidden
+          max-md:w-full max-md:rounded-none max-md:border-0
+          ${selected ? "max-md:hidden flex" : "flex"}`}
+      >
         <div className="border-b shrink-0">
           <div className="px-3 pt-2.5 pb-1 flex items-center gap-2">
             <h1 className="font-semibold text-[15px] flex-1 truncate">{tituloVista}</h1>
@@ -1207,7 +1233,11 @@ export function AtendimentoInbox({
       {/* O fundo levemente tingido fica: a bolha RECEBIDA usa `card`, então
           um cartão branco puro aqui faria a mensagem do cliente sumir
           dentro do painel. */}
-      <section className="flex-1 min-w-0 flex flex-col bg-muted/20 min-h-0 rounded-2xl border shadow-sm overflow-hidden">
+      <section
+        className={`flex-1 min-w-0 flex-col bg-muted/20 min-h-0 rounded-2xl border shadow-sm overflow-hidden
+          max-md:rounded-none max-md:border-0
+          ${selected ? "flex" : "max-md:hidden flex"}`}
+      >
         {!selected ? (
           naCaixaCentral ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted-foreground">
@@ -1246,6 +1276,16 @@ export function AtendimentoInbox({
         ) : (
           <>
             <header className="px-3 py-2 border-b bg-card flex items-center justify-between gap-2 flex-wrap shrink-0">
+              {/* VOLTAR — só no celular, onde a lista deu lugar ao fio.
+                  Sem ele a pessoa entra na conversa e não tem como sair. */}
+              <button
+                type="button"
+                onClick={() => setSelectedId(null)}
+                aria-label="Voltar para a lista"
+                className="md:hidden -ml-1 shrink-0 rounded-md p-1.5 hover:bg-muted"
+              >
+                <ArrowLeft size={18} />
+              </button>
               <div className="min-w-0">
                 <div className="font-semibold text-sm truncate flex items-center gap-1.5">
                   {nomeEditando !== null ? (

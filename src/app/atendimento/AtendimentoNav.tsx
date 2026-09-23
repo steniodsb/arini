@@ -41,7 +41,7 @@ import { useState } from "react";
 import {
   Inbox, MessageSquare, AtSign, AlarmClock, Radio, Users, Building2,
   BarChart3, Megaphone, Settings, ChevronDown, ChevronRight, Zap,
-  LifeBuoy, Bot, PanelLeftClose, PanelLeftOpen, Sparkles, UserCheck,
+  LifeBuoy, Bot, PanelLeftClose, PanelLeftOpen, Sparkles, UserCheck, Menu,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
@@ -143,6 +143,13 @@ export function AtendimentoNav({
 }) {
   const pathname = usePathname();
   const [colapsada, setColapsada] = useState(false);
+  /**
+   * Gaveta do celular. A navegação ocupa 224px fixos — 60% de uma tela de
+   * 375px — e empurrava a lista de conversas inteira para fora do
+   * viewport, onde nada é clicável porque a pagina nem rola de lado.
+   * No celular ela some e vira sobreposição, aberta pelo botão do topo.
+   */
+  const [gaveta, setGaveta] = useState(false);
   // Submenu de Conversas nasce fechado: "Todas / Menções / Não atendidas"
   // ocupavam três linhas permanentes na sidebar para atalhos que quase
   // ninguém usa no dia a dia — a lista em si já é a tela inicial.
@@ -162,7 +169,7 @@ export function AtendimentoNav({
 
   if (colapsada) {
     return (
-      <nav className="w-14 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground flex flex-col items-center py-3 gap-1">
+      <nav className="hidden md:flex w-14 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground flex-col items-center py-3 gap-1">
         <button
           type="button"
           onClick={() => setColapsada(false)}
@@ -195,7 +202,37 @@ export function AtendimentoNav({
   }
 
   return (
-    <nav className="w-56 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground flex flex-col">
+    <>
+      {/* BARRA DO CELULAR — só aqui existe o botão que abre a gaveta. */}
+      <div className="md:hidden fixed inset-x-0 top-0 z-40 h-12 flex items-center gap-2 border-b border-sidebar-border bg-sidebar px-2 text-sidebar-foreground">
+        <button
+          type="button"
+          onClick={() => setGaveta(true)}
+          aria-label="Abrir menu"
+          className="p-2 rounded-md hover:bg-sidebar-foreground/10"
+        >
+          <Menu size={20} />
+        </button>
+        <span className="font-display text-base">Atendimento</span>
+      </div>
+
+      {/* Fundo escuro: fecha a gaveta ao tocar fora, que é o gesto que
+          todo mundo tenta antes de procurar um botão de fechar. */}
+      {gaveta && (
+        <button
+          type="button"
+          aria-label="Fechar menu"
+          onClick={() => setGaveta(false)}
+          className="md:hidden fixed inset-0 z-40 bg-black/50"
+        />
+      )}
+
+    <nav
+      onClick={() => setGaveta(false)}
+      className={`w-56 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground flex flex-col
+        max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:transition-transform
+        ${gaveta ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}
+    >
       {/* Cabeçalho da conta */}
       <div className="h-12 shrink-0 px-3 flex items-center gap-2 border-b border-sidebar-border">
         {/* A sidebar é verde nos dois temas, então o logo é sempre o de
@@ -287,5 +324,6 @@ export function AtendimentoNav({
         {papel && <span className="ml-auto truncate">{PAPEL_LABELS[papel]}</span>}
       </div>
     </nav>
+    </>
   );
 }
