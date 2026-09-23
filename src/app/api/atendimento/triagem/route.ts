@@ -63,7 +63,14 @@ const ACAO_LOG: Record<AcaoPedido, AcaoTransferencia> = {
 /** Quem pode cada ação. `assumir` fica de fora: ver comentário no uso. */
 const PAPEIS_PERMITIDOS: Record<AcaoPedido, AtendimentoPapel[]> = {
   triagem: ["recepcao", "administrador"],
-  transferencia: ["administrador"],
+  // Atendente e recepção também transferem — é o "delegar em todas as
+  // telas" do Carlos (21/08) e o que resolve "atribuímos para o setor
+  // competente e a conversa não sai da nossa caixa" (23/09): antes, o
+  // seletor de equipe do cabeçalho gravava direto no banco, sem log e sem
+  // tirar o responsável — a conversa mudava de fila e continuava com quem
+  // transferiu. A checagem de alcance (é minha ou da minha fila) está no
+  // caso `transferencia`.
+  transferencia: ["atendente", "recepcao", "administrador"],
   assumir: ["atendente", "recepcao", "administrador"],
   retirar: ["administrador"],
   devolver_central: ["administrador"],
@@ -175,6 +182,48 @@ export async function POST(req: Request) {
       }
       if (Object.keys(patch).length === 0) {
         return NextResponse.json({ error: "nada para transferir" }, { status: 400 });
+      }
+      // Quem não é administrador só transfere o que está na mão dele: a
+      // conversa de que é responsável ou da fila em que está. A RLS já
+      // garante que ele ENXERGA a linha; isto decide se pode MEXER.
+      if (papel !== "administrador") {
+        const minha = deAgente === sessao.user.id;
+        let daMinhaFila = false;
+        if (!minha && deEquipe) {
+          const { data: membro } = await supabase
+            .from("atendimento_team_members")
+            .select("team_id")
+            .eq("team_id", deEquipe)
+            .eq("profile_id", sessao.user.id)
+            .maybeSingle();
+          daMinhaFila = Boolean(membro);
+        }
+        if (!minha && !daMinhaFila) {
+          return NextResponse.json(
+            { error: "você só pode transferir conversas suas ou da sua fila" },
+            { status: 403 },
+          );
+        }
+      }
+      // MUDOU DE FILA E NINGUÉM DISSE QUEM FICA: o responsável atual sai,
+      // a menos que também esteja na fila nova. Sem isto a conversa ia
+      // para o outro setor ainda "com" quem transferiu — e continuava na
+      // caixa dele, que é exatamente a queixa.
+      if (body.teamId !== undefined && body.responsavelId === undefined && deAgente) {
+        let ficaNaNova = false;
+        if (paraEquipe) {
+          const { data: membro } = await createSupabaseAdmin()
+            .from("atendimento_team_members")
+            .select("team_id")
+            .eq("team_id", paraEquipe)
+            .eq("profile_id", deAgente)
+            .maybeSingle();
+          ficaNaNova = Boolean(membro);
+        }
+        if (!ficaNaNova) {
+          paraAgente = null;
+          patch.responsavel_id = null;
+        }
       }
       // Transferir uma conversa que nunca foi triada carimba a triagem: o
       // destino já está definido, então ela não pertence mais à caixa.

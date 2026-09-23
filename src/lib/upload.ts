@@ -130,9 +130,20 @@ export async function uploadAtendimentoMedia(
 ): Promise<{ url: string; key: string; nome: string; mime: string; tamanho: number }> {
   let f = file;
   if (f.type.startsWith("image/")) f = await compressImageFile(f);
-  const { url, key } = await storeMedia(
-    supabase, "property-media", `atendimento/${conversationId}`, f, 0, onByteProgress,
-  );
+  const folder = `atendimento/${conversationId}`;
+  let url: string, key: string;
+  try {
+    ({ url, key } = await storeMedia(supabase, "property-media", folder, f, 0, onByteProgress));
+  } catch (e) {
+    // O PUT direto no R2 depende do CORS do bucket liberar ESTE host — e
+    // em 23/09 ele liberava só o do CRM: todo anexo do atendimento morria
+    // aqui com "erro de rede/CORS". Pelo servidor não há CORS a negociar.
+    // Só cai para cá em falha de rede/CORS/HTTP do upload direto; tamanho
+    // acima do limite e afins continuam sendo erro na hora.
+    const motivo = e instanceof Error ? e.message : String(e);
+    if (!/cors|rede|network|failed to fetch|HTTP \d{3}|preparar upload/i.test(motivo)) throw e;
+    ({ url, key } = await uploadPeloServidor(folder, f, onByteProgress));
+  }
   return {
     url,
     key,
@@ -140,6 +151,40 @@ export async function uploadAtendimentoMedia(
     mime: f.type || "application/octet-stream",
     tamanho: f.size,
   };
+}
+
+/**
+ * Sobe o arquivo pelo NOSSO servidor (`/api/storage/upload`), que grava
+ * no R2 (ou no Supabase Storage). Caminho de contingência do upload
+ * direto — ver o comentário em `uploadAtendimentoMedia`. XHR para manter
+ * a barra de progresso.
+ */
+async function uploadPeloServidor(
+  folder: string,
+  file: File,
+  onFileProgress?: FileProgress,
+): Promise<{ url: string; key: string }> {
+  const form = new FormData();
+  form.append("folder", folder);
+  form.append("file", file, file.name);
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/storage/upload");
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) onFileProgress?.(ev.loaded, ev.total);
+    };
+    xhr.onload = () => {
+      let json: { url?: string; key?: string; error?: string } = {};
+      try { json = JSON.parse(xhr.responseText); } catch { /* corpo vazio */ }
+      if (xhr.status >= 200 && xhr.status < 300 && json.url && json.key) {
+        resolve({ url: json.url, key: json.key });
+      } else {
+        reject(new Error(json.error || `falha no upload pelo servidor (HTTP ${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("erro de rede no upload pelo servidor"));
+    xhr.send(form);
+  });
 }
 
 /** Traduz o MIME do arquivo para o `tipo` da tabela messages. */

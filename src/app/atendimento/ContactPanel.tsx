@@ -25,7 +25,15 @@ type LeadCtx = {
   custom_attributes: Record<string, unknown> | null;
 };
 type PropertyCtx = { codigo: string; titulo: string | null };
-type ConvResumo = { id: string; canal: string; status: string; last_message_at: string; last_message_preview: string | null };
+type ConvResumo = {
+  id: string; canal: string; status: string; last_message_at: string; last_message_preview: string | null;
+  team_id?: string | null; responsavel_id?: string | null;
+};
+type MsgResumo = {
+  id: string; direcao: "in" | "out"; remetente: string; autor_id: string | null; tipo: string;
+  conteudo: string | null; media_url: string | null; media_nome: string | null; interna: boolean;
+  created_at: string; apagada_em: string | null;
+};
 
 function stageLabel(stage: string | null) {
   return LEAD_STAGES.find((s) => s.key === stage)?.label ?? stage ?? "—";
@@ -143,21 +151,37 @@ export function ContactPanel({
     return () => { cancelado = true; };
   }, [conversation.id]);
 
+  // HISTÓRICO DO CONTATO — pela rota, não pela RLS. A RLS mostra ao
+  // atendente só as conversas da fila dele; as anteriores do mesmo
+  // cliente, atendidas por outro setor, ficavam invisíveis — e ele
+  // perguntava de novo o que já tinha sido respondido (relato de 23/09).
+  // A rota libera LEITURA do passado do contato para quem enxerga a
+  // conversa atual. Ver `api/atendimento/contatos/historico`.
   const [anteriores, setAnteriores] = useState<ConvResumo[]>([]);
+  const [historicoAberto, setHistoricoAberto] = useState<string | null>(null);
+  const [historicoMsgs, setHistoricoMsgs] = useState<MsgResumo[] | null>(null);
   useEffect(() => {
-    if (!leadId) { setAnteriores([]); return; }
     let cancelado = false;
-    const supabase = createSupabaseBrowser();
-    void supabase
-      .from("conversations")
-      .select("id, canal, status, last_message_at, last_message_preview")
-      .eq("lead_id", leadId)
-      .neq("id", conversation.id)
-      .order("last_message_at", { ascending: false })
-      .limit(8)
-      .then(({ data }) => { if (!cancelado) setAnteriores((data ?? []) as ConvResumo[]); });
+    setAnteriores([]); setHistoricoAberto(null); setHistoricoMsgs(null);
+    void fetch(`/api/atendimento/contatos/historico?conversa=${conversation.id}`)
+      .then((r) => (r.ok ? r.json() : { conversas: [] }))
+      .then((j: { conversas?: ConvResumo[] }) => { if (!cancelado) setAnteriores(j.conversas ?? []); })
+      .catch(() => undefined);
     return () => { cancelado = true; };
-  }, [leadId, conversation.id]);
+  }, [conversation.id]);
+
+  async function abrirHistorico(id: string) {
+    if (historicoAberto === id) { setHistoricoAberto(null); setHistoricoMsgs(null); return; }
+    setHistoricoAberto(id);
+    setHistoricoMsgs(null);
+    try {
+      const r = await fetch(`/api/atendimento/contatos/historico?conversa=${conversation.id}&mensagens=${id}`);
+      const j = (await r.json()) as { mensagens?: MsgResumo[] };
+      setHistoricoMsgs(j.mensagens ?? []);
+    } catch {
+      setHistoricoMsgs([]);
+    }
+  }
 
   async function adicionarNota() {
     const texto = novaNota.trim();
@@ -313,18 +337,76 @@ export function ContactPanel({
       )}
 
       {anteriores.length > 0 && (
-        <Bloco titulo={`Conversas anteriores (${anteriores.length})`}>
+        <Bloco titulo={`Histórico do contato (${anteriores.length})`} inicialAberto>
+          <p className="text-[11px] text-muted-foreground">
+            Conversas anteriores deste contato, inclusive as de outros setores. Só leitura.
+          </p>
           {anteriores.map((c) => (
-            <Link
-              key={c.id}
-              href={`/atendimento?c=${c.id}`}
-              className="block rounded-md px-2 py-1.5 hover:bg-muted -mx-2"
-            >
-              <div className="text-[11px] font-medium truncate">{c.last_message_preview ?? "—"}</div>
-              <div className="text-[10px] text-muted-foreground">
-                {CHANNEL_LABELS[c.canal as keyof typeof CHANNEL_LABELS] ?? c.canal} · {formatDateTimeBR(c.last_message_at)}
-              </div>
-            </Link>
+            <div key={c.id} className="-mx-2">
+              <button
+                type="button"
+                onClick={() => void abrirHistorico(c.id)}
+                className={`w-full text-left rounded-md px-2 py-1.5 hover:bg-muted ${historicoAberto === c.id ? "bg-muted" : ""}`}
+              >
+                <div className="text-xs font-medium truncate">{c.last_message_preview ?? "—"}</div>
+                <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <span>{CHANNEL_LABELS[c.canal as keyof typeof CHANNEL_LABELS] ?? c.canal}</span>
+                  <span>·</span>
+                  <span>{formatDateTimeBR(c.last_message_at)}</span>
+                  <span>·</span>
+                  <span>{CONVERSATION_STATUS_LABELS[c.status as keyof typeof CONVERSATION_STATUS_LABELS] ?? c.status}</span>
+                  {c.responsavel_id && agentName?.get(c.responsavel_id) && (
+                    <span className="truncate">· {agentName.get(c.responsavel_id)}</span>
+                  )}
+                </div>
+              </button>
+              {historicoAberto === c.id && (
+                <div className="mx-2 mt-1 mb-2 max-h-72 overflow-y-auto rounded-md border bg-chat p-2 space-y-1">
+                  {historicoMsgs === null && (
+                    <p className="text-[11px] text-muted-foreground text-center py-2">Carregando…</p>
+                  )}
+                  {historicoMsgs?.length === 0 && (
+                    <p className="text-[11px] text-muted-foreground text-center py-2">Sem mensagens.</p>
+                  )}
+                  {historicoMsgs?.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`flex ${m.interna ? "justify-center" : m.direcao === "out" ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`max-w-[92%] rounded-lg px-2 py-1 text-xs whitespace-pre-line break-words ${
+                          m.interna
+                            ? "bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200"
+                            : m.direcao === "out"
+                              ? "bg-bolha-out text-bolha-out-foreground"
+                              : "bg-card border"
+                        }`}
+                      >
+                        {m.apagada_em ? (
+                          <span className="italic opacity-60">mensagem apagada</span>
+                        ) : (
+                          <>
+                            {m.media_url && (
+                              <a href={m.media_url} target="_blank" rel="noopener noreferrer" className="underline break-all">
+                                {m.media_nome ?? `[${m.tipo}]`}
+                              </a>
+                            )}
+                            {m.conteudo && <div>{m.conteudo}</div>}
+                          </>
+                        )}
+                        <div className="mt-0.5 text-[10px] opacity-70">
+                          {m.direcao === "out" && m.autor_id && agentName?.get(m.autor_id) ? `${agentName.get(m.autor_id)} · ` : ""}
+                          {formatDateTimeBR(m.created_at)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <Link href={`/atendimento?c=${c.id}`} className="block text-[11px] text-center text-arini dark:text-gold hover:underline pt-1">
+                    Abrir conversa
+                  </Link>
+                </div>
+              )}
+            </div>
           ))}
         </Bloco>
       )}

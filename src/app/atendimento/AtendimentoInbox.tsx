@@ -105,7 +105,12 @@ export function AtendimentoInbox({
    * `recepcao_ve_atribuidas`, pode estar vazia. O administrador abre em
    * "todas" — ele acompanha tudo e escolhe a vista pelo menu.
    */
-  const vista = vistaParam ?? (papel === "recepcao" ? "central" : null);
+  // O administrador também abre na caixa central: ele tria tanto quanto a
+  // recepção (Hayanne: 7 triagens em 3 dias). Abrindo em "Todas" — que por
+  // definição mostra tudo — a conversa que ele acabava de encaminhar
+  // continuava na lista à frente dele: "não sai da nossa caixa" (23/09).
+  // "Todas as conversas" continua a um clique, no menu.
+  const vista = vistaParam ?? (papel === "recepcao" || papel === "administrador" ? "central" : null);
   const naCaixaCentral = vista === "central";
   const podeTriar = papel === "recepcao" || papel === "administrador";
   const ehAdmin = papel === "administrador";
@@ -621,11 +626,56 @@ export function AtendimentoInbox({
     }
   }
 
-  const assign = (agentId: string | null) =>
-    selected && atualizar(selected.id, { responsavel_id: agentId }, { responsavel_id: agentId });
+  /**
+   * Os seletores de EQUIPE e RESPONSÁVEL do cabeçalho passam pela rota de
+   * triagem, não pelo update direto. Três coisas que o update direto não
+   * fazia: registrar em `atendimento_transferencias` (quem mandou para
+   * onde), tirar o responsável quando a fila muda e ele não está na nova,
+   * e — para quem não é administrador — sair da lista de quem
+   * transferiu. Era o "atribuímos para o setor e não sai da nossa caixa".
+   */
+  async function transferirPeloCabecalho(campos: { teamId?: string | null; responsavelId?: string | null }) {
+    if (!selected) return;
+    const conv = selected;
+    const i = filtered.findIndex((c) => c.id === conv.id);
+    const proxima = filtered[i + 1] ?? filtered[i - 1] ?? null;
+    try {
+      const res = await fetch("/api/atendimento/triagem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: conv.id, acao: "transferencia", ...campos }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; conversa?: Conversation };
+      if (!res.ok || !json.conversa) {
+        setNotice({ tipo: "erro", texto: json.error ?? "Não deu para transferir." });
+        return;
+      }
+      const depois = json.conversa;
+      reconciliar(depois);
+      // Saiu do meu alcance? (não sou admin, não é minha e não é da minha
+      // fila). Então some da lista: vai para a próxima, com aviso do
+      // destino — em vez de deixar a pessoa olhando uma conversa que não
+      // é mais dela.
+      const aindaMinha =
+        ehAdmin ||
+        depois.responsavel_id === currentUser.id ||
+        (depois.team_id !== null && minhasEquipes.includes(depois.team_id));
+      const fila = depois.team_id ? teams.find((t) => t.id === depois.team_id)?.nome : null;
+      if (!aindaMinha) {
+        setSelectedId(proxima ? proxima.id : null);
+        setNotice({ tipo: "info", texto: `Conversa encaminhada${fila ? ` para ${fila}` : ""}. Ela saiu da sua lista.` });
+      } else if (campos.teamId !== undefined) {
+        setNotice({ tipo: "info", texto: `Conversa encaminhada${fila ? ` para ${fila}` : ""}.` });
+      }
+      void refreshConversations();
+    } catch {
+      setNotice({ tipo: "erro", texto: "Erro de rede ao transferir." });
+    }
+  }
 
-  const assignTeam = (teamId: string | null) =>
-    selected && atualizar(selected.id, { team_id: teamId }, { team_id: teamId });
+  const assign = (agentId: string | null) => transferirPeloCabecalho({ responsavelId: agentId });
+
+  const assignTeam = (teamId: string | null) => transferirPeloCabecalho({ teamId });
 
   const setPrioridade = (p: ConversationPriority | null) =>
     selected && atualizar(selected.id, { prioridade: p }, { prioridade: p });

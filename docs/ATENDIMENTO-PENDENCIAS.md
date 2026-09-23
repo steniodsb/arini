@@ -24,6 +24,20 @@ Todas as migrações estão aplicadas, incluindo as desta madrugada:
 | `0046` | **Unicidade por conexão** — o que destravou o 2º WhatsApp |
 | `0047` | Renomear/remover etiqueta dentro das conversas |
 
+## 0.5 CORS do R2 — o anexo do atendimento não sobe ⚠️ (5 min, painel da Cloudflare)
+
+Conferido em 23/09/2026 direto no bucket: o CORS libera só
+`https://crm.arininegociosimobiliarios.com.br`. O preflight a partir de
+`https://atendimento.arininegociosimobiliarios.com.br` responde **403**,
+então todo anexo mandado pelo atendimento morria antes de subir — é o
+"não conseguimos anexar documentos" do Carlos.
+
+O código passou a ter contingência (`/api/storage/upload`: o servidor
+grava no R2 quando o PUT direto falha), então o anexo já funciona. Mas o
+caminho direto é melhor (não passa pela nossa banda) — adicione a origem
+no painel: R2 › bucket › Settings › CORS policy, `AllowedOrigins` com os
+dois hosts, `AllowedMethods` PUT/GET, `AllowedHeaders` content-type.
+
 ## 1. Acesso, papel e FILA de cada pessoa ⚠️ BLOQUEANTE (10 min)
 
 Conferido agora: **`admin@arininegociosimobiliarios.com.br` está com
