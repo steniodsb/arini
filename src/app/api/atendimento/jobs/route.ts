@@ -49,12 +49,13 @@ function autorizar(req: Request): { status: number; erro: string } | null {
 
 async function executar() {
   const admin = createSupabaseAdmin();
-  const [despertadas, sla, campanhas] = await Promise.all([
+  const [despertadas, sla, campanhas, encerradas] = await Promise.all([
     despertarAdiadas(admin),
     marcarViolacoesSla(admin),
     processarCampanhas(admin),
+    encerrarInativas(admin),
   ]);
-  return NextResponse.json({ ok: true, despertadas, sla, campanhas });
+  return NextResponse.json({ ok: true, despertadas, sla, campanhas, encerradas });
 }
 
 export async function POST(req: Request) {
@@ -83,6 +84,87 @@ async function despertarAdiadas(admin: Admin): Promise<number> {
     .select("id");
   if (error) return 0;
   return data?.length ?? 0;
+}
+
+// ---------------------------------------------------------------------
+// 1.5 ENCERRAMENTO AUTOMÁTICO — fecha o que parou de andar
+//
+// `atendimento_settings.auto_resolver_dias` existe desde a 0031 e a tela
+// de Conta promete "resolver automaticamente após N dias sem resposta" —
+// mas NENHUMA linha implementava isso. O campo salvava e não acontecia
+// nada. Terceiro campo decorativo encontrado nesta rodada.
+//
+// Isto virou peça obrigatória quando o menu passou a devolver o cliente
+// ao ramal depois de a conversa ser resolvida (0055): sem alguém fechando
+// o que ficou para trás, uma conversa esquecida tranca aquele cliente
+// fora do ramal para sempre.
+//
+// A REGRA QUE NÃO É ÓBVIA: só encerra o que JÁ FOI RESPONDIDO. Fechar
+// sozinho uma conversa que ninguém nunca atendeu faria o sistema esconder
+// a própria falha — o cliente sumiria da tela sem nunca ter sido
+// atendido, e ninguém ficaria sabendo. Essas continuam abertas, visíveis,
+// cobrando alguém. É o comportamento certo mesmo custando mais barulho.
+// ---------------------------------------------------------------------
+async function encerrarInativas(admin: Admin): Promise<{ encerradas: number; dias: number }> {
+  const { data: cfg } = await admin
+    .from("atendimento_settings")
+    .select("auto_resolver_dias")
+    .eq("id", true)
+    .maybeSingle();
+
+  const dias = Number(cfg?.auto_resolver_dias ?? 0);
+  if (!dias || dias <= 0) return { encerradas: 0, dias: 0 };
+
+  const limite = new Date(Date.now() - dias * 24 * 3600_000).toISOString();
+
+  const { data: paradas } = await admin
+    .from("conversations")
+    .select("id")
+    .in("status", ["aberta", "pendente"])
+    .lt("last_message_at", limite)
+    .limit(500);
+  if (!paradas?.length) return { encerradas: 0, dias };
+
+  // Quais delas já receberam resposta de gente. `remetente = 'atendente'`
+  // e não só `direcao = 'out'`: o menu e as automações também escrevem
+  // para fora, e uma conversa que só recebeu o menu automático NÃO foi
+  // atendida.
+  const ids = paradas.map((c) => c.id as string);
+  const { data: respostas } = await admin
+    .from("messages")
+    .select("conversation_id")
+    .in("conversation_id", ids)
+    .eq("direcao", "out")
+    .eq("remetente", "atendente")
+    .eq("interna", false);
+
+  const atendidas = [...new Set((respostas ?? []).map((m) => m.conversation_id as string))];
+  if (!atendidas.length) return { encerradas: 0, dias };
+
+  const agora = new Date().toISOString();
+  const { data: fechadas } = await admin
+    .from("conversations")
+    .update({ status: "resolvida", resolvida_em: agora })
+    .in("id", atendidas)
+    .select("id");
+
+  // Deixa dito na conversa por que ela fechou. Sem isso, o atendente que
+  // voltar semana que vem acha que alguém resolveu e não sabe quem.
+  if (fechadas?.length) {
+    await admin.from("messages").insert(
+      fechadas.map((c) => ({
+        conversation_id: c.id as string,
+        direcao: "out",
+        remetente: "sistema",
+        tipo: "texto",
+        conteudo: `Encerrada automaticamente após ${dias} dia(s) sem movimento.`,
+        interna: true,
+        status: "enviada",
+      })),
+    );
+  }
+
+  return { encerradas: fechadas?.length ?? 0, dias };
 }
 
 // ---------------------------------------------------------------------

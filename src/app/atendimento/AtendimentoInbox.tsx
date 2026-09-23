@@ -95,7 +95,7 @@ export function AtendimentoInbox({
   minhasEquipes: string[];
 }) {
   const params = useSearchParams();
-  const vistaParam = params.get("vista"); // "central" | "minhas" | "mencoes" | "nao_atendidas" | null
+  const vistaParam = params.get("vista"); // "central" | "minhas" | "encerradas" | "mencoes" | "nao_atendidas" | null
   const convParam = params.get("c");
 
   /**
@@ -362,6 +362,14 @@ export function AtendimentoInbox({
     // São DUAS coisas, não uma: encaminhar manda ora para uma PESSOA, ora
     // para uma FILA. Filtrar só por responsável deixaria de fora tudo o
     // que cai na fila esperando alguém pegar — que é metade do fluxo.
+    // ENCERRADAS — onde o atendimento concluído fica guardado.
+    //
+    // Serve como "caixa geral" e como "caixa do ramal" ao mesmo tempo, sem
+    // precisar de duas telas: a RLS já limita o atendente às filas dele,
+    // então para ele esta lista É a do próprio ramal. Para quem vê tudo
+    // (administração), o filtro de fila da própria tela faz o recorte.
+    if (vista === "encerradas") return conversations.filter((c) => c.status === "resolvida");
+
     if (vista === "minhas") {
       return conversations.filter(
         (c) =>
@@ -928,6 +936,7 @@ export function AtendimentoInbox({
   const tituloVista =
     vista === "central" ? "Caixa central"
       : vista === "minhas" ? "Minhas conversas"
+      : vista === "encerradas" ? "Encerradas"
       : vista === "mencoes" ? "Menções"
       : vista === "nao_atendidas" ? "Não atendidas"
       : "Conversas";

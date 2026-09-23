@@ -41,7 +41,7 @@ import { useState } from "react";
 import {
   Inbox, MessageSquare, AtSign, AlarmClock, Radio, Users, Building2,
   BarChart3, Megaphone, Settings, ChevronDown, ChevronRight, Zap,
-  LifeBuoy, Bot, PanelLeftClose, PanelLeftOpen, Sparkles, UserCheck, Menu,
+  LifeBuoy, Bot, PanelLeftClose, PanelLeftOpen, Sparkles, UserCheck, Menu, CheckCheck,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
@@ -88,6 +88,7 @@ const CONVERSAS: Item = {
   children: [
     { href: "/atendimento", label: "Todas as conversas", icon: Inbox },
     { href: "/atendimento?vista=minhas", label: "Minhas conversas", icon: UserCheck },
+    { href: "/atendimento?vista=encerradas", label: "Encerradas", icon: CheckCheck },
     { href: "/atendimento?vista=mencoes", label: "Menções", icon: AtSign },
     { href: "/atendimento?vista=nao_atendidas", label: "Não atendidas", icon: AlarmClock },
   ],
