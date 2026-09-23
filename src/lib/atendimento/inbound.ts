@@ -4,6 +4,8 @@ import { dispararAutomacoes } from "@/lib/atendimento/triggers";
 import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import { processarMenu } from "@/lib/atendimento/menu";
 import { resolverCaixa } from "@/lib/atendimento/caixa";
+import { devolverParaCaixaCentral } from "@/lib/atendimento/reabertura";
+import { nomeDoContato } from "@/lib/atendimento/contato-nome";
 import {
   emitirContatoCriado,
   emitirConversaCriada,
@@ -81,6 +83,11 @@ type ConversaExistente = {
   lead_id: string | null;
   unread_count: number;
   custom_attributes: Record<string, unknown> | null;
+  /** É dele que sai o sinal de "estava encerrada" (0055 / reabertura). */
+  status: string | null;
+  contato_nome: string | null;
+  team_id: string | null;
+  responsavel_id: string | null;
 };
 
 export type ResultadoEntrada =
@@ -272,7 +279,7 @@ export async function registrarMensagemEntrada(
   if (entrada.conversaId) {
     const { data } = await admin
       .from("conversations")
-      .select("id, lead_id, unread_count, custom_attributes")
+      .select("id, lead_id, unread_count, custom_attributes, status, contato_nome, team_id, responsavel_id")
       .eq("id", entrada.conversaId)
       .maybeSingle();
     convExistente = (data as ConversaExistente | null) ?? null;
@@ -280,7 +287,7 @@ export async function registrarMensagemEntrada(
   if (!convExistente) {
     const { data } = await admin
       .from("conversations")
-      .select("id, lead_id, unread_count, custom_attributes")
+      .select("id, lead_id, unread_count, custom_attributes, status, contato_nome, team_id, responsavel_id")
       .eq("canal", canal)
       .eq("external_id", externalIdConversa)
       .maybeSingle();
@@ -436,6 +443,8 @@ export async function registrarMensagemEntrada(
   // ---- 4) Denormaliza o inbox ----------------------------------------
   // Mensagem do cliente sempre conta como não lida e reabre a conversa
   // adiada — o cliente respondeu, o caso voltou a ser urgente.
+  // Lido ANTES do patch, que reabre a conversa e apaga o sinal.
+  const estavaResolvida = convExistente?.status === "resolvida";
   const patch: Record<string, unknown> = {
     last_message_at: new Date().toISOString(),
     last_message_preview: preview,
@@ -443,7 +452,12 @@ export async function registrarMensagemEntrada(
     status: "aberta",
     snoozed_until: null,
   };
-  if (nome) patch.contato_nome = nome;
+  // Mesma regra do WhatsApp: o nome que o provedor manda só PREENCHE o
+  // que está vazio, nunca sobrescreve o que o atendente já corrigiu.
+  const nomeAGravar = nomeDoContato({
+    atual: convExistente?.contato_nome ?? null, pushName: nome, fromMe: false,
+  });
+  if (nomeAGravar) patch.contato_nome = nomeAGravar;
   if (telefone) patch.contato_telefone = telefone;
   if (entrada.atributos && convExistente) {
     // Mescla: os atributos personalizados do agente não podem sumir só
@@ -454,6 +468,16 @@ export async function registrarMensagemEntrada(
     };
   }
   await admin.from("conversations").update(patch).eq("id", conversationId);
+
+  // Encerrada e o cliente voltou: de volta à caixa central, para o ramal
+  // ser escolhido de novo. Ver `lib/atendimento/reabertura.ts`.
+  if (estavaResolvida && convExistente) {
+    await devolverParaCaixaCentral(admin, {
+      id: conversationId,
+      team_id: convExistente.team_id,
+      responsavel_id: convExistente.responsavel_id,
+    });
+  }
 
   if (leadId) {
     await admin
@@ -483,6 +507,7 @@ export async function registrarMensagemEntrada(
     conteudo: texto,
     direcao: "in",
     interna: false,
+    reabriuResolvida: estavaResolvida,
   }).catch(() => null);
 
   // ---- 5) Automações --------------------------------------------------

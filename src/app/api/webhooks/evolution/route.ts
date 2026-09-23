@@ -10,6 +10,8 @@ import { dispararAutomacoes } from "@/lib/atendimento/triggers";
 import { processarMenu } from "@/lib/atendimento/menu";
 import { resolverCaixa } from "@/lib/atendimento/caixa";
 import { atualizarAvatarDoContato } from "@/lib/atendimento/avatar-contato";
+import { nomeDoContato } from "@/lib/atendimento/contato-nome";
+import { devolverParaCaixaCentral } from "@/lib/atendimento/reabertura";
 import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import {
   emitirContatoCriado,
@@ -240,8 +242,6 @@ export async function POST(req: Request) {
     if (dup) return NextResponse.json({ ok: true, duplicate: true });
   }
 
-  const nome = (data.pushName as string) || null;
-
   // 1) Acha-ou-cria a conversa por (canal, external_id do contato, NÚMERO).
   //
   // O `channel_id` faz parte da chave desde que passou a existir mais de
@@ -254,7 +254,7 @@ export async function POST(req: Request) {
   // antiga; por isso pega a mais recente em vez de exigir unicidade.
   const { data: achadas } = await admin
     .from("conversations")
-    .select("id, lead_id, unread_count, status, avatar_em")
+    .select("id, lead_id, unread_count, status, avatar_em, contato_nome, team_id, responsavel_id")
     .eq("canal", "whatsapp")
     .eq("external_id", telefone)
     .eq("channel_id", canal.id)
@@ -270,7 +270,7 @@ export async function POST(req: Request) {
       .from("conversations")
       // Mesmas colunas da busca acima: `status` entra porque é dele que
       // sai o sinal de "estava resolvida" (0055).
-      .select("id, lead_id, unread_count, status, avatar_em")
+      .select("id, lead_id, unread_count, status, avatar_em, contato_nome, team_id, responsavel_id")
       .eq("canal", "whatsapp")
       .eq("external_id", telefone)
       .is("channel_id", null)
@@ -285,6 +285,16 @@ export async function POST(req: Request) {
         .eq("id", orfa.id);
     }
   }
+
+  // O NOME DO CONTATO. Só o pushName de mensagem DO CLIENTE conta, e só
+  // preenche o que está vazio — ver `lib/atendimento/contato-nome.ts`
+  // para o bug que isto conserta (178 conversas chamadas "Arini Negócios
+  // Imobiliários", o nome do próprio número, encontradas em 23/09).
+  const nome = nomeDoContato({
+    atual: (convExistente?.contato_nome as string | null) ?? null,
+    pushName: data.pushName as string | undefined,
+    fromMe,
+  }) ?? null;
 
   let conversationId = convExistente?.id as string | undefined;
   let leadId = (convExistente?.lead_id as string | null) ?? null;
@@ -446,8 +456,8 @@ export async function POST(req: Request) {
   const patch: Record<string, unknown> = {
     last_message_at: new Date().toISOString(),
     last_message_preview: preview,
-    contato_nome: nome ?? undefined,
   };
+  if (nome) patch.contato_nome = nome;
   // A CONVERSA ESTAVA RESOLVIDA? Lido ANTES do patch abaixo, que a
   // reabre. Depois dele o status diz "aberta" para todo mundo e o sinal
   // se perde — e é justamente ele que faz o ramal recomeçar (0055).
@@ -459,6 +469,18 @@ export async function POST(req: Request) {
     patch.snoozed_until = null;
   }
   await admin.from("conversations").update(patch).eq("id", conversationId);
+
+  // ENCERRADA E O CLIENTE VOLTOU: sai do ramal antigo e volta à caixa
+  // central, para escolher o ramal de novo (regra do Carlos, 23/09). Só
+  // mensagem DO CLIENTE reabre; o eco de uma resposta nossa não. Ver
+  // `lib/atendimento/reabertura.ts`.
+  if (!fromMe && estavaResolvida && convExistente) {
+    await devolverParaCaixaCentral(admin, {
+      id: conversationId,
+      team_id: (convExistente.team_id as string | null) ?? null,
+      responsavel_id: (convExistente.responsavel_id as string | null) ?? null,
+    });
+  }
 
   if (leadId) {
     await admin.from("leads")

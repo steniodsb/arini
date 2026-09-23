@@ -93,6 +93,36 @@ A troca de papel passa pela rota `/api/atendimento/agentes`, que confere
 quem está pedindo e registra auditoria. Nunca altere `atendimento_papel`
 direto pelo cliente.
 
+## O ciclo de um atendimento (regra do Carlos, 23/09/2026)
+
+> "A ideia é o atendente conseguir encerrar o atendimento ou o atendimento
+> se encerrar sozinho após um tempo. Assim, toda conversa nova, mesmo que
+> seja de cliente antigo, volta para a caixa inicial até o cliente decidir
+> o ramal. Após decidir o ramal, ela vai pro ramal selecionado até ser
+> encerrada."
+
+```
+Cliente escreve ──► CAIXA CENTRAL ──► menu de ramais ──► RAMAL (fila)
+                        ▲                                    │
+                        │        cliente escreve de novo     │ Encerrar (botão)
+                        │        (mensagem do CLIENTE,       │ ou 3 dias parada
+                        │         não o eco de resposta)     ▼
+                        └───────────────────────────── ENCERRADAS
+                                                     (geral e por ramal)
+```
+
+| Passo | Onde mora |
+|---|---|
+| Encerrar à mão (botão **Encerrar**, Alt+R) | `POST /api/atendimento/conversas/<id>/status` |
+| Encerrar sozinho após N dias sem movimento — **só conversa já respondida por gente** | `lib/atendimento/encerramento.ts`, chamado pelo job e, com folga de 10 min, pela abertura da caixa |
+| Cliente volta depois de encerrada → limpa fila, responsável e triagem; registra `devolver` em `atendimento_transferencias` e uma nota interna | `lib/atendimento/reabertura.ts`, chamado pelo webhook da Evolution e por `inbound.ts` |
+| Menu volta a ser enviado depois de encerrada | `atendimento_menus.reenviar_apos_resolver` (0055; ligado por padrão desde a 0057) |
+| Caixa de **Encerradas**, geral e por ramal | vista `?vista=encerradas`, com abas por fila |
+
+`auto_resolver_dias` (Configurações › Conta) é o "N dias"; 0 desliga.
+Conversa que ninguém nunca respondeu **não** é encerrada pelo tempo — fechar
+sozinho um cliente não atendido esconderia a falha.
+
 ## O que falta configurar (depende do Stenio)
 
 1. **Definir o papel de cada pessoa** em Configurações › Agentes. Hoje só

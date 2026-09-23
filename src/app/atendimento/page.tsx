@@ -7,6 +7,7 @@ import type {
 } from "@/lib/types";
 import { AtendimentoInbox } from "./AtendimentoInbox";
 import { papelDoPerfil } from "@/lib/atendimento/papel";
+import { encerrarInativasComFolga } from "@/lib/atendimento/encerramento";
 
 // A caixa é sempre dinâmica (conversas chegam a todo momento).
 export const dynamic = "force-dynamic";
@@ -23,20 +24,34 @@ export default async function AtendimentoPage() {
     () => undefined,
     () => undefined, // função ainda não aplicada no banco: segue sem quebrar
   );
+  // Encerramento automático sem depender do cron (que em produção pode
+  // não estar ligado): roda no máximo a cada 10 min, em segundo plano.
+  encerrarInativasComFolga(admin);
 
   const [
-    { data: conversations },
+    { data: ativas },
+    { data: encerradas },
     { data: canned },
     { data: agents },
     { data: teams },
     { data: labels },
     { data: macros },
   ] = await Promise.all([
+    // ATIVAS e ENCERRADAS em consultas separadas. Numa lista só, cortada
+    // em 300 por atividade, as encerradas (as mais paradas, por definição)
+    // eram as primeiras a sumir — e a caixa "Encerradas" ficava vazia.
     supabase
       .from("conversations")
       .select("*")
+      .neq("status", "resolvida")
       .order("last_message_at", { ascending: false })
       .limit(300),
+    supabase
+      .from("conversations")
+      .select("*")
+      .eq("status", "resolvida")
+      .order("resolvida_em", { ascending: false, nullsFirst: false })
+      .limit(200),
     supabase.from("canned_responses").select("*").order("titulo"),
     // A RLS de profiles esconde a lista dos não-admins → usa admin p/ montar
     // o seletor de responsável (id, nome e cargo dos atendentes/diretoria).
@@ -112,7 +127,7 @@ export default async function AtendimentoPage() {
       {/* useSearchParams no cliente exige Suspense no App Router. */}
       <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Carregando a caixa…</div>}>
         <AtendimentoInbox
-          initialConversations={(conversations ?? []) as Conversation[]}
+          initialConversations={[...(ativas ?? []), ...(encerradas ?? [])] as Conversation[]}
           cannedResponses={(canned ?? []) as CannedResponse[]}
           agents={(agents ?? []) as AgentOption[]}
           teams={(teams ?? []) as AtendimentoTeam[]}
