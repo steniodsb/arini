@@ -8,6 +8,7 @@ import {
 import { formatDateTimeBR } from "@/lib/utils";
 import { formatarEspera, minutosEsperando, esperaCritica, LIMITE_ESPERA_MIN } from "./espera";
 import { Inbox, Paperclip, Hourglass } from "lucide-react";
+import { AvatarContato } from "@/components/atendimento/AvatarContato";
 
 /** Cor do canal. Exportado para as abas de canal usarem a MESMA bolinha da
  *  lista — duas paletas para a mesma coisa seria pedir para divergirem. */
@@ -146,33 +147,46 @@ export function ConversationList({
                 />
               </label>
             )}
+            {/* LINHA NO FORMATO DO WHATSAPP: foto à esquerda, nome em 15px,
+                prévia em 14px. Os tamanhos anteriores (14/12/10/9px) eram
+                de tabela de sistema, não de lista de conversa — e é a
+                lista que o time lê o dia inteiro. */}
             <button
               type="button"
               onClick={() => onSelecionar(c.id)}
-              className={`flex-1 min-w-0 text-left px-3 py-2.5 flex flex-col gap-1 ${
+              className={`flex-1 min-w-0 text-left px-3 py-2.5 flex items-start gap-3 ${
                 ativa ? "border-l-2 border-l-acao -ml-0.5" : ""
               }`}
             >
+              <span className="relative shrink-0 pt-0.5">
+                <AvatarContato nome={contactName(c)} url={c.avatar_url} tamanho={44} />
+                {/* A bolinha do canal virou selo no canto da foto, como o
+                    WhatsApp faz com o status — sem gastar uma coluna. */}
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-card ${CHANNEL_DOT[c.canal] ?? "bg-gray-400"}`}
+                  title={CHANNEL_LABELS[c.canal]}
+                />
+              </span>
+              <span className="min-w-0 flex-1 flex flex-col gap-0.5">
               <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full shrink-0 ${CHANNEL_DOT[c.canal] ?? "bg-gray-400"}`} />
-                <span className="font-medium text-sm truncate flex-1">{contactName(c)}</span>
+                <span className="font-medium text-[15px] leading-tight truncate flex-1">{contactName(c)}</span>
                 {/* Exceções primeiro: é o que o olho precisa achar antes
                     de ler qualquer nome. */}
                 {c.sla_violado && <SlaChip />}
                 {c.bot_status === "ativo" && <BotChip />}
                 {c.unread_count > 0 && (
-                  <span className="bg-acao text-acao-foreground text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                  <span className="bg-acao text-acao-foreground text-[11px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
                     {c.unread_count}
                   </span>
                 )}
               </div>
 
-              <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                {c.last_message_preview?.startsWith("[") && <Paperclip size={10} className="shrink-0" />}
+              <div className="text-sm text-muted-foreground truncate flex items-center gap-1">
+                {c.last_message_preview?.startsWith("[") && <Paperclip size={12} className="shrink-0" />}
                 {c.last_message_preview ?? "—"}
               </div>
 
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground/80">
                 {c.prioridade && <PrioridadeChip prioridade={c.prioridade} />}
                 {/* "Aberta" é o estado normal: mostrar chip em toda linha
                     seria ruído. Os outros três são desvio e aparecem. */}
@@ -205,6 +219,7 @@ export function ConversationList({
                   )}
                 </div>
               )}
+              </span>
             </button>
           </div>
         );

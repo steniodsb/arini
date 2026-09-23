@@ -290,6 +290,31 @@ export async function getSettings(cfg: EvolutionConfig): Promise<EvolutionSettin
  * alcançar o arquivo, e é por não chamá-lo que toda foto e todo áudio
  * recebidos eram descartados pelo webhook.
  */
+/**
+ * URL da foto de perfil de um número. Devolve null quando o contato não
+ * tem foto ou a esconde (privacidade) — os dois casos voltam como erro
+ * ou campo vazio, e para nós dá no mesmo.
+ *
+ * A URL é da CDN do WhatsApp e EXPIRA (~10 dias): quem chama precisa
+ * baixar e guardar, não linkar. Ver `atendimento/avatar-contato.ts`.
+ */
+export async function getProfilePictureUrl(
+  cfg: EvolutionConfig,
+  numero: string,
+): Promise<string | null> {
+  try {
+    const res = await call<{ profilePictureUrl?: string | null }>(
+      cfg,
+      `/chat/fetchProfilePictureUrl/${encodeURIComponent(cfg.instance_name)}`,
+      { method: "POST", body: { number: numero } },
+    );
+    const url = res?.profilePictureUrl;
+    return typeof url === "string" && url.startsWith("http") ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getMediaBase64(
   cfg: EvolutionConfig,
   messageKey: Record<string, unknown>,

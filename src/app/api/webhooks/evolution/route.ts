@@ -9,6 +9,7 @@ import { guardarBufferRecebido } from "@/lib/atendimento/media-inbound";
 import { dispararAutomacoes } from "@/lib/atendimento/triggers";
 import { processarMenu } from "@/lib/atendimento/menu";
 import { resolverCaixa } from "@/lib/atendimento/caixa";
+import { atualizarAvatarDoContato } from "@/lib/atendimento/avatar-contato";
 import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import {
   emitirContatoCriado,
@@ -253,7 +254,7 @@ export async function POST(req: Request) {
   // antiga; por isso pega a mais recente em vez de exigir unicidade.
   const { data: achadas } = await admin
     .from("conversations")
-    .select("id, lead_id, unread_count, status")
+    .select("id, lead_id, unread_count, status, avatar_em")
     .eq("canal", "whatsapp")
     .eq("external_id", telefone)
     .eq("channel_id", canal.id)
@@ -269,7 +270,7 @@ export async function POST(req: Request) {
       .from("conversations")
       // Mesmas colunas da busca acima: `status` entra porque é dele que
       // sai o sinal de "estava resolvida" (0055).
-      .select("id, lead_id, unread_count, status")
+      .select("id, lead_id, unread_count, status, avatar_em")
       .eq("canal", "whatsapp")
       .eq("external_id", telefone)
       .is("channel_id", null)
@@ -473,6 +474,20 @@ export async function POST(req: Request) {
   //    nossa (fromMe) não deve reprocessar boas-vindas nem reatribuir.
   let automacao: Awaited<ReturnType<typeof dispararAutomacoes>> | null = null;
   if (!fromMe) {
+    // 4.4) FOTO DO CONTATO. Só quando ele escreve (não há varredura), e só
+    //      se a que temos tiver mais de 30 dias. Best-effort com prazo
+    //      curto: foto que falhou fica para a próxima mensagem. Nunca
+    //      atrasa nem derruba o recebimento.
+    const cfgFoto = configDoCanal(canal);
+    if (cfgFoto) {
+      await atualizarAvatarDoContato(admin, cfgFoto, {
+        id: conversationId,
+        contato_telefone: telefone,
+        lead_id: leadId,
+        avatar_em: (convExistente?.avatar_em as string | null) ?? null,
+      }).catch(() => null);
+    }
+
     // 4.5) MENU DE RAMAIS. Tem de estar AQUI, e não só em `inbound.ts`:
     // o WhatsApp não passa por aquele módulo — esta rota é anterior a ele
     // e faz o próprio caminho. Enquanto o menu vivia só lá, ele estava

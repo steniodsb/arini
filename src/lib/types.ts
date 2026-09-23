@@ -392,6 +392,9 @@ export interface Conversation {
   inbox_id: string | null;
   custom_attributes: Record<string, unknown>;
   waiting_since: string | null;
+  /** Foto do contato, já no nosso R2 (a do WhatsApp expira). 0056. */
+  avatar_url?: string | null;
+  avatar_em?: string | null;
   sla_policy_id: string | null;
   sla_first_response_due: string | null;
   sla_resolution_due: string | null;

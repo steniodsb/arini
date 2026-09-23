@@ -37,6 +37,7 @@ import {
   Inbox as InboxIcon, Hand, PartyPopper, ArrowLeft,
 } from "lucide-react";
 import { fmtDataHoraBR } from "@/lib/fuso";
+import { AvatarContato } from "@/components/atendimento/AvatarContato";
 
 type StatusFilter = "todas" | ConversationStatus;
 type AssignFilter = "todas" | "minhas" | "nao_atribuidas";
@@ -1315,8 +1316,9 @@ export function AtendimentoInbox({
               >
                 <ArrowLeft size={18} />
               </button>
+              <AvatarContato nome={contactName(selected)} url={selected.avatar_url} tamanho={36} />
               <div className="min-w-0">
-                <div className="font-semibold text-sm truncate flex items-center gap-1.5">
+                <div className="font-semibold text-[15px] truncate flex items-center gap-1.5">
                   {nomeEditando !== null ? (
                     <input
                       autoFocus
