@@ -33,9 +33,18 @@ export function uploadErrorMsg(raw: string): string {
   return raw;
 }
 
-/** Mídia vai para o Cloudflare R2? (definido por env público no deploy) */
+/**
+ * Mídia vai para o Cloudflare R2?
+ *
+ * Era `NEXT_PUBLIC_STORAGE_DRIVER === "r2"` — uma variável de BUILD que a
+ * produção não tinha: o navegador subia direto para o Supabase mesmo com o
+ * bucket da WaveHost pronto. Agora é sempre sim: o navegador pede a URL
+ * pré-assinada e, se o servidor não tiver storage configurado (501), o
+ * upload cai no servidor (`/api/storage/upload`), que decide o destino.
+ * `NEXT_PUBLIC_STORAGE_DRIVER=supabase` ainda força o caminho antigo.
+ */
 export function isR2Active(): boolean {
-  return process.env.NEXT_PUBLIC_STORAGE_DRIVER === "r2";
+  return process.env.NEXT_PUBLIC_STORAGE_DRIVER !== "supabase";
 }
 
 /** Progresso por bytes de um arquivo em upload. */
@@ -97,7 +106,15 @@ async function storeMedia(
 ): Promise<{ url: string; key: string }> {
   if (file.size > MAX_UPLOAD_BYTES) throw new Error(tooBigMsg());
   if (isR2Active()) {
-    return putToR2(`${bucket}/${folder}`, file, index, onFileProgress);
+    try {
+      return await putToR2(`${bucket}/${folder}`, file, index, onFileProgress);
+    } catch (e) {
+      // Direto no R2 não deu (servidor sem storage → 501, ou CORS): vai
+      // pelo servidor. Tamanho acima do limite continua sendo erro.
+      const motivo = e instanceof Error ? e.message : String(e);
+      if (!/cors|rede|network|failed to fetch|HTTP \d{3}|preparar upload|não configurado/i.test(motivo)) throw e;
+      return uploadPeloServidor(`${bucket}/${folder}`, file, onFileProgress);
+    }
   }
   const path = `${folder}/${Date.now()}-${index}.${safeExt(file.name)}`;
   let lastErr: string | null = null;
