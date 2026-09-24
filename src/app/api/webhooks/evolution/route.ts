@@ -403,6 +403,19 @@ export async function POST(req: Request) {
   }
 
   // 3) Grava a mensagem.
+  //
+  // HORA DA MENSAGEM = a do WhatsApp (`messageTimestamp`), não a da
+  // gravação. Foto e áudio são baixados ANTES de gravar (até 8 s), e o
+  // texto mandado logo depois pelo cliente era gravado primeiro — o fio
+  // mostrava fora da ordem de envio. Só usa o carimbo do WhatsApp quando
+  // ele é plausível: no passado e de no máximo 10 minutos atrás (uma
+  // reentrega tardia da Evolution não pode reescrever o histórico).
+  const tsWhatsApp = Number(data.messageTimestamp ?? 0) * 1000;
+  const agoraMs = Date.now();
+  const criadaEm =
+    tsWhatsApp > 0 && tsWhatsApp <= agoraMs && agoraMs - tsWhatsApp < 10 * 60_000
+      ? new Date(tsWhatsApp).toISOString()
+      : undefined;
   const preview = conteudo.texto?.slice(0, 140) ?? `[${conteudo.tipo}]`;
   const { data: msgCriada } = await admin
     .from("messages")
@@ -422,6 +435,7 @@ export async function POST(req: Request) {
       external_id: externalId,
       raw_payload: payload as unknown as Record<string, unknown>,
       status: fromMe ? "enviada" : "recebida",
+      ...(criadaEm ? { created_at: criadaEm } : {}),
     })
     // id/created_at servem só para identificar a mensagem no payload.
     .select("id, created_at")

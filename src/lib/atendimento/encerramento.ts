@@ -13,7 +13,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // alguém fechando o que ficou para trás, uma conversa esquecida tranca
 // aquele cliente no ramal antigo para sempre.
 //
-// A REGRA QUE NÃO É ÓBVIA: só encerra o que JÁ FOI RESPONDIDO por gente.
+// A REGRA QUE NÃO É ÓBVIA: só encerra o que JÁ FOI RESPONDIDO por gente
+// e cuja ÚLTIMA mensagem é da equipe (ver o filtro no meio da função).
 // Fechar sozinho uma conversa que ninguém atendeu faria o sistema
 // esconder a própria falha — o cliente sumiria da tela sem nunca ter sido
 // atendido, e ninguém ficaria sabendo. Essas continuam abertas, visíveis,
@@ -61,7 +62,28 @@ export async function encerrarInativas(
     .eq("remetente", "atendente")
     .eq("interna", false);
 
-  const atendidas = [...new Set((respostas ?? []).map((m) => m.conversation_id as string))];
+  const respondidas = [...new Set((respostas ?? []).map((m) => m.conversation_id as string))];
+  if (!respondidas.length) return { encerradas: 0, dias };
+
+  // A SEGUNDA REGRA, que faltava: a ÚLTIMA mensagem tem de ser NOSSA.
+  //
+  // Em 24/09 às 7h05 esta rotina fechou 257 conversas de uma vez, e em 79
+  // delas a última mensagem era do CLIENTE — gente que tinha perguntado
+  // algo e esperava resposta. "Já recebeu resposta um dia" não quer dizer
+  // "está atendido": o cliente pode ter voltado a escrever depois. Só
+  // fecha o que terminou com a equipe falando por último.
+  const { data: ultimas } = await admin
+    .from("messages")
+    .select("conversation_id, direcao, created_at")
+    .in("conversation_id", respondidas)
+    .eq("interna", false)
+    .order("created_at", { ascending: false });
+  const ultimaPorConversa = new Map<string, string>();
+  for (const m of ultimas ?? []) {
+    const id = m.conversation_id as string;
+    if (!ultimaPorConversa.has(id)) ultimaPorConversa.set(id, m.direcao as string);
+  }
+  const atendidas = respondidas.filter((id) => ultimaPorConversa.get(id) === "out");
   if (!atendidas.length) return { encerradas: 0, dias };
 
   const agora = new Date().toISOString();

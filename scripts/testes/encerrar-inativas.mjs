@@ -29,7 +29,14 @@ async function rodar(dias) {
   const ids = paradas.map((c) => c.id);
   const { data: respostas } = await db.from("messages").select("conversation_id")
     .in("conversation_id", ids).eq("direcao", "out").eq("remetente", "atendente").eq("interna", false);
-  const atendidas = [...new Set((respostas ?? []).map((m) => m.conversation_id))];
+  const respondidas = [...new Set((respostas ?? []).map((m) => m.conversation_id))];
+  if (!respondidas.length) return 0;
+  // Segunda regra (24/09): a última mensagem não interna tem de ser nossa.
+  const { data: ultimas } = await db.from("messages").select("conversation_id, direcao, created_at")
+    .in("conversation_id", respondidas).eq("interna", false).order("created_at", { ascending: false });
+  const ult = new Map();
+  for (const m of ultimas ?? []) if (!ult.has(m.conversation_id)) ult.set(m.conversation_id, m.direcao);
+  const atendidas = respondidas.filter((id) => ult.get(id) === "out");
   if (!atendidas.length) return 0;
   const { data: fechadas } = await db.from("conversations")
     .update({ status: "resolvida", resolvida_em: new Date().toISOString() })
@@ -46,10 +53,13 @@ async function conversa(sufixo, diasAtras, mensagens) {
   }).select("id").single();
   if (error) throw new Error(error.message);
   criadas.push(data.id);
-  for (const m of mensagens) {
+  // Um segundo entre as mensagens: com o mesmo horário, "a última" fica
+  // indefinida e a regra de quem falou por último não pode ser testada.
+  for (const [i, m] of mensagens.entries()) {
     await db.from("messages").insert({
       conversation_id: data.id, direcao: m.direcao, remetente: m.remetente,
-      tipo: "texto", conteudo: "x", interna: false, status: "enviada", created_at: quando,
+      tipo: "texto", conteudo: "x", interna: false, status: "enviada",
+      created_at: new Date(new Date(quando).getTime() + i * 1000).toISOString(),
     });
   }
   return data.id;
@@ -76,6 +86,14 @@ async function main() {
     { direcao: "out", remetente: "atendente" },
   ]);
 
+  // 5b. Atendida no passado, mas o CLIENTE falou por último -> NÃO encerra
+  //     (o caso das 79 conversas fechadas por engano em 24/09).
+  const clienteUltimo = await conversa("cliente-ultimo", 10, [
+    { direcao: "in", remetente: "cliente" },
+    { direcao: "out", remetente: "atendente" },
+    { direcao: "in", remetente: "cliente" },
+  ]);
+
   const n = await rodar(7);
   ok("encerrou exatamente 1", n === 1, `encerrou ${n}`);
 
@@ -87,6 +105,8 @@ async function main() {
   ok("3. so o menu respondeu: continua ABERTA", (await ler(soMenu)) === "aberta",
     "receber o menu automatico nao e ser atendido");
   ok("4. atendida mas recente continua ABERTA", (await ler(recente)) === "aberta");
+  ok("5b. cliente falou por último: continua ABERTA", (await ler(clienteUltimo)) === "aberta",
+    "fecharia um cliente que está esperando resposta");
 
   // 5. Com a configuracao em 0, nada acontece.
   await db.from("conversations").update({ status: "aberta", resolvida_em: null }).eq("id", atendida);

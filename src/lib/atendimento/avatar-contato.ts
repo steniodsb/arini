@@ -55,7 +55,12 @@ export async function atualizarAvatarDoContato(
 ): Promise<string | null> {
   if (!conversa.contato_telefone) return null;
   if (!precisaBuscarAvatar(conversa)) return null;
-  if (!isR2Configured()) return null;
+  // Antes havia aqui `if (!isR2Configured()) return null`. O servidor de
+  // produção NÃO tem as chaves do R2 (as mídias recebidas vão para o
+  // Supabase Storage) — então a função saía nesta linha para TODO
+  // contato, sem nem carimbar a tentativa: 0 fotos em 363 conversas em
+  // 24/09 ("as fotos ainda não aparecem"). Agora usa o mesmo destino das
+  // mídias recebidas quando o R2 não está configurado. Ver `guardar`.
 
   // Carimba ANTES de tentar. Se a busca falhar (contato sem foto, ou
   // privacidade), o carimbo evita bater na Evolution a cada mensagem
@@ -87,7 +92,8 @@ export async function atualizarAvatarDoContato(
     // vez de acumular uma cópia por mês no bucket.
     const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
     const chave = `atendimento/avatars/${conversa.contato_telefone}.${ext}`;
-    const publica = await uploadBufferR2(chave, buffer, mime);
+    const publica = await guardar(admin, chave, buffer, mime);
+    if (!publica) return null;
 
     // `?v=` na URL: a chave é a mesma, então sem isso o navegador
     // continuaria mostrando a foto antiga do cache depois da troca.
@@ -101,4 +107,23 @@ export async function atualizarAvatarDoContato(
   } catch {
     return null;
   }
+}
+
+/**
+ * Grava a foto no R2 quando ele está configurado no servidor; senão no
+ * Supabase Storage, no mesmo bucket das mídias recebidas. `upsert`: a
+ * chave é estável por telefone e trocar a foto sobrescreve.
+ */
+async function guardar(
+  admin: SupabaseClient,
+  chave: string,
+  buffer: Buffer,
+  mime: string,
+): Promise<string | null> {
+  if (isR2Configured()) return uploadBufferR2(chave, buffer, mime);
+  const { error } = await admin.storage
+    .from("property-media")
+    .upload(chave, buffer, { contentType: mime, upsert: true });
+  if (error) return null;
+  return admin.storage.from("property-media").getPublicUrl(chave).data.publicUrl;
 }

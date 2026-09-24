@@ -157,6 +157,10 @@ export async function POST(req: Request) {
   const canal = conv.canal as ConversationChannel;
   const destino = conv.contato_telefone ?? conv.external_id;
 
+  // A hora da mensagem é a do ENVIO, marcada antes de falar com o canal.
+  // O envio à Evolution leva de 1 a 5 s; gravar com a hora de depois
+  // punha a resposta rápida do cliente ACIMA da nossa pergunta no fio.
+  const enviadaEm = new Date().toISOString();
   const send = await enviarMensagem(admin, {
     canal,
     channelId: (conv.channel_id as string | null) ?? null,
@@ -188,6 +192,7 @@ export async function POST(req: Request) {
       reply_to_id: replyToId,
       external_id: send.ok ? send.externalId : null,
       status,
+      created_at: enviadaEm,
     })
     .select("*")
     .single();

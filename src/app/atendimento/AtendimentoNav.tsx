@@ -110,6 +110,10 @@ const AJUDA: Item = { href: "/atendimento/ajuda", label: "Central de Ajuda", ico
 /** Menu completo — o de hoje, mais a caixa central no topo. */
 const ITENS_ADMIN: Item[] = [
   CAIXA_CENTRAL,
+  // O administrador também atende ramal (Carlos: Rurais e Avaliações;
+  // Hayanne: Financeiro). Sem este item, as conversas atribuídas a ele só
+  // eram achadas dentro do submenu recolhido de "Conversas".
+  MINHAS,
   CONVERSAS,
   { href: "/atendimento/canais", label: "Canais", icon: Radio },
   CONTATOS,

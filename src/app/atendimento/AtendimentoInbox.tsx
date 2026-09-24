@@ -105,12 +105,13 @@ export function AtendimentoInbox({
    * `recepcao_ve_atribuidas`, pode estar vazia. O administrador abre em
    * "todas" — ele acompanha tudo e escolhe a vista pelo menu.
    */
-  // O administrador também abre na caixa central: ele tria tanto quanto a
-  // recepção (Hayanne: 7 triagens em 3 dias). Abrindo em "Todas" — que por
-  // definição mostra tudo — a conversa que ele acabava de encaminhar
-  // continuava na lista à frente dele: "não sai da nossa caixa" (23/09).
-  // "Todas as conversas" continua a um clique, no menu.
-  const vista = vistaParam ?? (papel === "recepcao" || papel === "administrador" ? "central" : null);
+  // Só a RECEPÇÃO abre na caixa central. Em 23/09 o administrador passou
+  // a abrir lá também, e na caixa central as abas "Minhas / Não
+  // atribuídas / Todos" ficam escondidas (nada ali tem dono) — o Carlos
+  // e a Hayanne, que são administradores E atendem ramal, perderam a aba
+  // das conversas atribuídas a eles ("a aba desapareceu", 24/09). A
+  // caixa central continua a um clique, no topo do menu.
+  const vista = vistaParam ?? (papel === "recepcao" ? "central" : null);
   const naCaixaCentral = vista === "central";
   const podeTriar = papel === "recepcao" || papel === "administrador";
   const ehAdmin = papel === "administrador";
@@ -253,12 +254,17 @@ export function AtendimentoInbox({
     const supabase = createSupabaseBrowser();
     const { data } = await supabase
       .from("messages")
-      .select("*")
+      // SEM `raw_payload`. Era `select("*")`, e o raw_payload é o pacote
+      // cru da Evolution (até 267 kB numa mensagem com mídia): abrir a
+      // conversa do Roberto Couto baixava 1,3 MB, e isso se repetia a cada
+      // 30 s pelo polling. É a maior parte do "sistema travando" (24/09).
+      // A tela não usa esse campo em lugar nenhum.
+      .select(COLUNAS_MENSAGEM)
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
     // Chegou tarde: já estamos em outra conversa. Descarta.
     if (conversaPedida.current !== convId) return;
-    setMessages((data ?? []) as Message[]);
+    setMessages(ordenarMensagens((data ?? []) as unknown as Message[]));
   }, []);
 
   /**
@@ -336,14 +342,42 @@ export function AtendimentoInbox({
   }, [selectedId, loadMessages]);
 
   // Tempo real + fallback por polling.
+  //
+  // TRAVAMENTO (relato de 24/09), três causas neste bloco:
+  //   · cada evento — mensagem nova E cada update de conversa, que são
+  //     2 a 4 por mensagem recebida — disparava `refreshConversations`,
+  //     duas consultas de até 500 linhas e a lista inteira redesenhada.
+  //     Uma rajada (o encerramento de 257 conversas às 7h, ou só um
+  //     cliente mandando cinco áudios) virava dezenas de recargas
+  //     seguidas. Agora a recarga espera o evento acalmar (debounce);
+  //   · o canal do tempo real era desfeito e refeito a cada troca de
+  //     conversa (dependia de `selectedId`). Agora a conversa aberta é
+  //     lida de uma ref e o canal vive enquanto a tela vive;
+  //   · a mensagem nova era sempre posta no FIM, e a resposta do envio
+  //     também, sem checar se o tempo real já a tinha trazido — dava
+  //     duplicata e ordem trocada. Ver `juntarMensagem`.
+  const selecionadaRef = useRef<string | null>(selectedId);
+  useEffect(() => { selecionadaRef.current = selectedId; }, [selectedId]);
+  const recargaAgendada = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const agendarRecarga = useCallback(() => {
+    if (recargaAgendada.current) clearTimeout(recargaAgendada.current);
+    recargaAgendada.current = setTimeout(() => {
+      recargaAgendada.current = null;
+      void refreshConversations();
+    }, 800);
+  }, [refreshConversations]);
+
   useEffect(() => {
     const supabase = createSupabaseBrowser();
     const channel = supabase
       .channel("atendimento-inbox")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
-        const m = payload.new as Message;
-        if (m.conversation_id === selectedId) {
-          setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+        // O tempo real traz a linha inteira, com `raw_payload`. Tira aqui
+        // para não guardar na memória da tela o que ela não usa.
+        const { raw_payload: _descartado, ...m } = payload.new as Message;
+        void _descartado;
+        if (m.conversation_id === selecionadaRef.current) {
+          setMessages((prev) => juntarMensagem(prev, m as Message));
         }
         if (m.mentions?.includes(currentUser.id)) {
           setMinhasMencoes((prev) => new Set(prev).add(m.conversation_id));
@@ -357,23 +391,31 @@ export function AtendimentoInbox({
             () => setSelectedId(m.conversation_id),
           );
         }
-        void refreshConversations();
+        agendarRecarga();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
-        void refreshConversations();
+        agendarRecarga();
       })
       .subscribe();
     const t = setInterval(() => {
       void refreshConversations();
-      if (selectedId) void loadMessages(selectedId);
+      if (selecionadaRef.current) void loadMessages(selecionadaRef.current);
     }, 30000);
     return () => {
       clearInterval(t);
+      if (recargaAgendada.current) clearTimeout(recargaAgendada.current);
       void supabase.removeChannel(channel);
     };
-  }, [selectedId, loadMessages, refreshConversations, currentUser.id, avisar]);
+  }, [loadMessages, refreshConversations, agendarRecarga, currentUser.id, avisar]);
 
+  // Rola para o fim só quando CHEGA mensagem nova ou troca a conversa —
+  // não a cada recarga do polling, que substituía o array a cada 30 s e
+  // arrancava do histórico quem estava lendo mensagens antigas.
+  const ultimaMensagemVista = useRef<string | null>(null);
   useEffect(() => {
+    const ultima = messages[messages.length - 1]?.id ?? null;
+    if (ultima === ultimaMensagemVista.current) return;
+    ultimaMensagemVista.current = ultima;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
@@ -813,7 +855,7 @@ export function AtendimentoInbox({
           if (!res.ok) {
             setNotice({ tipo: "erro", texto: json.error ?? "Falha ao enviar o anexo." });
           } else {
-            if (json.message) setMessages((prev) => [...prev, json.message as Message]);
+            if (json.message) setMessages((prev) => juntarMensagem(prev, json.message as Message));
             // `delivered === false` = gravamos a mensagem mas o canal não
             // entregou. O caminho do texto já avisava; o do anexo não, e o
             // atendente via a foto na tela achando que tinha ido — enquanto
@@ -851,7 +893,7 @@ export function AtendimentoInbox({
         if (!res.ok) {
           setNotice({ tipo: "erro", texto: json.error ?? "Falha ao enviar." });
         } else {
-          if (json.message) setMessages((prev) => [...prev, json.message as Message]);
+          if (json.message) setMessages((prev) => juntarMensagem(prev, json.message as Message));
           if (json.delivered === false) {
             setNotice({
               tipo: "erro",
@@ -1886,6 +1928,44 @@ export function AtendimentoInbox({
       </Modal>
     </div>
   );
+}
+
+/**
+ * As colunas de `messages` que a tela usa — tudo menos `raw_payload`.
+ * Ver o comentário em `loadMessages`.
+ */
+const COLUNAS_MENSAGEM =
+  "id, conversation_id, direcao, remetente, autor_id, tipo, conteudo, media_url, external_id, " +
+  "status, interna, created_at, media_nome, media_mime, media_tamanho, reply_to_id, mentions, " +
+  "apagada_em, apagada_por";
+
+/** Ordem de exibição: a do envio (created_at); empate, pelo id. */
+function ordenarMensagens(lista: Message[]): Message[] {
+  return [...lista].sort((a, b) => {
+    const d = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    return d !== 0 ? d : a.id.localeCompare(b.id);
+  });
+}
+
+/**
+ * Junta uma mensagem que chegou (tempo real ou resposta do envio) ao fio:
+ * substitui se já existe, senão INSERE NA POSIÇÃO CERTA. Antes ia sempre
+ * para o fim — e a mesma mensagem entrava duas vezes quando o tempo real
+ * chegava antes da resposta do envio. "As mensagens não estão em ordem
+ * de envio" (24/09).
+ */
+function juntarMensagem(lista: Message[], m: Message): Message[] {
+  const i = lista.findIndex((x) => x.id === m.id);
+  if (i >= 0) {
+    const copia = lista.slice();
+    copia[i] = { ...lista[i], ...m };
+    return copia;
+  }
+  const ultima = lista[lista.length - 1];
+  if (!ultima || new Date(ultima.created_at).getTime() <= new Date(m.created_at).getTime()) {
+    return [...lista, m];
+  }
+  return ordenarMensagens([...lista, m]);
 }
 
 /**
