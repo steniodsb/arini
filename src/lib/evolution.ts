@@ -72,7 +72,7 @@ class EvolutionError extends Error {
 async function call<T>(
   cfg: EvolutionConfig,
   path: string,
-  init?: { method?: string; body?: unknown },
+  init?: { method?: string; body?: unknown; timeoutMs?: number },
 ): Promise<T> {
   let res: Response;
   try {
@@ -85,7 +85,9 @@ async function call<T>(
       body: init?.body ? JSON.stringify(init.body) : undefined,
       // A Evolution pode demorar para responder quando está subindo a
       // instância; sem timeout a rota do Next fica pendurada.
-      signal: AbortSignal.timeout(20_000),
+      // Mídia grande (vídeo de 40 MB vira ~54 MB em base64) precisa de
+      // mais que isso — quem baixa mídia passa o próprio prazo.
+      signal: AbortSignal.timeout(init?.timeoutMs ?? 20_000),
     });
   } catch (e) {
     const motivo =
@@ -337,6 +339,9 @@ export async function getMediaBase64(
         // navegador toca. Converter só adiciona latência e um ponto de
         // falha no meio de um webhook que precisa responder rápido.
         body: { message: { key: messageKey }, convertToMp4: false },
+        // 20 s bastava para foto e áudio; o vídeo de 40 MB de 24/09 não
+        // cabia e virava "[video]" sem arquivo.
+        timeoutMs: 180_000,
       },
     );
     if (!res?.base64) return null;
@@ -437,6 +442,35 @@ export async function markMessagesAsRead(
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Edita uma mensagem de TEXTO já enviada (o WhatsApp permite até 15 min).
+ *
+ * Formato conferido na Evolution 2.3.7: `{ number, text, key: { id,
+ * fromMe, remoteJid } }` — sem `key` ela responde "Message not
+ * compatible". Nunca lança: devolve o motivo para a tela explicar.
+ */
+export async function editarTexto(
+  cfg: EvolutionConfig,
+  numero: string,
+  externalId: string,
+  texto: string,
+): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const digitos = onlyDigits(numero);
+  try {
+    await call(cfg, `/chat/updateMessage/${encodeURIComponent(cfg.instance_name)}`, {
+      method: "POST",
+      body: {
+        number: digitos,
+        text: texto,
+        key: { id: externalId, fromMe: true, remoteJid: `${digitos}@s.whatsapp.net` },
+      },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : "falha na Evolution" };
   }
 }
 

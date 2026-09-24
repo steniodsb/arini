@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isR2Configured, uploadBufferR2 } from "@/lib/storage";
+import { avisarSemR2, isR2Configured, uploadBufferR2 } from "@/lib/storage";
 
 // =====================================================================
 // Mídia que CHEGA por webhook.
@@ -17,8 +17,12 @@ import { isR2Configured, uploadBufferR2 } from "@/lib/storage";
 // nosso storage. Aqui fica esse caminho, único para todos os canais.
 // =====================================================================
 
-/** Teto por arquivo. Acima disso guardamos só a referência, sem baixar. */
-const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+/**
+ * Teto por arquivo. Era 25 MB, e o vídeo de 65 s que um cliente mandou em
+ * 24/09 tinha 40 MB — foi descartado e a conversa mostrava só "[video]".
+ * O WhatsApp aceita até 100 MB por vídeo/documento; o bucket, 1 GB.
+ */
+const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 
 function extensaoDoMime(mime: string, nomeOriginal?: string | null): string {
   const doNome = nomeOriginal?.split(".").pop();
@@ -108,6 +112,7 @@ export async function guardarBufferRecebido(
       return { url, path, mime, tamanho: buffer.byteLength };
     }
 
+    avisarSemR2("mídia recebida");
     const { error } = await admin.storage
       .from("property-media")
       .upload(path, buffer, { contentType: mime, upsert: false });

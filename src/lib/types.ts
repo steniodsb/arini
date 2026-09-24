@@ -443,6 +443,10 @@ export interface Message {
   /** Apagar é soft delete: o rastro fica, o conteúdo some (ver 0035). */
   apagada_em: string | null;
   apagada_por: string | null;
+  /** Editada depois de enviada (0058). Nulo = nunca editada. */
+  editada_em?: string | null;
+  /** O texto da primeira versão, quando foi editada. */
+  conteudo_original?: string | null;
 }
 
 export interface CannedResponse {

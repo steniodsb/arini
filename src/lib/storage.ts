@@ -14,6 +14,23 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
  *   NEXT_PUBLIC_STORAGE_DRIVER=r2
  */
 
+/**
+ * Chamado nos caminhos que caem no Supabase Storage por falta de R2.
+ * Em 24/09/2026 o servidor de produção estava sem as chaves do R2 e 882 MB
+ * de mídia foram parar no Supabase sem ninguém perceber. Agora fica no log
+ * do servidor, uma vez por processo, com o nome do que falta.
+ */
+let avisouSemR2 = false;
+export function avisarSemR2(onde: string): void {
+  if (avisouSemR2) return;
+  avisouSemR2 = true;
+  console.error(
+    `[storage] R2 NÃO configurado — "${onde}" gravou no Supabase Storage. ` +
+      "Defina R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET e R2_PUBLIC_URL " +
+      "no ambiente do servidor (e NEXT_PUBLIC_STORAGE_DRIVER=r2 antes do build).",
+  );
+}
+
 export function isR2Configured(): boolean {
   return Boolean(
     process.env.R2_ACCOUNT_ID &&

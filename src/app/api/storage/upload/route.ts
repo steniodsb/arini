@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
-import { isR2Configured, uploadBufferR2 } from "@/lib/storage";
+import { avisarSemR2, isR2Configured, uploadBufferR2 } from "@/lib/storage";
 
 // =====================================================================
 // POST /api/storage/upload  (multipart: folder, file)
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ url, key });
     }
     // Sem R2: Supabase Storage, no mesmo bucket que o resto do app usa.
+    avisarSemR2("anexo enviado");
     const admin = createSupabaseAdmin();
     const { error } = await admin.storage
       .from("property-media")

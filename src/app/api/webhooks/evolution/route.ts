@@ -11,6 +11,7 @@ import { processarMenu } from "@/lib/atendimento/menu";
 import { resolverCaixa } from "@/lib/atendimento/caixa";
 import { atualizarAvatarDoContato } from "@/lib/atendimento/avatar-contato";
 import { nomeDoContato } from "@/lib/atendimento/contato-nome";
+import { lerEdicao } from "@/lib/atendimento/editar-mensagem";
 import { devolverParaCaixaCentral } from "@/lib/atendimento/reabertura";
 import { ativarBotNaConversa, entregarAoBot } from "@/lib/atendimento/bots";
 import {
@@ -224,6 +225,30 @@ export async function POST(req: Request) {
   // Grupo, broadcast ou status: fora do escopo do atendimento 1-a-1.
   if (!telefone) return NextResponse.json({ ok: true, ignored: "não é conversa individual" });
 
+  // EDIÇÃO feita no WhatsApp (pelo cliente, ou pela equipe no celular).
+  // Chega como uma mensagem nova com `protocolMessage`; sem isto ela era
+  // lida como "sem conteúdo" e descartada — a tela continuava mostrando o
+  // texto antigo. Aplica na mensagem original e guarda o texto de antes.
+  const edicao = lerEdicao(data.message as Record<string, unknown> | undefined);
+  if (edicao) {
+    const { data: original } = await admin
+      .from("messages")
+      .select("id, conteudo, conteudo_original")
+      .eq("external_id", edicao.idOriginal)
+      .maybeSingle();
+    if (original && original.conteudo !== edicao.texto) {
+      await admin
+        .from("messages")
+        .update({
+          conteudo: edicao.texto,
+          editada_em: new Date().toISOString(),
+          conteudo_original: (original.conteudo_original as string | null) ?? original.conteudo,
+        })
+        .eq("id", original.id);
+    }
+    return NextResponse.json({ ok: true, editada: Boolean(original) });
+  }
+
   const conteudo = extrairConteudo(data.message as Record<string, unknown> | undefined);
   // `temMidia` entra na condição porque foto e áudio SEM legenda chegam com
   // texto nulo e, num servidor Evolution sem S3, também sem `mediaUrl`. A
@@ -386,8 +411,16 @@ export async function POST(req: Request) {
   // foto e o áudio se perdiam. Buscamos os bytes em base64 e guardamos,
   // porque a `url` crua do payload é a do WhatsApp, criptografada: ela não
   // abre no navegador nem serve para reenviar.
+  //
+  // MÍDIA GRANDE vai para depois da resposta. Baixar 40 MB da Evolution
+  // leva dezenas de segundos; segurando o webhook esse tempo, a Evolution
+  // desiste e reentrega — e a mensagem nem chega a ser gravada. Acima de
+  // `MIDIA_EM_SEGUNDO_PLANO` a mensagem é gravada na hora ("vídeo
+  // chegando…") e o arquivo entra quando terminar de baixar.
+  const tamanhoDeclarado = tamanhoDaMidia(data.message as Record<string, unknown> | undefined);
+  const baixarDepois = conteudo.temMidia && !conteudo.mediaUrl && tamanhoDeclarado > MIDIA_EM_SEGUNDO_PLANO;
   let guardada = null;
-  if (conteudo.temMidia && !conteudo.mediaUrl && key) {
+  if (conteudo.temMidia && !conteudo.mediaUrl && key && !baixarDepois) {
     const cfg = configDoCanal(canal);
     if (cfg) {
       const baixada = await getMediaBase64(cfg, key);
@@ -440,6 +473,32 @@ export async function POST(req: Request) {
     // id/created_at servem só para identificar a mensagem no payload.
     .select("id, created_at")
     .maybeSingle();
+
+  // O download que ficou para depois (mídia grande). Sem `await`: o
+  // servidor é um processo Node de longa duração (Dokploy), a promessa
+  // continua depois da resposta. Grava o arquivo na mesma mensagem.
+  if (baixarDepois && key && msgCriada?.id) {
+    const cfg = configDoCanal(canal);
+    const idMensagem = msgCriada.id as string;
+    const idConversa = conversationId;
+    if (cfg) {
+      void (async () => {
+        const baixada = await getMediaBase64(cfg, key);
+        if (!baixada) return;
+        const salva = await guardarBufferRecebido(admin, {
+          buffer: baixada.buffer,
+          mime: conteudo.mediaMime || baixada.mime,
+          conversationId: idConversa,
+          nomeOriginal: conteudo.mediaNome,
+        });
+        if (!salva) return;
+        await admin
+          .from("messages")
+          .update({ media_url: salva.url, media_mime: salva.mime, media_tamanho: salva.tamanho })
+          .eq("id", idMensagem);
+      })().catch(() => undefined);
+    }
+  }
 
   // Webhook `mensagem_criada`. Vale para os dois sentidos: o eco de
   // `fromMe` é uma resposta real dada pelo celular e o integrador
@@ -587,6 +646,29 @@ async function notificarRecepcao(admin: Admin, mensagem: string) {
     mensagem,
     link: "/atendimento",
   });
+}
+
+/** Acima disto (bytes) a mídia é baixada depois de responder ao webhook. */
+const MIDIA_EM_SEGUNDO_PLANO = 8 * 1024 * 1024;
+
+/**
+ * Tamanho declarado da mídia no payload do Baileys. `fileLength` vem ora
+ * como número, ora como Long `{ low, high }` — visto nos dois formatos no
+ * banco. Devolve 0 quando não sabe.
+ */
+function tamanhoDaMidia(message: Record<string, unknown> | undefined): number {
+  if (!message) return 0;
+  for (const chave of ["videoMessage", "documentMessage", "audioMessage", "imageMessage"]) {
+    const m = message[chave] as Record<string, unknown> | undefined;
+    const f = m?.fileLength as unknown;
+    if (typeof f === "number") return f;
+    if (typeof f === "string") return Number(f) || 0;
+    if (f && typeof f === "object") {
+      const { low, high } = f as { low?: number; high?: number };
+      return ((low ?? 0) >>> 0) + (high ?? 0) * 2 ** 32;
+    }
+  }
+  return 0;
 }
 
 /** A Evolution faz um GET de sanidade na URL ao configurar o webhook. */

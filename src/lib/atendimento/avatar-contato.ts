@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getProfilePictureUrl, type EvolutionConfig } from "@/lib/evolution";
-import { isR2Configured, uploadBufferR2 } from "@/lib/storage";
+import { avisarSemR2, isR2Configured, uploadBufferR2 } from "@/lib/storage";
 
 // =====================================================================
 // FOTO DO CONTATO — buscada quando ele escreve, guardada no nosso R2.
@@ -121,6 +121,7 @@ async function guardar(
   mime: string,
 ): Promise<string | null> {
   if (isR2Configured()) return uploadBufferR2(chave, buffer, mime);
+  avisarSemR2("foto do contato");
   const { error } = await admin.storage
     .from("property-media")
     .upload(chave, buffer, { contentType: mime, upsert: true });

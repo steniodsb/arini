@@ -393,6 +393,14 @@ export function AtendimentoInbox({
         }
         agendarRecarga();
       })
+      // UPDATE de mensagem: uma edição (nossa, de um colega ou do cliente
+      // no celular) e a mídia grande que terminou de baixar depois.
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (payload) => {
+        const { raw_payload: _descartado, ...m } = payload.new as Message;
+        void _descartado;
+        if (m.conversation_id !== selecionadaRef.current) return;
+        setMessages((prev) => (prev.some((x) => x.id === m.id) ? juntarMensagem(prev, m as Message) : prev));
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
         agendarRecarga();
       })
@@ -797,6 +805,27 @@ export function AtendimentoInbox({
     if (!selected) return;
     await atualizar(selected.id, { marcada_nao_lida: true }, { marcada_nao_lida: true });
     setSelectedId(null);
+  }
+
+  /**
+   * Editar mensagem enviada. Vai pela rota, que edita PRIMEIRO no WhatsApp
+   * do cliente e só depois no histórico — ver `mensagens/[id]/editar`.
+   * Devolve o erro para a bolha mostrar, ou null se deu certo.
+   */
+  async function editarMensagem(m: Message, texto: string): Promise<string | null> {
+    try {
+      const res = await fetch(`/api/atendimento/mensagens/${m.id}/editar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; message?: Message };
+      if (!res.ok) return json.error ?? "Não deu para editar.";
+      if (json.message) setMessages((prev) => juntarMensagem(prev, json.message as Message));
+      return null;
+    } catch {
+      return "Erro de rede ao editar.";
+    }
   }
 
   /** Apagar é soft delete: some o conteúdo, fica o rastro (ver 0035). */
@@ -1767,6 +1796,9 @@ export function AtendimentoInbox({
               onResponder={setRespondendoA}
               termoBusca={buscaThread}
               onApagar={(m) => void apagarMensagem(m)}
+              onEditar={editarMensagem}
+              usuarioId={currentUser.id}
+              ehAdmin={ehAdmin}
             />
 
             {notice && (
@@ -1937,7 +1969,7 @@ export function AtendimentoInbox({
 const COLUNAS_MENSAGEM =
   "id, conversation_id, direcao, remetente, autor_id, tipo, conteudo, media_url, external_id, " +
   "status, interna, created_at, media_nome, media_mime, media_tamanho, reply_to_id, mentions, " +
-  "apagada_em, apagada_por";
+  "apagada_em, apagada_por, editada_em, conteudo_original";
 
 /** Ordem de exibição: a do envio (created_at); empate, pelo id. */
 function ordenarMensagens(lista: Message[]): Message[] {

@@ -24,6 +24,24 @@ Todas as migrações estão aplicadas, incluindo as desta madrugada:
 | `0046` | **Unicidade por conexão** — o que destravou o 2º WhatsApp |
 | `0047` | Renomear/remover etiqueta dentro das conversas |
 
+## 0.4 Chaves do R2 no servidor de produção ⚠️ BLOQUEANTE (5 min, Dokploy)
+
+Conferido em 24/09/2026: o servidor de produção NÃO tem as chaves do R2.
+Por isso toda mídia do atendimento (635 arquivos) e do marketing foi para
+o Supabase Storage — 882 MB, perto do teto do plano. Os arquivos que já
+estavam lá foram copiados para o R2 e os links trocados
+(`scripts/migra-storage-r2.mjs`), mas o que chegar a partir de agora
+continua indo para o Supabase até as variáveis existirem.
+
+No Dokploy, no app do Next, defina (os valores estão no `.env.local`):
+
+- `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`
+- `NEXT_PUBLIC_STORAGE_DRIVER=r2` — é de BUILD: exige um redeploy completo, não só restart.
+
+Depois do deploy, rode `node scripts/migra-storage-r2.mjs` para conferir
+que ficou 0 arquivo com link no Supabase. Enquanto faltar, o log do
+servidor mostra `[storage] R2 NÃO configurado`.
+
 ## 0.5 CORS do R2 — o anexo do atendimento não sobe ⚠️ (5 min, painel da Cloudflare)
 
 Conferido em 23/09/2026 direto no bucket: o CORS libera só
