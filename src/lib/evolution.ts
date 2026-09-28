@@ -97,6 +97,15 @@ async function call<T>(
     throw new EvolutionError(motivo);
   }
 
+  // A Evolution só fala JSON. HTML aqui quer dizer que a URL do servidor
+  // aponta para outro site (já aconteceu de cadastrarem o endereço do
+  // próprio CRM) — e o "HTTP 404" genérico não deixava ninguém perceber.
+  if (res.headers.get("content-type")?.includes("text/html")) {
+    throw new EvolutionError(
+      `${cfg.base_url} não é um servidor da Evolution API — confira a URL do servidor no canal`,
+    );
+  }
+
   const json = (await res.json().catch(() => null)) as
     | (T & { message?: unknown; error?: unknown })
     | null;
