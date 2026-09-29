@@ -40,7 +40,13 @@ import { fmtDataHoraBR } from "@/lib/fuso";
 import { AvatarContato } from "@/components/atendimento/AvatarContato";
 
 type StatusFilter = "todas" | ConversationStatus;
-type AssignFilter = "todas" | "minhas" | "nao_atribuidas";
+/**
+ * "geral" só existe em Minhas conversas, para quem tria (administração e
+ * recepção): a empresa inteira, caixa central incluída, sem sair da
+ * própria caixa. Pedido de 29/09 — "eu já clico no geral, já vejo quem não
+ * foi atribuído, e atribuo sem precisar voltar lá pra caixa central".
+ */
+type AssignFilter = "todas" | "minhas" | "nao_atribuidas" | "geral";
 type Ordenacao = "recentes" | "antigas" | "prioridade" | "criacao";
 
 const ORDENACAO_LABELS: Record<Ordenacao, string> = {
@@ -117,9 +123,32 @@ export function AtendimentoInbox({
   const ehAdmin = papel === "administrador";
 
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
-  const [selectedId, setSelectedId] = useState<string | null>(
+  /**
+   * NÃO LIDAS DE QUEM ESTÁ OLHANDO (0059), conversa → quantidade.
+   *
+   * O `unread_count` da conversa é um número só para a equipe inteira:
+   * qualquer colega que abrisse a conversa zerava o de todo mundo — era o
+   * "no meu aparece 10 sem visualização, no dele não aparece" (29/09).
+   * `null` = a função ainda não respondeu (ou não existe no banco): a tela
+   * cai no contador antigo em vez de mostrar tudo lido.
+   */
+  const [naoLidas, setNaoLidas] = useState<Map<string, number> | null>(null);
+  const [selectedId, setSelectedIdBruto] = useState<string | null>(
     convParam ?? initialConversations[0]?.id ?? null,
   );
+  /**
+   * A conversa aberta foi ESCOLHIDA por alguém ou só caiu selecionada?
+   *
+   * No desktop a primeira da lista é aberta sozinha ao carregar a tela —
+   * justamente a que acabou de receber mensagem. Contar isso como leitura
+   * apagava o aviso de uma conversa que ninguém viu. Só o clique (ou o
+   * link direto) conta como "li".
+   */
+  const escolhida = useRef<boolean>(Boolean(convParam));
+  const setSelectedId = useCallback((id: string | null) => {
+    escolhida.current = true;
+    setSelectedIdBruto(id);
+  }, []);
   /**
    * NO CELULAR A TELA ABRE NA LISTA, não dentro de uma conversa.
    *
@@ -133,7 +162,7 @@ export function AtendimentoInbox({
    */
   useEffect(() => {
     if (convParam) return; // veio por link direto para uma conversa
-    if (window.matchMedia("(max-width: 767px)").matches) setSelectedId(null);
+    if (window.matchMedia("(max-width: 767px)").matches) setSelectedIdBruto(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -274,9 +303,21 @@ export function AtendimentoInbox({
    * "Encerradas" mostrava só as fechadas hoje. Mesmo par de consultas de
    * `page.tsx`.
    */
+  /**
+   * Número da recarga mais recente. O polling de 30 s, a recarga do tempo
+   * real e a de depois de cada ação correm soltas; sem isto, a resposta
+   * de uma recarga ANTIGA que chegasse por último desfazia a nova — a
+   * atribuição que "demora a aparecer" no colega e a conversa que sobe e
+   * desce na lista (29/09).
+   */
+  const ultimaRecarga = useRef(0);
+  /** Quantas conversas a lista tinha na última recarga que valeu. */
+  const totalAnterior = useRef(initialConversations.length);
+
   const refreshConversations = useCallback(async () => {
+    const minha = ++ultimaRecarga.current;
     const supabase = createSupabaseBrowser();
-    const [{ data: ativas }, { data: encerradas }] = await Promise.all([
+    const [ativas, encerradas, lidas] = await Promise.all([
       supabase
         .from("conversations")
         .select("*")
@@ -289,10 +330,53 @@ export function AtendimentoInbox({
         .eq("status", "resolvida")
         .order("resolvida_em", { ascending: false, nullsFirst: false })
         .limit(200),
+      supabase.rpc("fn_nao_lidas_minhas"),
     ]);
-    if (ativas || encerradas) {
-      setConversations([...(ativas ?? []), ...(encerradas ?? [])] as Conversation[]);
+    if (minha !== ultimaRecarga.current) return; // chegou outra mais nova
+
+    // Erro em qualquer das duas: mantém a lista que está na tela. Trocar
+    // por metade dela é pior que esperar a próxima recarga.
+    if (ativas.error || encerradas.error) return;
+    const lista = [...(ativas.data ?? []), ...(encerradas.data ?? [])] as Conversation[];
+
+    // LISTA ZERADA DO NADA. Com a sessão vencida o banco não dá erro — a
+    // RLS devolve lista vazia, e a tela "zerava" até a recarga seguinte.
+    // Antes de aceitar um zero depois de uma lista cheia, confirma que a
+    // sessão está de pé (o getUser renova o token se preciso).
+    if (lista.length === 0 && totalAnterior.current > 0) {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user || minha !== ultimaRecarga.current) return;
     }
+    totalAnterior.current = lista.length;
+    setConversations(lista);
+
+    if (!lidas.error) {
+      const m = new Map<string, number>();
+      for (const r of (lidas.data ?? []) as { conversation_id: string; nao_lidas: number }[]) {
+        m.set(r.conversation_id, r.nao_lidas);
+      }
+      // A conversa aberta, com a aba à vista, está sendo lida agora.
+      if (selecionadaRef.current && escolhida.current && document.visibilityState === "visible") {
+        m.delete(selecionadaRef.current);
+      }
+      setNaoLidas(m);
+    }
+  }, []);
+
+  /**
+   * "Li até agora" para quem está olhando. Best-effort: se falhar, o pior
+   * que acontece é o aviso continuar aceso até a próxima abertura.
+   */
+  const marcarLida = useCallback((convId: string) => {
+    setNaoLidas((prev) => {
+      if (!prev?.has(convId)) return prev;
+      const m = new Map(prev);
+      m.delete(convId);
+      return m;
+    });
+    void createSupabaseBrowser()
+      .rpc("fn_marcar_conversa_lida", { p_conversation: convId })
+      .then(undefined, () => undefined);
   }, []);
 
   // Quais conversas têm nota interna me mencionando (aba "Menções").
@@ -320,21 +404,31 @@ export function AtendimentoInbox({
     loadMessages(selectedId).finally(() => setLoadingMsgs(false));
     setBuscaThread("");
     setBuscaThreadAberta(false);
+    // Aberta sozinha (primeira da lista ao carregar): mostra, mas não
+    // conta como lida — ninguém viu ainda.
+    if (!escolhida.current) return;
     const supabase = createSupabaseBrowser();
-    // Abrir a conversa limpa o não-lidas E o "marcada como não lida" — se
-    // o agente marcou e voltou, a marcação já cumpriu o papel dela.
-    void supabase
-      .from("conversations")
-      .update({ unread_count: 0, marcada_nao_lida: false })
-      .eq("id", selectedId)
-      .then(() => {
-        patchLocal(selectedId, { unread_count: 0, marcada_nao_lida: false });
-      });
+    const conv = conversations.find((c) => c.id === selectedId);
+    const tinhaNaoLidas =
+      (naoLidas?.get(selectedId) ?? 0) > 0 || (conv?.unread_count ?? 0) > 0;
+    marcarLida(selectedId);
+    // O contador compartilhado e o "marcada como não lida" continuam sendo
+    // limpos: relatórios e webhooks leem o primeiro, e o segundo já
+    // cumpriu o papel de lembrete. Só quando há o que limpar — trocar de
+    // conversa não precisa virar uma escrita por clique.
+    if ((conv?.unread_count ?? 0) > 0 || conv?.marcada_nao_lida) {
+      void supabase
+        .from("conversations")
+        .update({ unread_count: 0, marcada_nao_lida: false })
+        .eq("id", selectedId)
+        .then(() => {
+          patchLocal(selectedId, { unread_count: 0, marcada_nao_lida: false });
+        });
+    }
     // E AVISA O WHATSAPP que foi lida — o visto azul para o cliente e o
     // "não lida" saindo do celular da imobiliária. Só quando havia algo
     // por ler: trocar de conversa não pode virar uma chamada por clique.
     // Best-effort: falhar aqui não impede de ler nem de responder.
-    const tinhaNaoLidas = (conversations.find((c) => c.id === selectedId)?.unread_count ?? 0) > 0;
     if (tinhaNaoLidas) {
       void fetch(`/api/atendimento/conversas/${selectedId}/lida`, { method: "POST" }).catch(() => undefined);
     }
@@ -385,6 +479,23 @@ export function AtendimentoInbox({
         // Só mensagem do cliente merece som/notificação — o eco da nossa
         // própria resposta tocando um "blim" seria irritante.
         if (m.direcao === "in" && !m.interna) {
+          // O aviso de não lida, como no WhatsApp: acende NA HORA em
+          // qualquer outra conversa (sem esperar a recarga); na que está
+          // aberta e à vista, a mensagem já está sendo lida.
+          const lendoAgora =
+            m.conversation_id === selecionadaRef.current &&
+            escolhida.current &&
+            document.visibilityState === "visible";
+          if (lendoAgora) {
+            marcarLida(m.conversation_id);
+          } else {
+            setNaoLidas((prev) => {
+              if (!prev) return prev;
+              const n = new Map(prev);
+              n.set(m.conversation_id, (n.get(m.conversation_id) ?? 0) + 1);
+              return n;
+            });
+          }
           avisar(
             "Nova mensagem no atendimento",
             m.conteudo?.slice(0, 120) ?? `[${m.tipo}]`,
@@ -409,12 +520,34 @@ export function AtendimentoInbox({
       void refreshConversations();
       if (selecionadaRef.current) void loadMessages(selecionadaRef.current);
     }, 30000);
+
+    // VOLTOU PARA A ABA: recarrega na hora. Com a aba em segundo plano o
+    // navegador segura timers e o tempo real pode ter caído — e a pessoa
+    // voltava para uma lista de até 30 s atrás, sem a atribuição que o
+    // colega tinha acabado de fazer. E a conversa aberta passa a estar
+    // sendo lida.
+    const aoVoltar = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshConversations();
+      const aberta = selecionadaRef.current;
+      if (aberta) {
+        void loadMessages(aberta);
+        if (escolhida.current) marcarLida(aberta);
+      }
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("focus", aoVoltar);
+    // Primeira carga das não lidas (a lista já veio do servidor).
+    void refreshConversations();
+
     return () => {
       clearInterval(t);
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener("focus", aoVoltar);
       if (recargaAgendada.current) clearTimeout(recargaAgendada.current);
       void supabase.removeChannel(channel);
     };
-  }, [loadMessages, refreshConversations, agendarRecarga, currentUser.id, avisar]);
+  }, [loadMessages, refreshConversations, agendarRecarga, currentUser.id, avisar, marcarLida, setSelectedId]);
 
   // Rola para o fim só quando CHEGA mensagem nova ou troca a conversa —
   // não a cada recarga do polling, que substituía o array a cada 30 s e
@@ -430,7 +563,48 @@ export function AtendimentoInbox({
   // ------------------------------------------------------------------
   // Filtros e contadores
   // ------------------------------------------------------------------
+
+  /**
+   * TROCOU DE CAIXA, OS FILTROS RECOMEÇAM.
+   *
+   * O "clico em Caixa central e aparece zerada; do nada aparecem as
+   * mensagens" (29/09): as abas Minhas/Não atribuídas/Todos ficam
+   * ESCONDIDAS na caixa central, mas o filtro escolhido nelas continuava
+   * valendo. Quem deixava "Minhas" marcada em Minhas conversas e ia para
+   * a caixa central via zero — nada ali tem dono — sem nenhum botão na
+   * tela para desfazer. O mesmo com a aba de ramal das Encerradas, que
+   * seguia filtrando a fila nas outras caixas.
+   */
+  const vistaAnterior = useRef(vista);
+  useEffect(() => {
+    if (vistaAnterior.current === vista) return;
+    vistaAnterior.current = vista;
+    setAssignFilter("todas");
+    setStatusFilter("todas");
+    setEquipeFiltro("todas");
+  }, [vista]);
+
+  /** A lista com as não lidas DE QUEM ESTÁ OLHANDO no lugar das da equipe. */
+  const comLeitura = useMemo(() => {
+    return conversations.map((c) => {
+      // "Marcar como não lida" acende o aviso com 1 — a marcação existia
+      // no banco, mas a lista nunca a mostrava.
+      const n = (naoLidas ? naoLidas.get(c.id) ?? 0 : c.unread_count) || (c.marcada_nao_lida ? 1 : 0);
+      return c.unread_count === n ? c : { ...c, unread_count: n };
+    });
+  }, [conversations, naoLidas]);
+
+  /** Total de não lidas no título da aba do navegador — "(3) Atendimento". */
+  useEffect(() => {
+    if (!naoLidas) return;
+    let total = 0;
+    naoLidas.forEach((n) => { total += n; });
+    const base = document.title.replace(/^\(\d+\+?\)\s*/, "");
+    document.title = total > 0 ? `(${total > 99 ? "99+" : total}) ${base}` : base;
+  }, [naoLidas]);
+
   const porVista = useMemo(() => {
+    const conversations = comLeitura;
     // CAIXA CENTRAL = tudo que ainda não passou pela triagem. `triada_em`
     // nulo é a definição, não uma heurística: é a mesma coluna que a RLS
     // usa para decidir quem enxerga o quê (ver 0040).
@@ -454,6 +628,9 @@ export function AtendimentoInbox({
     if (vista === "encerradas") return conversations.filter((c) => c.status === "resolvida");
 
     if (vista === "minhas") {
+      // Aba "Geral" (só para quem tria): a empresa inteira, caixa central
+      // incluída, sem sair daqui.
+      if (assignFilter === "geral") return conversations;
       return conversations.filter(
         (c) =>
           c.responsavel_id === currentUser.id ||
@@ -466,18 +643,33 @@ export function AtendimentoInbox({
       return conversations.filter((c) => !c.primeira_resposta_em && c.status !== "resolvida");
     }
     return conversations;
-  }, [conversations, vista, minhasMencoes, currentUser.id, minhasEquipes]);
+  }, [comLeitura, vista, minhasMencoes, currentUser.id, minhasEquipes, assignFilter]);
 
   const byStatus = useMemo(
     () => porVista.filter((c) => statusFilter === "todas" || c.status === statusFilter),
     [porVista, statusFilter],
   );
 
-  const counts = useMemo(() => ({
-    minhas: byStatus.filter((c) => c.responsavel_id === currentUser.id).length,
-    nao_atribuidas: byStatus.filter((c) => !c.responsavel_id).length,
-    todas: byStatus.length,
-  }), [byStatus, currentUser.id]);
+  /** A aba "Geral" existe nesta tela? Só em Minhas conversas, para quem tria. */
+  const temAbaGeral = vista === "minhas" && podeTriar;
+
+  const counts = useMemo(() => {
+    // Com "Geral" aberta, `byStatus` é a empresa inteira; as outras três
+    // abas continuam contando o recorte de Minhas conversas.
+    const meu = (c: Conversation) =>
+      c.responsavel_id === currentUser.id ||
+      (!c.responsavel_id && c.team_id !== null && minhasEquipes.includes(c.team_id));
+    const base = assignFilter === "geral" ? byStatus.filter(meu) : byStatus;
+    const geral = assignFilter === "geral"
+      ? byStatus.length
+      : comLeitura.filter((c) => statusFilter === "todas" || c.status === statusFilter).length;
+    return {
+      minhas: base.filter((c) => c.responsavel_id === currentUser.id).length,
+      nao_atribuidas: base.filter((c) => !c.responsavel_id).length,
+      todas: base.length,
+      geral,
+    };
+  }, [byStatus, currentUser.id, minhasEquipes, assignFilter, comLeitura, statusFilter]);
 
   // Todos os filtros MENOS o de canal.
   //
@@ -488,8 +680,8 @@ export function AtendimentoInbox({
   // continuam valendo: com "não atribuídas" ligado, a aba do WhatsApp conta
   // as não atribuídas do WhatsApp, não o total dele.
   const passaSemCanal = useCallback((c: Conversation) => {
-    if (assignFilter === "minhas" && c.responsavel_id !== currentUser.id) return false;
-    if (assignFilter === "nao_atribuidas" && c.responsavel_id) return false;
+    if (!naCaixaCentral && assignFilter === "minhas" && c.responsavel_id !== currentUser.id) return false;
+    if (!naCaixaCentral && assignFilter === "nao_atribuidas" && c.responsavel_id) return false;
     if (conexaoFiltro !== "todas" && c.channel_id !== conexaoFiltro) return false;
     if (prioridadeFiltro !== "todas") {
       if (prioridadeFiltro === "sem" ? c.prioridade !== null : c.prioridade !== prioridadeFiltro) return false;
@@ -504,7 +696,7 @@ export function AtendimentoInbox({
       if (!hay.includes(q)) return false;
     }
     return true;
-  }, [assignFilter, currentUser.id, conexaoFiltro, prioridadeFiltro, equipeFiltro, etiquetaFiltro, busca]);
+  }, [naCaixaCentral, assignFilter, currentUser.id, conexaoFiltro, prioridadeFiltro, equipeFiltro, etiquetaFiltro, busca]);
 
   /** Quantas conversas por canal, para o número na aba. */
   const contagemPorCanal = useMemo(() => {
@@ -538,8 +730,8 @@ export function AtendimentoInbox({
 
   const filtered = useMemo(() => {
     const lista = byStatus.filter((c) => {
-      if (assignFilter === "minhas" && c.responsavel_id !== currentUser.id) return false;
-      if (assignFilter === "nao_atribuidas" && c.responsavel_id) return false;
+      if (!naCaixaCentral && assignFilter === "minhas" && c.responsavel_id !== currentUser.id) return false;
+      if (!naCaixaCentral && assignFilter === "nao_atribuidas" && c.responsavel_id) return false;
       if (canalFiltro !== "todos" && c.canal !== canalFiltro) return false;
       if (conexaoFiltro !== "todas" && c.channel_id !== conexaoFiltro) return false;
       if (prioridadeFiltro !== "todas") {
@@ -573,7 +765,7 @@ export function AtendimentoInbox({
       return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
     });
   }, [
-    byStatus, assignFilter, busca, currentUser.id, canalFiltro, conexaoFiltro,
+    byStatus, naCaixaCentral, assignFilter, busca, currentUser.id, canalFiltro, conexaoFiltro,
     prioridadeFiltro, equipeFiltro, etiquetaFiltro, ordenacao,
   ]);
 
@@ -1353,6 +1545,7 @@ export function AtendimentoInbox({
               ["minhas", "Minhas", counts.minhas],
               ["nao_atribuidas", "Não atribuídas", counts.nao_atribuidas],
               ["todas", "Todos", counts.todas],
+              ...(temAbaGeral ? [["geral", "Geral", counts.geral]] : []),
             ] as [AssignFilter, string, number][]).map(([key, label, n]) => (
               <button
                 key={key}
@@ -1442,6 +1635,19 @@ export function AtendimentoInbox({
                 <VazioCaixaCentral
                   filtrando={Boolean(busca.trim()) || filtrosAtivos > 0 || statusFilter !== "todas"}
                   total={conversations.length}
+                />
+              ) : porVista.length > 0 ? (
+                // Lista vazia, mas a caixa NÃO está vazia: é filtro. Diz
+                // isso e oferece o botão — em vez de parecer que o
+                // sistema perdeu as conversas.
+                <VazioPorFiltro
+                  escondidas={porVista.length}
+                  onLimpar={() => {
+                    setAssignFilter("todas"); setStatusFilter("todas"); setBusca("");
+                    setCanalFiltro("todos"); setPrioridadeFiltro("todas");
+                    setEquipeFiltro("todas"); setEtiquetaFiltro("todas");
+                    setConexaoFiltro("todas");
+                  }}
                 />
               ) : undefined
             }
@@ -2031,6 +2237,23 @@ function VazioCaixaCentral({ filtrando, total }: { filtrando: boolean; total: nu
           ? "Nenhuma conversa no sistema ainda. Se os clientes já estão escrevendo, confira as conexões em Canais."
           : "Nenhuma conversa esperando classificação. As novas aparecem aqui sozinhas."}
       </p>
+    </div>
+  );
+}
+
+function VazioPorFiltro({ escondidas, onLimpar }: { escondidas: number; onLimpar: () => void }) {
+  return (
+    <div className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
+      <Search size={28} className="opacity-40" />
+      <p className="font-medium text-foreground">Nada com esse filtro.</p>
+      <p className="text-xs max-w-[15rem]">
+        {escondidas === 1
+          ? "Há 1 conversa nesta caixa fora do filtro atual."
+          : `Há ${escondidas} conversas nesta caixa fora do filtro atual.`}
+      </p>
+      <button type="button" onClick={onLimpar} className="text-xs underline text-arini dark:text-gold">
+        Limpar filtros
+      </button>
     </div>
   );
 }
