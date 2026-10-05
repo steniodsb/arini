@@ -9,7 +9,7 @@
 // =====================================================================
 
 import type { TimeEntry, TimeEntryType, Colaborador } from "./types";
-import { diaSemanaBR, fmtDiaBR, inicioDoDiaBR, proximoDiaBR } from "./fuso";
+import { diaSemanaBR, fmtDiaBR, fmtHoraBR, inicioDoDiaBR, proximoDiaBR } from "./fuso";
 
 export function fmtHours(ms: number): string {
   if (ms <= 0) return "—";
@@ -27,8 +27,16 @@ export function fmtSaldo(ms: number): string {
 }
 
 /**
- * Horas de um dia: (última saída − primeira entrada) menos o intervalo
- * (primeiro início → último fim). Dia sem saída conta até agora.
+ * Horas de um dia: (última saída − primeira entrada) menos CADA intervalo
+ * (início → o retorno seguinte). Dia sem saída conta até agora.
+ *
+ * Antes descontava um bloco só, do primeiro início ao último retorno. Quem
+ * fazia almoço e café perdia a tarde inteira trabalhada entre os dois — o
+ * relatório mostrava 4h num dia de jornada cheia.
+ *
+ * Intervalo sem retorno: com o dia já fechado não desconta nada (não dá para
+ * saber quanto durou); com o dia em aberto a pessoa está no intervalo agora,
+ * então a contagem para no início dele.
  */
 export function workedMs(entries: TimeEntry[]): { ms: number; aberto: boolean } {
   const sorted = [...entries].sort(
@@ -41,12 +49,24 @@ export function workedMs(entries: TimeEntry[]): { ms: number; aberto: boolean } 
   const saida = last("saida");
   const fim = saida ? +new Date(saida.registrado_em) : Date.now();
   let ms = fim - +new Date(entrada.registrado_em);
-  const pIni = first("intervalo_inicio");
-  const pFim = last("intervalo_fim");
-  if (pIni && pFim && +new Date(pFim.registrado_em) > +new Date(pIni.registrado_em)) {
-    ms -= +new Date(pFim.registrado_em) - +new Date(pIni.registrado_em);
+  let pausaDesde: number | null = null;
+  for (const e of sorted) {
+    const t = +new Date(e.registrado_em);
+    if (e.tipo === "intervalo_inicio" && pausaDesde === null) pausaDesde = t;
+    else if (e.tipo === "intervalo_fim" && pausaDesde !== null) {
+      ms -= t - pausaDesde;
+      pausaDesde = null;
+    }
   }
+  if (pausaDesde !== null && !saida) ms -= fim - pausaDesde;
   return { ms: Math.max(0, ms), aberto: !saida };
+}
+
+/** Os registros do dia em ordem, com a hora de São Paulo — para conferir no olho. */
+export function batidasDoDia(entries: TimeEntry[]): { tipo: TimeEntryType; hora: string }[] {
+  return [...entries]
+    .sort((a, b) => +new Date(a.registrado_em) - +new Date(b.registrado_em))
+    .map((e) => ({ tipo: e.tipo, hora: fmtHoraBR(e.registrado_em) }));
 }
 
 /**
@@ -99,7 +119,10 @@ export type ResumoPonto = {
   diasComRegistro: number;
   diasDeEscala: number;
   diasEmAberto: number;
-  porDia: { dia: string; ms: number; aberto: boolean; regs: number }[];
+  porDia: {
+    dia: string; ms: number; aberto: boolean; regs: number;
+    batidas: { tipo: TimeEntryType; hora: string }[];
+  }[];
 };
 
 /** O relatório individual: quanto era esperado, quanto foi feito, e a diferença. */
@@ -111,7 +134,9 @@ export function resumoDoPeriodo(
 ): ResumoPonto {
   const byDay = groupByDay(entries);
   const porDia = Object.entries(byDay)
-    .map(([dia, list]) => ({ dia, ...workedMs(list), regs: list.length }))
+    .map(([dia, list]) => ({
+      dia, ...workedMs(list), regs: list.length, batidas: batidasDoDia(list),
+    }))
     // "dd/mm/aaaa" não ordena como string; vira Date para ordenar.
     .sort((a, b) => {
       const p = (s: string) => { const [d, m, y] = s.split("/").map(Number); return +new Date(y, m - 1, d); };

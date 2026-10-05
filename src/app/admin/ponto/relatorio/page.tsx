@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Users } from "lucide-react";
 import {
-  DIAS_SEMANA_LABELS, SECTOR_LABELS,
+  DIAS_SEMANA_LABELS, SECTOR_LABELS, TIME_ENTRY_LABELS,
   type Colaborador, type TimeEntry,
 } from "@/lib/types";
 import { fmtHours, fmtSaldo, fmtCarga, resumoDoPeriodo } from "@/lib/ponto";
@@ -169,7 +169,7 @@ export default async function RelatorioPontoPage({
             <CardContent className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs uppercase text-muted-foreground">
-                  <tr><th className="py-2">Dia</th><th>Registros</th><th>Horas</th><th>Saldo do dia</th></tr>
+                  <tr><th className="py-2">Dia</th><th>Registros</th><th>Horários</th><th>Horas</th><th>Saldo do dia</th></tr>
                 </thead>
                 <tbody>
                   {resumo.porDia.map((d) => {
@@ -178,6 +178,16 @@ export default async function RelatorioPontoPage({
                       <tr key={d.dia} className="border-t">
                         <td className="py-2">{d.dia}</td>
                         <td className="text-xs text-muted-foreground">{d.regs}</td>
+                        <td className="py-2 pr-4 text-xs">
+                          <div className="flex flex-wrap gap-x-3 gap-y-1">
+                            {d.batidas.map((b, i) => (
+                              <span key={i} className="whitespace-nowrap">
+                                <span className="text-muted-foreground">{TIME_ENTRY_LABELS[b.tipo]}</span>{" "}
+                                <span className="font-medium">{b.hora}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
                         <td className="font-medium">
                           {fmtHours(d.ms)} {d.aberto && <Badge variant="warning">em aberto</Badge>}
                         </td>
@@ -188,7 +198,7 @@ export default async function RelatorioPontoPage({
                     );
                   })}
                   {resumo.porDia.length === 0 && (
-                    <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">
+                    <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">
                       Nenhum registro no período.
                     </td></tr>
                   )}
